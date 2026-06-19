@@ -9,9 +9,15 @@ const FOLDER_SYNC_TEST_TIMEOUT_MS = 15_000;
 // here, so a no-op stub keeps the import side-effect free.
 vi.mock("@/player/media-engine", () => ({
   MediaEngine: class {
+    destroy() {}
     getAnalyser() {
       return null;
     }
+    on() {
+      return () => {};
+    }
+    setMuted() {}
+    setVolume() {}
   },
 }));
 
@@ -136,6 +142,25 @@ describe("runFolderSync", () => {
     await new Promise((resolve) => setTimeout(resolve, 1900));
 
     expect(folderImport.useFolderImportStore.getState().progress).toBeNull();
+  });
+
+  it("defers active-set queue append until folder import progress clears", async () => {
+    const { repos, runFolderSync } = await load();
+    const folderImport = await import("./folder-import-store");
+    const store = await import("./player-store");
+    const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
+    const folderId = await repos.upsertImportFolder({ path: "/active", setId: session.id });
+    await store.usePlayerStore.getState().setActiveSession(session.id);
+    const fs = fakeFs({ "/active": [file("a.mp3"), file("b.mp3")] });
+
+    await runFolderSync([folderId], fs);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((await repos.getPlayQueue()).entries).toHaveLength(0);
+
+    folderImport.setFolderImportProgress(null);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((await repos.getPlayQueue()).entries.map((entry) => entry.trackId)).toHaveLength(2);
   });
 
   it(

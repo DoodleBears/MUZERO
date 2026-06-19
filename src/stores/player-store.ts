@@ -107,6 +107,7 @@ import {
   type FolderImportPhase,
   type FolderImportProgress,
   setFolderImportProgress,
+  useFolderImportStore,
 } from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
 import { setSetBulkDownloading, setStreamDownloading } from "@/stores/stream-cache-store";
@@ -375,6 +376,8 @@ export function getMediaEngine(): MediaEngine | null {
 let setSub: Subscription | null = null;
 let setSubSessionId: string | null = null;
 let consumedTrackIds = new Set<string>();
+const deferredSetAppendIdsBySession = new Map<string, Set<string>>();
+let deferredSetAppendUnsubscribe: (() => void) | null = null;
 let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
@@ -3719,10 +3722,55 @@ function watchSetForAppend(
       const fresh = unconsumedTrackIds(s.trackIds, consumedTrackIds);
       if (fresh.length === 0) return;
       for (const id of fresh) consumedTrackIds.add(id);
+      if (useFolderImportStore.getState().progress) {
+        deferSetAppendUntilFolderImportSettles(sessionId, fresh);
+        return;
+      }
       void playQueueAppend(fresh);
     },
     error: (err) => log.error("player", "set subscription error", err),
   });
+}
+
+function deferSetAppendUntilFolderImportSettles(sessionId: string, trackIds: readonly string[]) {
+  let pending = deferredSetAppendIdsBySession.get(sessionId);
+  if (!pending) {
+    pending = new Set();
+    deferredSetAppendIdsBySession.set(sessionId, pending);
+  }
+  for (const id of trackIds) pending.add(id);
+  if (deferredSetAppendUnsubscribe) return;
+  deferredSetAppendUnsubscribe = useFolderImportStore.subscribe((state) => {
+    if (state.progress) return;
+    flushDeferredSetAppends();
+  });
+}
+
+function flushDeferredSetAppends(): void {
+  deferredSetAppendUnsubscribe?.();
+  deferredSetAppendUnsubscribe = null;
+  const activeSessionId = usePlayerStore.getState().activeSessionId;
+  const entries = [...deferredSetAppendIdsBySession.entries()];
+  deferredSetAppendIdsBySession.clear();
+  for (const [sessionId, idSet] of entries) {
+    if (sessionId !== activeSessionId || setSubSessionId !== sessionId) continue;
+    const ids = [...idSet];
+    if (ids.length === 0) continue;
+    const startedAt = performance.now();
+    void playQueueAppend(ids)
+      .then(() => {
+        notePerfWork("queue.deferSetAppend.flush", performance.now() - startedAt, {
+          tracks: ids.length,
+        });
+      })
+      .catch((error: unknown) => {
+        log.warn("player", "failed to append deferred folder-import queue tracks", {
+          err: String(error),
+          sessionId,
+          tracks: ids.length,
+        });
+      });
+  }
 }
 
 async function hydratePlaybackSettings(
