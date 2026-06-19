@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 归一化 + 评分纯函数地基：`match-text.ts`（normalizeTitle / primaryArtist / scoreCandidate）+ 穷举单测，无 IO | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 归一化 + 评分纯函数地基：`match-text.ts`（normalizeTitle / primaryArtist / scoreCandidate）+ 穷举单测，无 IO | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | LRCLIB 多变体阶梯 + 时长容差闸门 + 候选评分接管 `pickBestHit` | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | NetEase 搜索路径复用评分（时长 + 标题相似）+ 逐字 tier 收益对齐 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 匹配置信度落库（`LyricsRecord.match?`）+ 低置信不写负缓存 + 匹配进度 toast（正在匹配 → 结果，复用 `notify`）+ Settings 开关 + i18n | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -385,12 +385,14 @@ async fetch(q, signal) {
 - [ ] `provider.ts`：`LyricsMatchInfo` 接口 + `LyricsRecord/LyricsHit.match?` 字段。
 
 #### Phase 1 Checklist
-- [ ] `normalizeTitle` 穷举：`(Live)`/`- Remastered 2011`/`(feat. X)`/`（伴奏）`/`[Instrumental]` 剥离；**前置括注 `(Don't Fear) The Reaper` 不误伤**；全角括号归一；trim/折叠空白。
-- [ ] `primaryArtist` 穷举：`,` / `&` / `feat.` / `与` / `、` 分隔取主唱。
-- [ ] `titleSimilarity`：完全相同=1、完全不同≈0、大小写/空白差≈1、词序差合理。
-- [ ] `scoreCandidate`：tier 主导（yrc>lrc>plain>instrumental）；时长缺→中性；硬阈外→~0。
-- [ ] `passesGate`：默认级 / titleOnly 级边界（minConfidence、durationHardSec、titleOnlyMinSim）。
-- [ ] `make check` 绿（新测全过 + biome 干净）。
+- [x] `normalizeTitle` 穷举：`(Live)`/`- Remastered 2011`/`(feat. X)`/`（伴奏）`/`[Instrumental]` 剥离；**前置括注 `(Don't Fear) The Reaper` 不误伤**；全角括号归一；trim/折叠空白。
+- [x] `primaryArtist` 穷举：`,` / `&` / `feat.` / `与` / `、` 分隔取主唱；单名不误拆（`Charli XCX`）。
+- [x] `titleSimilarity`：完全相同=1、完全不同≈0、大小写/空白差≈1、词序差合理、小 typo 高。
+- [x] `scoreCandidate`：tier 主导（yrc>lrc>plain>instrumental）；时长缺→中性；硬阈外→~0；报 durationDelta/titleSim。
+- [x] `passesGate`：默认级 / titleOnly 级边界（minConfidence、durationHardSec、titleOnlyMinSim）。
+- [x] 新测全过（23 例）+ biome 干净 + tsc 干净。
+
+> **Phase 1 实现说明（2026-06-19）：** `src/lyrics/match-text.ts` 落地——`MATCH_GATE` 常量 + `normalizeTitle`/`primaryArtist`/`titleSimilarity`（token Jaccard ∪ 归一化 Levenshtein 取高）/`scoreCandidate`（tier×0.5 + 时长×0.3 + 标题×0.2）/`passesGate`（基线 minConfidence + 硬时长闸门，titleOnly 加标题相似下限）。`provider.ts` 加 `LyricsMatchInfo` 接口 + `LyricsHit/LyricsRecord.match?`。`match-text.test.ts` 23 例全绿，无 DB/UI 依赖。多语版本词表按 Open Q2 决议保持尽力而为（artist-drop/titleOnly 才是主召回）。
 
 ### Phase 2: LRCLIB 多变体阶梯 + 时长闸门
 
