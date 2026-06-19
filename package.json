@@ -178,6 +178,7 @@
         "AppImage",
         "deb"
       ],
+      "maintainer": "MUZERO <noreply@mu0.app>",
       "category": "Audio",
       "icon": "src-tauri/icons/icon.png"
     }
