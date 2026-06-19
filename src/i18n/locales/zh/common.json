@@ -267,6 +267,9 @@
   },
   "lyrics": {
     "fetching": "正在获取歌词…",
+    "matching": "正在匹配歌词…",
+    "matched": "已匹配歌词",
+    "matchedLowConfidence": "自动匹配，可能不是该版本",
     "instrumental": "纯音乐 · 无歌词",
     "followCurrent": "回到当前歌词",
     "source": "歌词来自 {{source}}",
@@ -825,6 +828,8 @@
     "appearance": "外观",
     "autoFetchLyrics": "自动获取歌词",
     "autoFetchLyricsHint": "为上传和在线歌曲匹配同步歌词。会把歌曲标题和艺人发送给你选择的歌词来源。",
+    "lyricsMatchToasts": "匹配通知",
+    "lyricsMatchToastsHint": "匹配歌词开始与结束时显示轻提示。关闭后静默匹配。",
     "smoothScroll": "平滑滚动",
     "smoothScrollHint": "默认关闭。开启后，长列表、播放队列和专辑页里的鼠标滚轮会更顺滑。",
     "smoothScrollHintMac": "默认关闭。开启后，长列表、播放队列和专辑页里的鼠标滚轮会更顺滑。",

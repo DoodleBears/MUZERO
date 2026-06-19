@@ -267,6 +267,9 @@
   },
   "lyrics": {
     "fetching": "가사를 가져오는 중…",
+    "matching": "가사를 매칭하는 중…",
+    "matched": "가사를 매칭했습니다",
+    "matchedLowConfidence": "자동 매칭 — 이 버전이 아닐 수 있습니다",
     "instrumental": "연주곡 · 가사 없음",
     "followCurrent": "현재 가사로 돌아가기",
     "source": "가사 제공: {{source}}",
@@ -824,6 +827,8 @@
     "appearance": "모양",
     "autoFetchLyrics": "가사 자동 가져오기",
     "autoFetchLyricsHint": "업로드한 곡과 스트리밍 곡의 동기화 가사를 찾습니다. 곡 제목과 아티스트가 선택한 가사 출처로 전송됩니다.",
+    "lyricsMatchToasts": "매칭 알림",
+    "lyricsMatchToastsHint": "가사를 매칭하는 동안과 완료될 때 짧은 토스트를 표시합니다. 끄면 조용히 매칭합니다.",
     "smoothScroll": "부드러운 스크롤",
     "smoothScrollHint": "기본적으로 꺼져 있습니다. 켜면 긴 목록, 재생 대기열, 앨범 페이지에서 마우스 휠이 더 부드럽게 움직입니다.",
     "smoothScrollHintMac": "기본적으로 꺼져 있습니다. 켜면 긴 목록, 재생 대기열, 앨범 페이지에서 마우스 휠이 더 부드럽게 움직입니다.",

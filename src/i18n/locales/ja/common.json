@@ -267,6 +267,9 @@
   },
   "lyrics": {
     "fetching": "歌詞を取得中…",
+    "matching": "歌詞をマッチング中…",
+    "matched": "歌詞をマッチしました",
+    "matchedLowConfidence": "自動マッチ — このバージョンではない可能性があります",
     "instrumental": "インストゥルメンタル · 歌詞なし",
     "followCurrent": "現在の歌詞へ戻る",
     "source": "歌詞提供: {{source}}",
@@ -825,6 +828,8 @@
     "appearance": "外観",
     "autoFetchLyrics": "歌詞を自動取得",
     "autoFetchLyricsHint": "アップロード曲とストリーミング曲の同期歌詞を検索します。曲名とアーティスト名が選択した歌詞ソースに送信されます。",
+    "lyricsMatchToasts": "マッチ通知",
+    "lyricsMatchToastsHint": "歌詞のマッチング中と完了時に短いトーストを表示します。オフにすると無音でマッチします。",
     "smoothScroll": "スムーズスクロール",
     "smoothScrollHint": "既定ではオフです。オンにすると、長いリストやキュー、アルバムページでマウスホイールが滑らかになります。",
     "smoothScrollHintMac": "既定ではオフです。オンにすると、長いリストやキュー、アルバムページでマウスホイールが滑らかになります。",

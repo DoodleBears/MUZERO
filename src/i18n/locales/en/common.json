@@ -276,6 +276,9 @@
   },
   "lyrics": {
     "fetching": "Fetching lyrics…",
+    "matching": "Matching lyrics…",
+    "matched": "Lyrics matched",
+    "matchedLowConfidence": "Auto-matched — may not be this version",
     "instrumental": "Instrumental — no lyrics",
     "followCurrent": "Back to current line",
     "source": "Lyrics from {{source}}",
@@ -840,6 +843,8 @@
     "appearance": "Appearance",
     "autoFetchLyrics": "Auto-fetch lyrics",
     "autoFetchLyricsHint": "Look up time-synced lyrics for uploads and streamed songs. This sends the track title and artist to the selected lyrics source.",
+    "lyricsMatchToasts": "Match notifications",
+    "lyricsMatchToastsHint": "Show a brief toast while matching lyrics and when it finishes. Turn off for silent matching.",
     "smoothScroll": "Smooth scrolling",
     "smoothScrollHint": "Off by default. Turn it on to glide the mouse wheel through long lists, queues, and album pages.",
     "smoothScrollHintMac": "Off by default. Turn it on to glide the mouse wheel through long lists, queues, and album pages.",

@@ -1,6 +1,6 @@
 # PRD: MUZERO 歌词自动匹配准确度优化（归一化 + 多变体阶梯 + 时长闸门 + 逐字优先）
 
-**Status:** Draft
+**Status:** Completed (Phases 1–4 ✅)
 **Created:** 2026-06-19
 **Author:** DoodleBear
 **Module:** `src/lyrics/`（`build-query.ts` · `lrclib-map.ts` · `lrclib-provider.ts` · `netease-lyrics-provider.ts` · `match-text.ts`(new) · `registry.ts` · `provider.ts`）· `src/lyrics/auto-fetch.ts`（匹配进度 toast）· `src/db/types.ts`（`LyricsRecord` / `AppSettings` 附加字段）· `src/stores/notification-store.ts`（复用 `notify`）· Settings · i18n
@@ -16,7 +16,7 @@
 | 1 | 归一化 + 评分纯函数地基：`match-text.ts`（normalizeTitle / primaryArtist / scoreCandidate）+ 穷举单测，无 IO | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | LRCLIB 多变体阶梯 + 时长容差闸门 + 候选评分接管 `pickBestHit` | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | NetEase 搜索路径复用评分（时长 + 标题相似）+ 逐字 tier 收益对齐 | ✅ Done | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 匹配置信度落库（`LyricsRecord.match?`）+ 低置信不写负缓存 + 匹配进度 toast（正在匹配 → 结果，复用 `notify`）+ Settings 开关 + i18n | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 匹配置信度落库（`LyricsRecord.match?`）+ 低置信不写负缓存 + 匹配进度 toast（正在匹配 → 结果，复用 `notify`）+ Settings 开关 + i18n | ✅ Done | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -446,13 +446,20 @@ async fetch(q, signal) {
 - [ ] i18n（§5.4）en→zh/ja/ko。
 
 #### Phase 4 Checklist
-- [ ] 高置信 found → 正常缓存、无额外 UI 噪音；toast 一闪即逝（success 自动消失）。
-- [ ] 全 miss → `notFound` 负缓存（现状保持，避免重打）；toast = `info` + 「搜索」action。
-- [ ] 低置信 found → 展示 + 标低置信 + 搜索入口；手动覆盖为 `manual`（不被自动覆盖，[`20260610` §4.8](../20260610-muzero-synced-lyrics-lrclib-prd/)）。
-- [ ] toast id `lyr:trackId` 去重：快速切歌不堆叠；切歌 dismiss 旧曲 loading toast。
-- [ ] `lyricsMatchToasts:false` → 全程静默（仍正常写库）。
-- [ ] error → 静默（不弹错误 toast，保持前作语义）。
-- [ ] `make check` 绿；i18n 4 locale（缺则标 pending translation）。
+- [x] `lyricsRecordFromHit` 落 `match`（hit 带则带，无则不写空字段）；高置信 found 正常缓存。
+- [x] 全 miss / gate 拒绝 → `notFound` 负缓存（现状保持，避免重打）；toast = `info` + 「搜索」action。
+- [x] 低置信 found（confidence < 0.8）→ 展示 + 标「可能不是该版本」+ 搜索入口；手动覆盖为 `manual`（[`20260610` §4.8](../20260610-muzero-synced-lyrics-lrclib-prd/)）。
+- [x] `runAutoFetchLyrics` 发 start/found/notFound/error 事件（注入式 reporter，单测）；skip 时不发。
+- [x] toast 切歌 dismiss 旧 loading（`triggerLyricsAutoFetch` + `lyricsToastId` 模块作用域）；start 就地 swap，不堆叠。
+- [x] `lyricsMatchToasts:false` → 不传 reporter，全程静默（仍正常写库）。
+- [x] error → 静默（dismiss loading，不弹错误 toast，保持前作语义）。
+- [x] 「搜索」action → ui-store `requestLyricsSearch` nonce → `synced-lyrics-view` 开手动搜索。
+- [x] Settings「匹配通知」开关（默认开）+ i18n 4 locale（en/zh/ja/ko 全量）。
+- [x] `src/lyrics/` 测试绿（auto-fetch 25 例）+ player-store/stores 隔离绿 + tsc 干净 + biome 干净。
+
+> **Phase 4 实现说明（2026-06-19）：** `provider.ts` 已带 `match?`（Phase 1）；`auto-fetch.ts` `lyricsRecordFromHit` 落 `match`，`runAutoFetchLyrics` 加注入式 `report(LyricsFetchEvent)`（start→found/notFound/error，UI-free 可单测）。`db/types.ts` 加 `AppSettings.lyricsMatchToasts`（默认 true，非索引、不 bump）。`ui-store.ts` 加 `lyricsSearchNonce`/`requestLyricsSearch`；`synced-lyrics-view.tsx` 监听 nonce 开手动搜索。`player-store.ts` `triggerLyricsAutoFetch` 接 `reportLyricsMatch`：复用 `notify.loading→update/swap`（success 自动消失 / 低置信·notFound info+「搜索」/ instrumental info / error 静默），`lyricsToastId` 去重 + 切歌 dismiss，受 `lyricsMatchToasts` 开关门控。`lyrics-settings.tsx` 加开关。i18n 4 语补 `lyrics.matching/matched/matchedLowConfidence` + `settings.lyricsMatchToasts(+Hint)`。
+>
+> **注（与原 §4.5 的差异）：** 因闸门已在 provider 内拒绝低于 `minConfidence` 的候选，`fetch` 返回的 hit 必然 ≥ `minConfidence`；故「低置信」在 UI 上定义为 `confidence < 0.8`（passing 但不够笃定），而非「< minConfidence」。gate 拒绝者直接成 `null`→`notFound`，不存在「接受了一条烂的还锁死」的中间态——这正是 §1.1-B 要消除的。
 
 ---
 
@@ -509,6 +516,7 @@ async fetch(q, signal) {
 |------|--------|---------|
 | 2026-06-19 | DoodleBear | Initial draft —— 归一化 + 多变体阶梯 + 时长容差闸门 + 跨源逐字择优 + 置信落库 |
 | 2026-06-19 | DoodleBear | Open Q1–4 定稿（Q2 改：词表降级、artist-drop 提为主召回）；新增 §4.7 匹配进度 in-app toast（复用 `notify`，全事件 + 负缓存防刷 + `lyricsMatchToasts` 开关）；Phase 4 扩 toast/Settings |
+| 2026-06-19 | DoodleBear | Phases 1–4 全部实现并合入（TDD，原子 commit）；Status → Completed |
 
 ---
 
