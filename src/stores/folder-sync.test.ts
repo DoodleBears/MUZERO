@@ -158,9 +158,13 @@ describe("runFolderSync", () => {
     expect((await repos.getPlayQueue()).entries).toHaveLength(0);
 
     folderImport.setFolderImportProgress(null);
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect((await repos.getPlayQueue()).entries.map((entry) => entry.trackId)).toHaveLength(2);
+    // Clearing progress flushes the deferred append asynchronously (store
+    // subscription → DB write). A single macrotask tick is racy under load, so
+    // poll until it lands instead of assuming it completed in one turn.
+    await vi.waitFor(async () => {
+      expect((await repos.getPlayQueue()).entries.map((entry) => entry.trackId)).toHaveLength(2);
+    });
   });
 
   it(
