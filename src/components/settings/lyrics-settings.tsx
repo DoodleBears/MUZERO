@@ -32,6 +32,10 @@ export function LyricsSettings() {
     await saveSettings({ autoFetchLyrics: enabled });
   }
 
+  async function changeLyricsMatchToasts(enabled: boolean) {
+    await saveSettings({ lyricsMatchToasts: enabled });
+  }
+
   async function changeLyricsProvider(id: AppSettings["lyricsProviderId"]) {
     await saveSettings({ lyricsProviderId: id });
   }
@@ -54,6 +58,20 @@ export function LyricsSettings() {
               <span className="font-medium text-sm">{t("settings.autoFetchLyrics")}</span>
               <span className="text-muted-foreground text-xs">
                 {t("settings.autoFetchLyricsHint")}
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={settings.lyricsMatchToasts ?? true}
+              onChange={(event) => void changeLyricsMatchToasts(event.currentTarget.checked)}
+              className="mt-1 size-4 accent-primary"
+            />
+            <span className="flex flex-col gap-1">
+              <span className="font-medium text-sm">{t("settings.lyricsMatchToasts")}</span>
+              <span className="text-muted-foreground text-xs">
+                {t("settings.lyricsMatchToastsHint")}
               </span>
             </span>
           </label>

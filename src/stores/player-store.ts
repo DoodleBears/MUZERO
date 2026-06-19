@@ -15,8 +15,8 @@ import {
   getTrackBlob,
   getTrackCover,
   getTracksByIds,
-  insertTrackIdsAfter,
-  knownSourcePaths,
+  listPendingReferencedNcmMetadataTracks,
+  listReferencedLocalFileAccessGrants,
   listReferencedLocalFileSourcePaths,
   playQueueAppend,
   playQueueInsertAt,
@@ -26,9 +26,11 @@ import {
   playQueueSetContext,
   playQueueSetIndex,
   prependTrackIds,
+  type ReferencedTrackMetadataPatch,
   saveSettings,
   setSessionDisplayMode,
   setTrackCover,
+  updateReferencedTracksMetadata,
   upsertImportFolder,
 } from "@/db/repositories";
 import type { ImportFolder, SetDisplayMode, StreamSourceId, Track } from "@/db/types";
@@ -38,6 +40,11 @@ import i18n from "@/i18n/i18n";
 import { hasFolderAccess, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { createTraceId, type DiagnosticContext, sanitizeUrlForTrace } from "@/lib/diagnostics";
 import {
+  EXAMPLE_TRACK_AUDIO_FILE_NAME,
+  EXAMPLE_TRACK_TITLE,
+  loadExampleTrackAssets,
+} from "@/lib/example-track";
+import {
   basename,
   createFolderFs,
   type FolderFs,
@@ -46,7 +53,6 @@ import {
   pickFolder,
   type ScannedFile,
   scanFolderForMedia,
-  selectNewFiles,
 } from "@/lib/folder-import";
 import { yieldForImportBackpressure } from "@/lib/import-backpressure";
 import { copyBlobWithProgress, type ImportProgress } from "@/lib/import-progress";
@@ -72,7 +78,7 @@ import { getAppFetch } from "@/lib/platform";
 import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { describeTrackCoverSource, describeTrackMediaSource } from "@/lib/track-source";
 import { centeredSquareCrop } from "@/lib/video-frame-score";
-import { runAutoFetchLyrics } from "@/lyrics/auto-fetch";
+import { type LyricsFetchEvent, runAutoFetchLyrics } from "@/lyrics/auto-fetch";
 import { resolveLyricsProviderForTrack } from "@/lyrics/registry";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { MediaEngine } from "@/player/media-engine";
@@ -103,10 +109,14 @@ import { describeTrackSwitch } from "@/player/switch-trace";
 import {
   beginFolderImport,
   endFolderImport,
+  type FolderImportPhase,
+  type FolderImportProgress,
   setFolderImportProgress,
+  useFolderImportStore,
 } from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
 import { setSetBulkDownloading, setStreamDownloading } from "@/stores/stream-cache-store";
+import { useUiStore } from "@/stores/ui-store";
 import { runStreamCache } from "@/streamsrc/cache-stream";
 import {
   cacheStreamPlaylistCover,
@@ -144,11 +154,22 @@ import {
   type R2PresenceCoordinator,
 } from "@/sync/r2-presence-coordinator";
 import { writeR2Presence } from "@/sync/r2-presence-sync";
-import { decodeNcmViaWorker, ingestViaWorker } from "@/workers/heavy-client";
+import { freshFilesFromPlan } from "@/workers/folder-sync-core";
+import {
+  createReferencedTracksViaWorker,
+  decodeNcmMetadataViaWorker,
+  decodeNcmViaWorker,
+  ingestViaWorker,
+  planFolderSyncViaWorker,
+  publishTrackIdsViaWorker,
+} from "@/workers/heavy-client";
 import type { DecodedNcmMedia } from "@/workers/ingest-core";
 import { extractUsefulVideoPosterFrameViaWorker } from "@/workers/video-poster-client";
 
-const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
+const IMPORT_COPY_VISIBILITY_FLUSH_SIZE = 25;
+const IMPORT_REFERENCED_BULK_ADD_BATCH_SIZE = 2000;
+const IMPORT_PROGRESS_MIN_DONE_DELTA = 100;
+const IMPORT_PROGRESS_MIN_INTERVAL_MS = 250;
 const IMPORT_PROGRESS_CLEAR_MS = 1800;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
 const MEDIA_SESSION_METADATA_SETTLE_MS = 650;
@@ -301,6 +322,8 @@ interface PlayerState {
   addUploads: (files: FileList | File[]) => Promise<void>;
   /** Import uploaded files into a SPECIFIC set (e.g. the gallery detail page). */
   addUploadsToSet: (setId: string, files: FileList | File[]) => Promise<void>;
+  /** Import the bundled example song and its paired cover into a set. */
+  importExampleTrack: (setId?: string) => Promise<void>;
   /** Copy a referenced local-file track into managed storage for offline playback. */
   cacheReferencedTrackToDevice: (trackId: string) => Promise<void>;
   /** Desktop boot repair: re-authorize reference-only source paths after restart. */
@@ -360,6 +383,8 @@ export function getMediaEngine(): MediaEngine | null {
 let setSub: Subscription | null = null;
 let setSubSessionId: string | null = null;
 let consumedTrackIds = new Set<string>();
+const deferredSetAppendIdsBySession = new Map<string, Set<string>>();
+let deferredSetAppendUnsubscribe: (() => void) | null = null;
 let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
@@ -377,6 +402,9 @@ let streamSkipRunTrackIds = new Set<string>();
 const MAX_STREAM_SKIP_RUN = 30;
 let lyricsAbort: AbortController | null = null;
 let lyricsTimer: ReturnType<typeof setTimeout> | null = null;
+// The id of the live match-progress toast, so a track switch / new match can
+// dismiss or replace it in place (never stacks). Module scope, not store state.
+let lyricsToastId: string | null = null;
 let playbackSettingsLoaded = false;
 // The active shuffled play order (queue indices). Non-reactive: next/prev read it,
 // setShuffle rebuilds it, and it self-heals when stale vs the queue length.
@@ -397,6 +425,7 @@ let queueCursorPersistTimer: number | null = null;
 let queueCursorPersistSeq = 0;
 let lastPersistedQueueIndex = -1;
 let importProgressClearTimer: ReturnType<typeof setTimeout> | null = null;
+let folderImportProgressClearTimer: ReturnType<typeof setTimeout> | null = null;
 let activeSessionSettingsTimer: ReturnType<typeof setTimeout> | null = null;
 let activeSessionSettingsIdleHandle: number | null = null;
 let pendingActiveSessionSettingsId: string | null = null;
@@ -411,6 +440,7 @@ export function getLastSwitchStartedAt(): number {
 }
 const playbackLog = createDiagnosticLogger("player.playback");
 const mediaSessionLog = createDiagnosticLogger("player.mediaSession");
+const folderSyncLog = createDiagnosticLogger("player.folderSync");
 const QUEUE_CURSOR_PERSIST_DEBOUNCE_MS = 900;
 
 type IdleScheduler = typeof globalThis & {
@@ -1600,7 +1630,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         if (r.trackId) {
           ids.push(r.trackId);
           uploaded += 1;
-          if (ids.length >= IMPORT_VISIBILITY_FLUSH_SIZE) {
+          if (ids.length >= IMPORT_COPY_VISIBILITY_FLUSH_SIZE) {
             lastPublishedTrackId = await flushImportedTrackIds(setId, ids, lastPublishedTrackId);
           }
         } else if (r.unsupportedName) unsupported.push(r.unsupportedName);
@@ -1651,30 +1681,182 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
+  async importExampleTrack(setId) {
+    if (importProgressClearTimer) {
+      clearTimeout(importProgressClearTimer);
+      importProgressClearTimer = null;
+    }
+    let completed = 0;
+    set({
+      isUploading: true,
+      importProgress: {
+        phase: "importing",
+        total: 1,
+        completed,
+        current: { name: EXAMPLE_TRACK_AUDIO_FILE_NAME, mode: "copy" },
+      },
+    });
+    try {
+      let targetSetId = setId ?? get().activeSessionId ?? undefined;
+      if (!targetSetId) {
+        const session = await createSession({
+          name: i18n.t("sessions.exampleSet"),
+          seedPrompt: "",
+          config: { autoExtend: false },
+          displayMode: "cover",
+        });
+        targetSetId = session.id;
+        await get().setActiveSession(session.id);
+      }
+
+      const { audio, cover } = await loadExampleTrackAssets();
+      set({
+        importProgress: {
+          phase: "importing",
+          total: 1,
+          completed,
+          current: {
+            name: EXAMPLE_TRACK_AUDIO_FILE_NAME,
+            mode: "copy",
+            bytesLoaded: 0,
+            bytesTotal: audio.size,
+          },
+        },
+      });
+
+      const probed = await probeMediaFile(audio).catch((error: unknown): ProbedMedia => {
+        log.warn("player", "example track probe failed; importing with fallback duration", {
+          error: error instanceof Error ? error.name : typeof error,
+        });
+        return {
+          durationSec: 0,
+          kind: "audio",
+          mime: audio.type || "audio/mpeg",
+          title: EXAMPLE_TRACK_TITLE,
+        };
+      });
+      const track = await createUploadedTrack({
+        sessionId: targetSetId,
+        title: EXAMPLE_TRACK_TITLE,
+        kind: "audio",
+        blob: audio,
+        mime: probed.mime || audio.type || "audio/mpeg",
+        durationSec: probed.durationSec,
+        mediaMetadata: {
+          ...fallbackUploadMediaMetadata(audio, EXAMPLE_TRACK_TITLE),
+          originalMime: probed.mime || audio.type || "audio/mpeg",
+          title: EXAMPLE_TRACK_TITLE,
+        },
+        embeddedCover: cover,
+        onMediaProgress: ({ bytesLoaded, bytesTotal }) =>
+          set({
+            importProgress: {
+              phase: "importing",
+              total: 1,
+              completed,
+              current: {
+                name: EXAMPLE_TRACK_AUDIO_FILE_NAME,
+                mode: "copy",
+                bytesLoaded,
+                bytesTotal,
+              },
+            },
+          }),
+      });
+      await flushImportedTrackIds(targetSetId, [track.id]);
+      completed = 1;
+      set({
+        importProgress: {
+          phase: "importing",
+          total: 1,
+          completed,
+          current: {
+            name: EXAMPLE_TRACK_AUDIO_FILE_NAME,
+            mode: "copy",
+            bytesLoaded: audio.size,
+            bytesTotal: audio.size,
+          },
+        },
+      });
+      log.info("player", `imported bundled example track to ${targetSetId}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ djError: msg });
+      log.error("player", "example track import failed", msg);
+    } finally {
+      set({
+        isUploading: false,
+        importProgress: { phase: "done", total: 1, completed },
+      });
+      importProgressClearTimer = setTimeout(() => {
+        importProgressClearTimer = null;
+        usePlayerStore.setState({ importProgress: null });
+      }, IMPORT_PROGRESS_CLEAR_MS);
+    }
+  },
+
   async cacheReferencedTrackToDevice(trackId) {
     await cacheReferencedTrackToDeviceFromSource(trackId, set, get);
   },
 
   async restoreReferencedLocalFileAccess() {
     const bridge = resolveDesktopBridge();
-    if (!bridge.grantFileAccess) return;
-    const paths = await listReferencedLocalFileSourcePaths();
-    if (paths.length === 0) return;
+    if (!bridge.grantFileAccess && !bridge.grantFolderAccess) return;
+    const grants = await listReferencedLocalFileAccessGrants();
+    if (grants.totalReferencedPaths === 0) return;
 
     let granted = 0;
     let failed = 0;
-    for (const path of paths) {
+    let folderGrantFailed = false;
+    const grantedFilePaths = new Set<string>();
+    const grantedFolderPaths: string[] = [];
+    for (const path of grants.folderPaths) {
+      if (!bridge.grantFolderAccess) break;
       try {
-        await bridge.grantFileAccess(path);
+        await bridge.grantFolderAccess(path);
         granted += 1;
+        grantedFolderPaths.push(path);
       } catch (error) {
         failed += 1;
-        log.warn("player", "failed to restore referenced local-file access", {
+        folderGrantFailed = true;
+        log.warn("player", "failed to restore referenced local-folder access", {
           errorType: error instanceof Error ? error.name : typeof error,
         });
       }
     }
+    const exactFilePaths =
+      bridge.grantFolderAccess && !folderGrantFailed
+        ? grants.filePaths
+        : await listReferencedLocalFileSourcePaths();
+    if (bridge.grantFileAccess) {
+      for (const path of exactFilePaths) {
+        try {
+          await bridge.grantFileAccess(path);
+          granted += 1;
+          grantedFilePaths.add(path);
+        } catch (error) {
+          failed += 1;
+          log.warn("player", "failed to restore referenced local-file access", {
+            errorType: error instanceof Error ? error.name : typeof error,
+          });
+        }
+      }
+    } else if (exactFilePaths.length > 0) {
+      failed += exactFilePaths.length;
+      log.warn("player", "some referenced local-file exact grants could not be restored", {
+        failed: exactFilePaths.length,
+      });
+    }
     log.info("player", `restored ${granted} referenced local-file grant(s)`);
+    if (bridge.readFile && (grantedFilePaths.size > 0 || grantedFolderPaths.length > 0)) {
+      const queued = await resumePendingReferencedNcmMetadataHydrations(
+        { readFile: bridge.readFile },
+        { filePaths: grantedFilePaths, folderPaths: grantedFolderPaths },
+      );
+      if (queued > 0) {
+        log.info("player", `resumed ${queued} referenced ncm metadata hydration(s)`);
+      }
+    }
     if (failed > 0) {
       log.warn("player", "some referenced local-file grants could not be restored", { failed });
     }
@@ -1812,13 +1994,13 @@ async function flushImportedTrackIds(
   if (ids.length === 0) return afterTrackId;
   const batch = [...ids];
   const startedAt = performance.now();
-  await insertTrackIdsAfter(setId, batch, afterTrackId);
+  const result = await publishTrackIdsViaWorker({ setId, ids: batch, afterTrackId });
   notePerfWork("upload.publishTrackIds", performance.now() - startedAt, {
     count: batch.length,
     setId,
   });
   ids.length = 0;
-  return batch.at(-1) ?? afterTrackId;
+  return result.afterTrackId;
 }
 
 async function resolveDroppedFilePath(file: File): Promise<string | undefined> {
@@ -2438,12 +2620,72 @@ interface FolderPlan {
   folder: ImportFolder;
   setId: string;
   fresh: ScannedFile[];
+  recoveredTrackIds: string[];
 }
 
 interface ScannedIngestResult {
   trackId: string;
   hasCover?: boolean;
   albumPicUrl?: string;
+}
+
+interface LazyNcmHydrationJob {
+  file: ScannedFile;
+  fs: Pick<FolderFs, "readFile">;
+  setId: string;
+  traceId?: string;
+  trackId: string;
+}
+
+function roundImportTraceMs(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function scheduleFolderImportProgressClear(): void {
+  if (folderImportProgressClearTimer) clearTimeout(folderImportProgressClearTimer);
+  folderImportProgressClearTimer = setTimeout(() => {
+    folderImportProgressClearTimer = null;
+    setFolderImportProgress(null);
+  }, IMPORT_PROGRESS_CLEAR_MS);
+  (
+    folderImportProgressClearTimer as ReturnType<typeof setTimeout> & { unref?: () => void }
+  ).unref?.();
+}
+
+function folderImportProgressUnits(progress: FolderImportProgress): number {
+  return progress.phase === "covers" ? (progress.coverDone ?? 0) : progress.done;
+}
+
+function folderImportProgressTotalUnits(progress: FolderImportProgress): number {
+  return progress.phase === "covers" ? (progress.coverTotal ?? 0) : progress.total;
+}
+
+function normalizedLocalAccessPath(path: string): string {
+  const normalized = path.trim().replaceAll("\\", "/").replace(/\/+/g, "/");
+  if (normalized === "/") return normalized;
+  return normalized.replace(/\/+$/, "").toLowerCase();
+}
+
+function isPathWithinGrantedFolder(path: string, folderPath: string): boolean {
+  const source = normalizedLocalAccessPath(path);
+  const root = normalizedLocalAccessPath(folderPath);
+  return Boolean(root && source !== root && source.startsWith(`${root}/`));
+}
+
+function hasRestoredLocalFileAccess(
+  path: string,
+  grants: { filePaths: ReadonlySet<string>; folderPaths: readonly string[] },
+): boolean {
+  return (
+    grants.filePaths.has(path) ||
+    grants.folderPaths.some((folder) => isPathWithinGrantedFolder(path, folder))
+  );
+}
+
+function folderImportMode(file: ScannedFile, referenceElectronLocalFiles: boolean): string {
+  if (!referenceElectronLocalFiles) return file.decode === "ncm" ? "copy-ncm" : "copy-bytes";
+  if (file.decode === "ncm") return "electron-reference-ncm";
+  return "electron-reference";
 }
 
 async function ingestReferencedScannedFile(
@@ -2470,6 +2712,204 @@ async function ingestReferencedScannedFile(
     },
   });
   return { trackId: track.id, hasCover: false };
+}
+
+async function ingestReferencedScannedFiles(
+  setId: string,
+  files: readonly ScannedFile[],
+): Promise<ScannedIngestResult[]> {
+  if (files.length === 0) return [];
+  const result = await createReferencedTracksViaWorker({ setId, files: [...files] });
+  return result.trackIds.map((trackId) => ({ trackId, hasCover: false }));
+}
+
+const NCM_METADATA_HYDRATION_CONCURRENCY = 2;
+const NCM_METADATA_PATCH_FLUSH_SIZE = 50;
+const NCM_METADATA_PATCH_FLUSH_DELAY_MS = 250;
+const pendingNcmHydrations: LazyNcmHydrationJob[] = [];
+const pendingNcmMetadataPatches: ReferencedTrackMetadataPatch[] = [];
+const queuedNcmHydrationTrackIds = new Set<string>();
+let pendingNcmHydrationCursor = 0;
+let activeNcmHydrations = 0;
+let ncmMetadataPatchFlushTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+
+function queueLazyNcmMetadataHydration(job: LazyNcmHydrationJob): void {
+  if (queuedNcmHydrationTrackIds.has(job.trackId)) return;
+  queuedNcmHydrationTrackIds.add(job.trackId);
+  pendingNcmHydrations.push(job);
+  pumpLazyNcmMetadataHydrations();
+}
+
+function compactLazyNcmHydrationQueue(): void {
+  if (pendingNcmHydrationCursor === 0) return;
+  if (pendingNcmHydrationCursor >= pendingNcmHydrations.length) {
+    pendingNcmHydrations.length = 0;
+    pendingNcmHydrationCursor = 0;
+    return;
+  }
+  if (
+    pendingNcmHydrationCursor < 1024 ||
+    pendingNcmHydrationCursor * 2 < pendingNcmHydrations.length
+  ) {
+    return;
+  }
+  pendingNcmHydrations.splice(0, pendingNcmHydrationCursor);
+  pendingNcmHydrationCursor = 0;
+}
+
+function pumpLazyNcmMetadataHydrations(): void {
+  while (
+    activeNcmHydrations < NCM_METADATA_HYDRATION_CONCURRENCY &&
+    pendingNcmHydrationCursor < pendingNcmHydrations.length
+  ) {
+    const job = pendingNcmHydrations[pendingNcmHydrationCursor];
+    pendingNcmHydrationCursor += 1;
+    compactLazyNcmHydrationQueue();
+    if (!job) return;
+    activeNcmHydrations += 1;
+    void hydrateLazyNcmMetadata(job).finally(() => {
+      queuedNcmHydrationTrackIds.delete(job.trackId);
+      activeNcmHydrations = Math.max(0, activeNcmHydrations - 1);
+      if (activeNcmHydrations === 0) compactLazyNcmHydrationQueue();
+      pumpLazyNcmMetadataHydrations();
+    });
+  }
+}
+
+async function resumePendingReferencedNcmMetadataHydrations(
+  fs: Pick<FolderFs, "readFile">,
+  grants?: { filePaths: ReadonlySet<string>; folderPaths: readonly string[] },
+): Promise<number> {
+  const pending = await listPendingReferencedNcmMetadataTracks();
+  let queued = 0;
+  for (const track of pending) {
+    if (grants && !hasRestoredLocalFileAccess(track.sourcePath, grants)) continue;
+    queueLazyNcmMetadataHydration({
+      file: {
+        path: track.sourcePath,
+        name: basename(track.sourcePath),
+        kind: "audio",
+        decode: "ncm",
+      },
+      fs,
+      setId: track.sessionId,
+      trackId: track.id,
+    });
+    queued += 1;
+  }
+  return queued;
+}
+
+function queueLazyNcmMetadataPatch(patch: ReferencedTrackMetadataPatch): void {
+  pendingNcmMetadataPatches.push(patch);
+  if (pendingNcmMetadataPatches.length >= NCM_METADATA_PATCH_FLUSH_SIZE) {
+    void flushLazyNcmMetadataPatches("size");
+    return;
+  }
+  if (ncmMetadataPatchFlushTimer !== null) return;
+  ncmMetadataPatchFlushTimer = globalThis.setTimeout(() => {
+    ncmMetadataPatchFlushTimer = null;
+    void flushLazyNcmMetadataPatches("timer");
+  }, NCM_METADATA_PATCH_FLUSH_DELAY_MS);
+}
+
+async function flushLazyNcmMetadataPatches(reason: "size" | "timer"): Promise<void> {
+  if (ncmMetadataPatchFlushTimer !== null) {
+    globalThis.clearTimeout(ncmMetadataPatchFlushTimer);
+    ncmMetadataPatchFlushTimer = null;
+  }
+  const batch = pendingNcmMetadataPatches.splice(0, pendingNcmMetadataPatches.length);
+  if (batch.length === 0) return;
+  const startedAt = performance.now();
+  try {
+    await updateReferencedTracksMetadata(batch);
+    folderSyncLog.debug("ncm.lazy.metadata.flush", {
+      category: "sync",
+      phase: "success",
+      count: batch.length,
+      durationMs: roundImportTraceMs(performance.now() - startedAt),
+      reason,
+    });
+  } catch (err) {
+    folderSyncLog.warn("ncm.lazy.metadata.flush.fail", {
+      category: "sync",
+      phase: "fail",
+      count: batch.length,
+      durationMs: roundImportTraceMs(performance.now() - startedAt),
+      err: err instanceof Error ? err.name : typeof err,
+    });
+  }
+}
+
+async function ingestLazyReferencedNcmScannedFile(
+  setId: string,
+  file: ScannedFile,
+  fs: Pick<FolderFs, "readFile">,
+  traceId?: string,
+): Promise<ScannedIngestResult> {
+  const [result] = await ingestLazyReferencedNcmScannedFiles(setId, [file], fs, traceId);
+  if (!result) throw new Error("Failed to create referenced ncm track");
+  return result;
+}
+
+async function ingestLazyReferencedNcmScannedFiles(
+  setId: string,
+  files: readonly ScannedFile[],
+  fs: Pick<FolderFs, "readFile">,
+  traceId?: string,
+): Promise<ScannedIngestResult[]> {
+  if (files.length === 0) return [];
+  const result = await createReferencedTracksViaWorker({ setId, files: [...files] });
+  result.trackIds.forEach((trackId, index) => {
+    const file = files[index];
+    if (file) queueLazyNcmMetadataHydration({ file, fs, setId, traceId, trackId });
+  });
+  return result.trackIds.map((trackId) => ({ trackId, hasCover: false }));
+}
+
+async function hydrateLazyNcmMetadata(job: LazyNcmHydrationJob): Promise<void> {
+  const startedAt = performance.now();
+  try {
+    const bytes = await job.fs.readFile(job.file.path);
+    const inputBytes = arrayBufferFromBytes(bytes);
+    const decoded = await decodeNcmMetadataViaWorker({
+      setId: job.setId,
+      name: job.file.name,
+      kind: "audio",
+      mime: "",
+      sourcePath: job.file.path,
+      bytes: inputBytes,
+      decode: "ncm",
+    });
+    queueLazyNcmMetadataPatch({
+      trackId: job.trackId,
+      title: decoded.title,
+      mime: decoded.mime,
+      durationSec: decoded.durationSec,
+      mediaMetadata: decoded.mediaMetadata,
+      remoteCoverUrl: decoded.albumPicUrl,
+    });
+    if (decoded.embeddedCover) {
+      await setTrackCover({
+        trackId: job.trackId,
+        blob: new Blob([new Uint8Array(decoded.embeddedCover.bytes)], {
+          type: decoded.embeddedCover.mime,
+        }),
+        mime: decoded.embeddedCover.mime,
+      });
+    } else if (decoded.albumPicUrl) {
+      await fetchAndStoreRemoteCover(job.trackId, decoded.albumPicUrl);
+    }
+  } catch (err) {
+    folderSyncLog.warn("ncm.lazy.fail", {
+      traceId: job.traceId,
+      category: "sync",
+      phase: "fail",
+      durationMs: roundImportTraceMs(performance.now() - startedAt),
+      err: err instanceof Error ? err.name : typeof err,
+      trackId: job.trackId,
+    });
+  }
 }
 
 async function ingestScannedFileBytes(
@@ -2525,6 +2965,12 @@ export async function runFolderSync(
 ): Promise<FolderSyncResult> {
   if (folderSyncRunning) return { imported: 0, encrypted: 0, decodeFailed: 0, cancelled: false };
   folderSyncRunning = true;
+  const traceId = createTraceId("fld");
+  const runStartedAt = performance.now();
+  if (folderImportProgressClearTimer) {
+    clearTimeout(folderImportProgressClearTimer);
+    folderImportProgressClearTimer = null;
+  }
   const signal = beginFolderImport();
   usePlayerStore.setState({ isUploading: true });
   const useRealShell = !fsOverride;
@@ -2533,27 +2979,89 @@ export async function runFolderSync(
   // Plaintext media defers its codec check to first play (never decode-fails here);
   // `.ncm` can fail to decrypt, so this is bumped in the import loop's catch.
   let decodeFailed = 0;
-  setFolderImportProgress({
-    phase: "scanning",
-    done: 0,
-    total: 0,
-    imported,
-    encrypted,
-    decodeFailed,
-  });
+  let lastProgressPhase: FolderImportPhase | undefined;
+  let lastProgressUnits = 0;
+  let lastProgressAt = 0;
+  const emitProgress = (
+    progress: Parameters<typeof setFolderImportProgress>[0],
+    reason: string,
+    options: { force?: boolean } = {},
+  ): void => {
+    const tracedProgress = progress ? { ...progress, traceId } : null;
+    const now = performance.now();
+    if (tracedProgress && !options.force && shouldThrottleFolderImportProgress(tracedProgress)) {
+      return;
+    }
+    const progressStartedAt = performance.now();
+    setFolderImportProgress(tracedProgress);
+    const durationMs = roundImportTraceMs(performance.now() - progressStartedAt);
+    if (tracedProgress) {
+      lastProgressPhase = tracedProgress.phase;
+      lastProgressUnits = folderImportProgressUnits(tracedProgress);
+      lastProgressAt = now;
+    }
+    folderSyncLog.debug("progress.emit", {
+      traceId,
+      category: "sync",
+      phase: "state",
+      reason,
+      durationMs,
+      folderPhase: tracedProgress?.phase ?? "clear",
+      done: tracedProgress?.done,
+      total: tracedProgress?.total,
+      imported: tracedProgress?.imported,
+      coverDone: tracedProgress?.coverDone,
+      coverTotal: tracedProgress?.coverTotal,
+    });
+  };
+  const shouldThrottleFolderImportProgress = (progress: FolderImportProgress): boolean => {
+    if (progress.phase !== "importing" && progress.phase !== "covers") return false;
+    if (progress.phase !== lastProgressPhase) return false;
+    const units = folderImportProgressUnits(progress);
+    const totalUnits = folderImportProgressTotalUnits(progress);
+    if (totalUnits > 0 && units >= totalUnits) return false;
+    return (
+      units - lastProgressUnits < IMPORT_PROGRESS_MIN_DONE_DELTA &&
+      performance.now() - lastProgressAt < IMPORT_PROGRESS_MIN_INTERVAL_MS
+    );
+  };
+  emitProgress(
+    {
+      phase: "scanning",
+      done: 0,
+      total: 0,
+      imported,
+      encrypted,
+      decodeFailed,
+    },
+    "run-start",
+  );
   try {
+    const desktopBridge = resolveDesktopBridge();
     const fs = fsOverride ?? createFolderFs();
-    const referencePlaintextLocalFiles = useRealShell && resolveDesktopBridge().kind === "electron";
+    const referenceElectronLocalFiles = useRealShell && desktopBridge.kind === "electron";
+    folderSyncLog.info("run.start", {
+      traceId,
+      category: "sync",
+      phase: "start",
+      folderCount: folderIds.length,
+      useRealShell,
+      referenceElectronLocalFiles,
+      nativeFolderScan: useRealShell && Boolean(desktopBridge.scanFolderForMedia),
+    });
 
     // Pass 1 — scan + dedup each folder, recreating a deleted bound set as needed.
     const plans: FolderPlan[] = [];
+    const scanStartedAt = performance.now();
     for (const folderId of folderIds) {
       if (signal.aborted) break;
+      const folderStartedAt = performance.now();
       const folder = (await getSettings()).importFolders?.find((f) => f.id === folderId);
       if (!folder) continue;
       if (useRealShell) await grantFolderAccess(folder.path);
 
       let setId = folder.setId;
+      let recreatedSet = false;
       if (!(await getSession(setId))) {
         const session = await createSession({
           name: folder.displayName ?? basename(folder.path),
@@ -2563,15 +3071,28 @@ export async function runFolderSync(
         });
         setId = session.id;
         await upsertImportFolder({ ...folder, setId });
+        recreatedSet = true;
       }
 
-      const scan = await scanFolderForMedia(folder.path, fs, {
-        recursive: folder.recursive ?? true,
-      }).catch((err: unknown) => {
+      const scanFolderStartedAt = performance.now();
+      const scanOptions = { recursive: folder.recursive ?? true };
+      const scan = await (useRealShell && desktopBridge.scanFolderForMedia
+        ? desktopBridge.scanFolderForMedia(folder.path, scanOptions)
+        : scanFolderForMedia(folder.path, fs, scanOptions)
+      ).catch((err: unknown) => {
+        folderSyncLog.warn("scan.folder.fail", {
+          traceId,
+          category: "sync",
+          phase: "fail",
+          folderId,
+          durationMs: roundImportTraceMs(performance.now() - scanFolderStartedAt),
+          err: err instanceof Error ? err.name : typeof err,
+        });
         log.warn("player", "folder scan failed", { path: folder.path, err: String(err) });
         return null;
       });
       if (!scan) continue;
+      const scanMs = roundImportTraceMs(performance.now() - scanFolderStartedAt);
       encrypted += scan.encryptedCount;
       if (scan.unsupportedCount > 0) {
         log.debug("player", "folder scan skipped non-media files", {
@@ -2579,37 +3100,206 @@ export async function runFolderSync(
           count: scan.unsupportedCount,
         });
       }
-      const known = await knownSourcePaths(scan.media.map((m) => m.path));
-      plans.push({ folder: { ...folder, setId }, setId, fresh: selectNewFiles(scan.media, known) });
+      const dedupStartedAt = performance.now();
+      const session = await getSession(setId);
+      const planResult = await planFolderSyncViaWorker({
+        media: scan.media,
+        setId,
+        sessionTrackIds: session?.trackIds ?? [],
+        removedTrackIds: Object.keys(session?.removedTracks ?? {}),
+      });
+      const fresh = freshFilesFromPlan(scan.media, planResult);
+      const { recoveredTrackIds } = planResult;
+      const dedupMs = roundImportTraceMs(performance.now() - dedupStartedAt);
+      plans.push({ folder: { ...folder, setId }, setId, fresh, recoveredTrackIds });
+      folderSyncLog.debug("scan.folder.done", {
+        traceId,
+        category: "sync",
+        phase: "success",
+        folderId,
+        durationMs: roundImportTraceMs(performance.now() - folderStartedAt),
+        scanMs,
+        dedupMs,
+        media: scan.media.length,
+        fresh: fresh.length,
+        known: planResult.knownCount,
+        recovered: recoveredTrackIds.length,
+        encrypted: scan.encryptedCount,
+        unsupported: scan.unsupportedCount,
+        recreatedSet,
+        nativeFolderScan: useRealShell && Boolean(desktopBridge.scanFolderForMedia),
+      });
     }
 
     // Pass 2 — import, emitting cumulative progress.
-    const total = plans.reduce((n, p) => n + p.fresh.length, 0);
+    const total = plans.reduce((n, p) => n + p.fresh.length + p.recoveredTrackIds.length, 0);
     let done = 0;
     // Carried-cover URLs to pull AFTER the audio is in (bounded, below) — each keyed
     // to its own track, so order of completion never reassigns a cover.
     const coverJobs: Array<{ trackId: string; url: string }> = [];
-    setFolderImportProgress({ phase: "importing", done, total, imported, encrypted, decodeFailed });
+    folderSyncLog.info("scan.complete", {
+      traceId,
+      category: "sync",
+      phase: "success",
+      durationMs: roundImportTraceMs(performance.now() - scanStartedAt),
+      folders: plans.length,
+      totalFresh: total,
+      encrypted,
+    });
+    const importStartedAt = performance.now();
+    emitProgress(
+      { phase: "importing", done, total, imported, encrypted, decodeFailed },
+      "import-start",
+    );
     for (const plan of plans) {
+      const planStartedAt = performance.now();
       const ids: string[] = [];
       let planImported = 0;
       let lastPublishedTrackId: string | undefined;
-      for (const file of plan.fresh) {
+      if (plan.recoveredTrackIds.length > 0) {
+        const recoverStartedAt = performance.now();
+        ids.push(...plan.recoveredTrackIds);
+        planImported += plan.recoveredTrackIds.length;
+        imported += plan.recoveredTrackIds.length;
+        done += plan.recoveredTrackIds.length;
+        lastPublishedTrackId = await flushImportedTrackIds(plan.setId, ids, lastPublishedTrackId);
+        folderSyncLog.debug("import.recover", {
+          traceId,
+          category: "sync",
+          phase: "success",
+          setId: plan.setId,
+          count: plan.recoveredTrackIds.length,
+          durationMs: roundImportTraceMs(performance.now() - recoverStartedAt),
+          done,
+          total,
+        });
+        emitProgress(
+          {
+            phase: "importing",
+            done,
+            total,
+            imported,
+            encrypted,
+            decodeFailed,
+          },
+          "recover-linked-tracks",
+        );
+      }
+      for (let fileIndex = 0; fileIndex < plan.fresh.length; ) {
         if (signal.aborted) break;
+        const file = plan.fresh[fileIndex];
+        if (referenceElectronLocalFiles && (!file.decode || file.decode === "ncm")) {
+          const referenceBatch: ScannedFile[] = [];
+          const batchDecode = file.decode;
+          for (
+            let i = fileIndex;
+            i < plan.fresh.length && referenceBatch.length < IMPORT_REFERENCED_BULK_ADD_BATCH_SIZE;
+            i += 1
+          ) {
+            const entry = plan.fresh[i];
+            if (entry.decode !== batchDecode) break;
+            referenceBatch.push(entry);
+          }
+          if (referenceBatch.length > 0) {
+            try {
+              const batchStartedAt = performance.now();
+              const results =
+                batchDecode === "ncm"
+                  ? await ingestLazyReferencedNcmScannedFiles(
+                      plan.setId,
+                      referenceBatch,
+                      fs,
+                      traceId,
+                    )
+                  : await ingestReferencedScannedFiles(plan.setId, referenceBatch);
+              for (const res of results) ids.push(res.trackId);
+              planImported += results.length;
+              imported += results.length;
+              done += results.length;
+              fileIndex += results.length;
+              folderSyncLog.debug("import.batch", {
+                traceId,
+                category: "sync",
+                phase: "success",
+                setId: plan.setId,
+                mode:
+                  batchDecode === "ncm" ? "electron-reference-ncm-bulk" : "electron-reference-bulk",
+                count: results.length,
+                durationMs: roundImportTraceMs(performance.now() - batchStartedAt),
+                done,
+                total,
+              });
+              emitProgress(
+                {
+                  phase: "importing",
+                  done,
+                  total,
+                  imported,
+                  encrypted,
+                  decodeFailed,
+                  currentName: referenceBatch.at(-1)?.name,
+                },
+                "bulk-import",
+              );
+              continue;
+            } catch (err) {
+              folderSyncLog.warn("import.batch.fail", {
+                traceId,
+                category: "sync",
+                phase: "fail",
+                setId: plan.setId,
+                mode:
+                  batchDecode === "ncm" ? "electron-reference-ncm-bulk" : "electron-reference-bulk",
+                count: referenceBatch.length,
+                err: err instanceof Error ? err.name : typeof err,
+              });
+              log.warn("player", "failed to bulk import referenced folder files", {
+                count: referenceBatch.length,
+                err: String(err),
+              });
+              // Fall through to the single-file path below; one unexpected bulk
+              // failure must not sink the entire folder run.
+            }
+          }
+        }
         try {
+          const fileStartedAt = performance.now();
           const res =
-            referencePlaintextLocalFiles && !file.decode
-              ? await ingestReferencedScannedFile(plan.setId, file)
-              : await ingestScannedFileBytes(plan.setId, file, fs);
+            referenceElectronLocalFiles && file.decode === "ncm"
+              ? await ingestLazyReferencedNcmScannedFile(plan.setId, file, fs, traceId)
+              : referenceElectronLocalFiles
+                ? await ingestReferencedScannedFile(plan.setId, file)
+                : await ingestScannedFileBytes(plan.setId, file, fs);
+          folderSyncLog.debug("import.file", {
+            traceId,
+            category: "sync",
+            phase: "success",
+            setId: plan.setId,
+            mode: folderImportMode(file, referenceElectronLocalFiles),
+            decode: file.decode,
+            kind: file.kind,
+            extension: extensionFromFileName(file.name),
+            durationMs: roundImportTraceMs(performance.now() - fileStartedAt),
+          });
           ids.push(res.trackId);
           planImported += 1;
           imported += 1;
-          if (ids.length >= IMPORT_VISIBILITY_FLUSH_SIZE) {
+          if (!referenceElectronLocalFiles && ids.length >= IMPORT_COPY_VISIBILITY_FLUSH_SIZE) {
+            const publishStartedAt = performance.now();
             lastPublishedTrackId = await flushImportedTrackIds(
               plan.setId,
               ids,
               lastPublishedTrackId,
             );
+            folderSyncLog.debug("import.publish", {
+              traceId,
+              category: "sync",
+              phase: "success",
+              setId: plan.setId,
+              durationMs: roundImportTraceMs(performance.now() - publishStartedAt),
+              done,
+              total,
+            });
           }
           // No embedded image but a carried cover URL (`.ncm`, or a plaintext mp3
           // with a NetEase "163 key" comment) → queue it for the bounded fetch pass.
@@ -2619,56 +3309,136 @@ export async function runFolderSync(
         } catch (err) {
           // One unreadable/corrupt file must not abort the batch.
           if (file.decode === "ncm") decodeFailed += 1;
+          folderSyncLog.warn("import.file.fail", {
+            traceId,
+            category: "sync",
+            phase: "fail",
+            setId: plan.setId,
+            mode: folderImportMode(file, referenceElectronLocalFiles),
+            decode: file.decode,
+            kind: file.kind,
+            extension: extensionFromFileName(file.name),
+            err: err instanceof Error ? err.name : typeof err,
+          });
           log.warn("player", "failed to import folder file", { path: file.path, err: String(err) });
         }
         done += 1;
-        setFolderImportProgress({
-          phase: "importing",
+        fileIndex += 1;
+        emitProgress(
+          {
+            phase: "importing",
+            done,
+            total,
+            imported,
+            encrypted,
+            decodeFailed,
+            currentName: file.name,
+          },
+          "file-import",
+        );
+      }
+      const finalPublishStartedAt = performance.now();
+      const finalPublishCount = ids.length;
+      lastPublishedTrackId = await flushImportedTrackIds(plan.setId, ids, lastPublishedTrackId);
+      if (finalPublishCount > 0) {
+        folderSyncLog.debug("import.publish.final", {
+          traceId,
+          category: "sync",
+          phase: "success",
+          setId: plan.setId,
+          count: finalPublishCount,
+          durationMs: roundImportTraceMs(performance.now() - finalPublishStartedAt),
           done,
           total,
-          imported,
-          encrypted,
-          decodeFailed,
-          currentName: file.name,
         });
       }
-      lastPublishedTrackId = await flushImportedTrackIds(plan.setId, ids, lastPublishedTrackId);
+      const persistStartedAt = performance.now();
       await upsertImportFolder({
         ...plan.folder,
         setId: plan.setId,
         lastScanAt: Date.now(),
         lastImportedCount: planImported,
       });
+      folderSyncLog.debug("import.folder.done", {
+        traceId,
+        category: "sync",
+        phase: "success",
+        setId: plan.setId,
+        imported: planImported,
+        durationMs: roundImportTraceMs(performance.now() - planStartedAt),
+        persistMs: roundImportTraceMs(performance.now() - persistStartedAt),
+      });
       if (signal.aborted) break;
     }
+    folderSyncLog.info("import.complete", {
+      traceId,
+      category: "sync",
+      phase: signal.aborted ? "abort" : "success",
+      durationMs: roundImportTraceMs(performance.now() - importStartedAt),
+      imported,
+      done,
+      total,
+      coverJobs: coverJobs.length,
+    });
 
     // Covers come from a CDN — fetch them bounded + abortable so a large folder
     // doesn't fire hundreds of concurrent downloads. Audio is already imported, so
     // tracks play immediately; this only fills in the artwork. Its own progress
     // phase keeps the indicator honest instead of sitting at "done/total".
     if (coverJobs.length > 0 && !signal.aborted) {
+      const coverStartedAt = performance.now();
       const coverTotal = coverJobs.length;
       const emitCovers = (coverDone: number) =>
-        setFolderImportProgress({
-          phase: "covers",
-          done,
-          total,
-          imported,
-          encrypted,
-          decodeFailed,
-          coverDone,
-          coverTotal,
-        });
+        emitProgress(
+          {
+            phase: "covers",
+            done,
+            total,
+            imported,
+            encrypted,
+            decodeFailed,
+            coverDone,
+            coverTotal,
+          },
+          "cover-import",
+        );
+      folderSyncLog.info("covers.start", {
+        traceId,
+        category: "sync",
+        phase: "start",
+        coverTotal,
+      });
       emitCovers(0);
       await fetchRemoteCovers(coverJobs, signal, emitCovers);
+      folderSyncLog.info("covers.complete", {
+        traceId,
+        category: "sync",
+        phase: signal.aborted ? "abort" : "success",
+        durationMs: roundImportTraceMs(performance.now() - coverStartedAt),
+        coverTotal,
+      });
     }
 
     const cancelled = signal.aborted;
-    setFolderImportProgress({
-      phase: cancelled ? "cancelled" : "completed",
+    emitProgress(
+      {
+        phase: cancelled ? "cancelled" : "completed",
+        done,
+        total,
+        imported,
+        encrypted,
+        decodeFailed,
+      },
+      "run-terminal",
+    );
+    folderSyncLog.info("run.complete", {
+      traceId,
+      category: "sync",
+      phase: cancelled ? "abort" : "success",
+      durationMs: roundImportTraceMs(performance.now() - runStartedAt),
+      imported,
       done,
       total,
-      imported,
       encrypted,
       decodeFailed,
     });
@@ -2676,11 +3446,19 @@ export async function runFolderSync(
       "player",
       `folder sync imported ${imported} file(s)${cancelled ? " (cancelled)" : ""}`,
     );
+    scheduleFolderImportProgressClear();
     return { imported, encrypted, decodeFailed, cancelled };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     usePlayerStore.setState({ djError: msg });
-    setFolderImportProgress(null);
+    emitProgress(null, "run-fail");
+    folderSyncLog.error("run.fail", {
+      traceId,
+      category: "sync",
+      phase: "fail",
+      durationMs: roundImportTraceMs(performance.now() - runStartedAt),
+      err: err instanceof Error ? err.name : typeof err,
+    });
     log.error("player", "folder sync failed", msg);
     return { imported, encrypted, decodeFailed, cancelled: signal.aborted };
   } finally {
@@ -2716,6 +3494,138 @@ function describePlaybackError(error: unknown): string {
 
 function trackLocalFileMime(track: Track): string {
   return track.mediaMetadata?.originalMime ?? (track.kind === "video" ? "video/mp4" : "audio/mpeg");
+}
+
+function trackHasNcmSource(track: Pick<Track, "mediaMetadata" | "sourcePath">): boolean {
+  return (
+    track.mediaMetadata?.originalExtension?.toLowerCase() === "ncm" ||
+    Boolean(track.sourcePath && isNcmFile(track.sourcePath))
+  );
+}
+
+async function loadNcmTrackFromSourcePath(input: {
+  continueCurrent: (stage: string) => boolean;
+  get: () => PlayerState;
+  onLoadingRequest?: (requestId: number) => void;
+  set: (p: Partial<PlayerState>) => void;
+  trace?: PlaybackTraceContext;
+  track: Track;
+}): Promise<boolean> {
+  const { get, onLoadingRequest, set, trace, track } = input;
+  const bridge = resolveDesktopBridge();
+  if (!track.sourcePath || !bridge.readFile) {
+    notifyLocalFilePlaybackFailure(track, set, get);
+    log.warn("player", "ncm source playback is unavailable", {
+      trackId: track.id,
+      hasReadFile: !!bridge.readFile,
+      hasSourcePath: !!track.sourcePath,
+    });
+    set({ isPlaying: false, wantPlay: false });
+    return false;
+  }
+  const engine = mediaEngine;
+  if (!engine) return false;
+  const request = beginPlaybackLoading(set, track, track.blobId ? "blob" : "local-file");
+  onLoadingRequest?.(request.id);
+  const continueLoading = (stage: string) => {
+    const activeTrackId = currentTrack(get())?.id;
+    if (activeTrackId === track.id && isPlaybackLoadCurrent(request.id)) return true;
+    log.debug("player", "discard stale ncm playback load", {
+      trackId: track.id,
+      activeTrackId,
+      requestId: request.id,
+      currentRequestId: playbackLoadSeq,
+      stage,
+    });
+    return false;
+  };
+  try {
+    const bytes = await bridge.readFile(track.sourcePath);
+    if (!continueLoading("ncm-source-read")) return false;
+    const inputBytes = arrayBufferFromBytes(bytes);
+    const decoded = await decodeNcmViaWorker({
+      setId: track.sessionId,
+      name: basename(track.sourcePath),
+      kind: "audio",
+      mime: "",
+      sourcePath: track.sourcePath,
+      bytes: inputBytes,
+      decode: "ncm",
+    });
+    if (!continueLoading("ncm-source-decoded")) return false;
+    const blob = new Blob([new Uint8Array(decoded.audio)], { type: decoded.mime });
+    tracePlaybackLoad("media.load.ncm-decoded", track, trace, {
+      bytes: blob.size,
+      mime: decoded.mime,
+      sourceId: "decoded-ncm",
+      transport: "blob",
+    });
+    await engine.loadBlob(blob, "audio");
+    if (!continueLoading("ncm-source-loaded")) return false;
+    const duration = playableDurationSec(decoded.durationSec);
+    if (duration > 0) set({ durationSec: duration });
+    return true;
+  } catch (error) {
+    if (!continueLoading("ncm-source-failed")) return false;
+    notifyLocalFilePlaybackFailure(track, set, get);
+    log.warn("player", "ncm source playback failed", {
+      trackId: track.id,
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    set({ isPlaying: false, wantPlay: false });
+    return false;
+  } finally {
+    clearPlaybackLoading(set, request.id);
+  }
+}
+
+async function loadTrackFromSourcePath(input: {
+  continueCurrent: (stage: string) => boolean;
+  get: () => PlayerState;
+  onLoadingRequest?: (requestId: number) => void;
+  set: (p: Partial<PlayerState>) => void;
+  trace?: PlaybackTraceContext;
+  track: Track;
+}): Promise<boolean> {
+  const { continueCurrent, get, set, trace, track } = input;
+  if (trackHasNcmSource(track)) return loadNcmTrackFromSourcePath(input);
+  const bridge = resolveDesktopBridge();
+  if (!track.sourcePath || !bridge.localMediaUrl) {
+    notifyLocalFilePlaybackFailure(track, set, get);
+    log.warn("player", "local-file playback is unavailable", {
+      trackId: track.id,
+      hasSourcePath: !!track.sourcePath,
+      bridge: bridge.kind,
+    });
+    set({ isPlaying: false, wantPlay: false });
+    return false;
+  }
+  const engine = mediaEngine;
+  if (!engine) return false;
+  const mime = trackLocalFileMime(track);
+  try {
+    const src = await bridge.localMediaUrl({
+      path: track.sourcePath,
+      mime,
+      trace,
+    });
+    if (!continueCurrent("local-file-url")) return false;
+    tracePlaybackLoad("media.load.local-file", track, trace, {
+      mime,
+      transport: "local-file",
+    });
+    await engine.loadUrl(src, track.kind, { crossOrigin: "anonymous" });
+    return continueCurrent("local-file-loaded");
+  } catch (error) {
+    if (!continueCurrent("local-file-failed")) return false;
+    notifyLocalFilePlaybackFailure(track, set, get);
+    log.warn("player", "local-file playback failed", {
+      trackId: track.id,
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    set({ isPlaying: false, wantPlay: false });
+    return false;
+  }
 }
 
 function patchQueuedTrack(
@@ -2933,10 +3843,55 @@ function watchSetForAppend(
       const fresh = unconsumedTrackIds(s.trackIds, consumedTrackIds);
       if (fresh.length === 0) return;
       for (const id of fresh) consumedTrackIds.add(id);
+      if (useFolderImportStore.getState().progress) {
+        deferSetAppendUntilFolderImportSettles(sessionId, fresh);
+        return;
+      }
       void playQueueAppend(fresh);
     },
     error: (err) => log.error("player", "set subscription error", err),
   });
+}
+
+function deferSetAppendUntilFolderImportSettles(sessionId: string, trackIds: readonly string[]) {
+  let pending = deferredSetAppendIdsBySession.get(sessionId);
+  if (!pending) {
+    pending = new Set();
+    deferredSetAppendIdsBySession.set(sessionId, pending);
+  }
+  for (const id of trackIds) pending.add(id);
+  if (deferredSetAppendUnsubscribe) return;
+  deferredSetAppendUnsubscribe = useFolderImportStore.subscribe((state) => {
+    if (state.progress) return;
+    flushDeferredSetAppends();
+  });
+}
+
+function flushDeferredSetAppends(): void {
+  deferredSetAppendUnsubscribe?.();
+  deferredSetAppendUnsubscribe = null;
+  const activeSessionId = usePlayerStore.getState().activeSessionId;
+  const entries = [...deferredSetAppendIdsBySession.entries()];
+  deferredSetAppendIdsBySession.clear();
+  for (const [sessionId, idSet] of entries) {
+    if (sessionId !== activeSessionId || setSubSessionId !== sessionId) continue;
+    const ids = [...idSet];
+    if (ids.length === 0) continue;
+    const startedAt = performance.now();
+    void playQueueAppend(ids)
+      .then(() => {
+        notePerfWork("queue.deferSetAppend.flush", performance.now() - startedAt, {
+          tracks: ids.length,
+        });
+      })
+      .catch((error: unknown) => {
+        log.warn("player", "failed to append deferred folder-import queue tracks", {
+          err: String(error),
+          sessionId,
+          tracks: ids.length,
+        });
+      });
+  }
 }
 
 async function hydratePlaybackSettings(
@@ -2959,6 +3914,63 @@ function clampVolume(value: number | undefined): number {
   return Math.min(1, Math.max(0, value));
 }
 
+/** Below this confidence an auto-match is flagged "may not be this version" + offered search. */
+const LYRICS_LOW_CONFIDENCE_MAX = 0.8;
+
+function dismissLyricsToast(): void {
+  if (lyricsToastId) {
+    notify.dismiss(lyricsToastId);
+    lyricsToastId = null;
+  }
+}
+
+/** Action that opens the Now-Playing manual lyrics search (via the ui-store nonce). */
+function searchLyricsAction() {
+  return {
+    label: i18n.t("lyrics.searchAction"),
+    onClick: () => useUiStore.getState().requestLyricsSearch(),
+  };
+}
+
+/**
+ * Drive the match-progress toast off auto-fetch lifecycle events (§4.7). A
+ * `loading` toast on start, swapped to a terminal toast: a clean success for a
+ * confident match (auto-dismisses), an actionable info for a low-confidence or
+ * not-found result, and silence on error (a background non-event). Bounded to one
+ * per track by the negative cache, so it can't spam.
+ */
+function reportLyricsMatch(event: LyricsFetchEvent): void {
+  switch (event.phase) {
+    case "start":
+      dismissLyricsToast();
+      lyricsToastId = notify.loading(i18n.t("lyrics.matching"));
+      break;
+    case "found":
+      if (event.instrumental) {
+        if (lyricsToastId) {
+          notify.update(lyricsToastId, { type: "info", message: i18n.t("lyrics.instrumental") });
+        }
+      } else if ((event.confidence ?? 1) < LYRICS_LOW_CONFIDENCE_MAX) {
+        dismissLyricsToast();
+        notify.info(i18n.t("lyrics.matchedLowConfidence"), {
+          duration: 8000,
+          actions: [searchLyricsAction()],
+        });
+      } else if (lyricsToastId) {
+        notify.update(lyricsToastId, { type: "success", message: i18n.t("lyrics.matched") });
+      }
+      lyricsToastId = null;
+      break;
+    case "notFound":
+      dismissLyricsToast();
+      notify.info(i18n.t("lyrics.noResults"), { duration: 8000, actions: [searchLyricsAction()] });
+      break;
+    case "error":
+      dismissLyricsToast(); // failures stay silent (background non-event)
+      break;
+  }
+}
+
 /**
  * Fire-and-forget LRCLIB auto-fetch for the now-current track. Module scope (not
  * store state) so per-frame playback never re-renders on it (rule 6). Aborts any
@@ -2966,10 +3978,12 @@ function clampVolume(value: number | undefined): number {
  * skip the network. All eligibility checks live in runAutoFetchLyrics.
  */
 function triggerLyricsAutoFetch(track: Track): void {
-  // Cancel any in-flight fetch + pending debounce from the previous track.
+  // Cancel any in-flight fetch + pending debounce from the previous track,
+  // and clear its match toast so it never lingers onto the next song.
   lyricsAbort?.abort();
   if (lyricsTimer !== null) clearTimeout(lyricsTimer);
   lyricsTimer = null;
+  dismissLyricsToast();
   if (track.origin === "generated") return;
   const controller = new AbortController();
   lyricsAbort = controller;
@@ -2986,6 +4000,8 @@ function triggerLyricsAutoFetch(track: Track): void {
           settings,
           provider: resolveLyricsProviderForTrack(settings, track),
           signal: controller.signal,
+          // Match toast is a visible Settings toggle (rule 3), default on.
+          report: settings.lyricsMatchToasts === false ? undefined : reportLyricsMatch,
         });
       } catch (err) {
         log.warn("lyrics", "auto-fetch trigger failed", err);
@@ -3223,7 +4239,23 @@ async function ensureLoadedAndPlay(
         const media = await getTrackBlob(track);
         if (!continueCurrent("blob-resolved")) return;
         if (!media) {
-          log.warn("player", "missing media blob", { trackId: track.id, blobId: track.blobId });
+          log.warn("player", "missing media blob", {
+            trackId: track.id,
+            blobId: track.blobId,
+            hasSourcePathFallback: !!track.sourcePath,
+          });
+          if (track.sourcePath) {
+            await loadTrackFromSourcePath({
+              continueCurrent,
+              get,
+              onLoadingRequest: (id) => {
+                activeRequestId = id;
+              },
+              set,
+              trace: playbackTrace,
+              track,
+            });
+          }
           return;
         }
         log.debug("player", "loading media blob", {
@@ -3238,6 +4270,27 @@ async function ensureLoadedAndPlay(
           transport: "blob",
         });
         if (!media.blob) {
+          if (track.sourcePath) {
+            log.warn(
+              "player",
+              "local media blob missing inline bytes; falling back to sourcePath",
+              {
+                trackId: track.id,
+                blobId: track.blobId,
+              },
+            );
+            await loadTrackFromSourcePath({
+              continueCurrent,
+              get,
+              onLoadingRequest: (id) => {
+                activeRequestId = id;
+              },
+              set,
+              trace: playbackTrace,
+              track,
+            });
+            return;
+          }
           notify.error(i18n.t("player.playbackError"));
           log.warn("player", "local media blob missing inline bytes", {
             trackId: track.id,
@@ -3250,41 +4303,17 @@ async function ensureLoadedAndPlay(
         if (!continueCurrent("blob-loaded")) return;
       }
     } else if (sourceKind === "local-file") {
-      const bridge = resolveDesktopBridge();
-      if (!track.sourcePath || !bridge.localMediaUrl) {
-        notifyLocalFilePlaybackFailure(track, set, get);
-        log.warn("player", "local-file playback is unavailable", {
-          trackId: track.id,
-          hasSourcePath: !!track.sourcePath,
-          bridge: bridge.kind,
-        });
-        set({ isPlaying: false, wantPlay: false });
-        return;
-      }
-      const mime = trackLocalFileMime(track);
-      try {
-        const src = await bridge.localMediaUrl({
-          path: track.sourcePath,
-          mime,
-          trace: playbackTrace,
-        });
-        if (!continueCurrent("local-file-url")) return;
-        tracePlaybackLoad("media.load.local-file", track, playbackTrace, {
-          mime,
-          transport: "local-file",
-        });
-        await mediaEngine.loadUrl(src, track.kind, { crossOrigin: "anonymous" });
-        if (!continueCurrent("local-file-loaded")) return;
-      } catch (error) {
-        if (!continueCurrent("local-file-failed")) return;
-        notifyLocalFilePlaybackFailure(track, set, get);
-        log.warn("player", "local-file playback failed", {
-          trackId: track.id,
-          errorType: error instanceof Error ? error.name : typeof error,
-        });
-        set({ isPlaying: false, wantPlay: false });
-        return;
-      }
+      const loaded = await loadTrackFromSourcePath({
+        continueCurrent,
+        get,
+        onLoadingRequest: (id) => {
+          activeRequestId = id;
+        },
+        set,
+        trace: playbackTrace,
+        track,
+      });
+      if (!loaded) return;
     } else if (sourceKind === "remote") {
       log.debug("player", "loading remote media url", {
         trackId: track.id,

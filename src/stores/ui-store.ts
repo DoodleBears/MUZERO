@@ -17,6 +17,14 @@ interface UiState {
    */
   chromeHidden: boolean;
   setChromeHidden: (hidden: boolean) => void;
+  /**
+   * Monotonic nonce bumped to ask the Now-Playing lyrics view to open its manual
+   * search (e.g. the "Search" action on a not-found / low-confidence match toast).
+   * A nonce (not a boolean) so a repeat request re-triggers even after the user
+   * closed search.
+   */
+  lyricsSearchNonce: number;
+  requestLyricsSearch: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -26,4 +34,6 @@ export const useUiStore = create<UiState>((set) => ({
   chromeHidden: false,
   setChromeHidden: (hidden) =>
     set((s) => (s.chromeHidden === hidden ? s : { chromeHidden: hidden })),
+  lyricsSearchNonce: 0,
+  requestLyricsSearch: () => set((s) => ({ lyricsSearchNonce: s.lyricsSearchNonce + 1 })),
 }));

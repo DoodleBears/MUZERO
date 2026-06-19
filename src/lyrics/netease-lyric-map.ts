@@ -6,8 +6,10 @@
  * `yrc.lyric` — we prefer the latter, tagging it `format: "yrc"` for `parseLyrics`.
  */
 
+import { MATCH_GATE, normalizeTitle, titleSimilarity } from "./match-text";
 import type { LyricFormat } from "./model";
 import { detectLyricsFormat } from "./parse";
+import type { LyricsQuery } from "./provider";
 
 export const NETEASE_LYRIC_URL = "https://interface.music.163.com/eapi/song/lyric/v1";
 export const NETEASE_LYRIC_PATH = "/api/song/lyric/v1";
@@ -109,6 +111,39 @@ export function pickClosestByDuration<T extends { durationSec?: number }>(
     if (delta < bestDelta) {
       best = hit;
       bestDelta = delta;
+    }
+  }
+  return best;
+}
+
+/** Duration nearness 0..1 against the hard ceiling; 0.5 (neutral) when the target is unknown. */
+function songDurationScore(durationSec: number | undefined, target: number | undefined): number {
+  if (target == null || !Number.isFinite(target)) return 0.5;
+  if (typeof durationSec !== "number") return 0;
+  const delta = Math.abs(durationSec - target);
+  return delta >= MATCH_GATE.durationHardSec ? 0 : 1 - delta / MATCH_GATE.durationHardSec;
+}
+
+/**
+ * From cloudsearch song candidates (no lyrics fetched yet), the best by title
+ * similarity + duration nearness — so a same-duration cover with the wrong title
+ * loses to the real song, and duration only disambiguates among title matches.
+ * Title leads (0.6) since NetEase relevance-ranks but can still float covers up.
+ */
+export function pickBestSong<T extends { title?: string; durationSec?: number }>(
+  songs: T[],
+  q: LyricsQuery,
+): T | null {
+  if (songs.length === 0) return null;
+  const want = normalizeTitle(q.trackName);
+  let best: T | null = null;
+  let bestScore = -1;
+  for (const song of songs) {
+    const titleSim = titleSimilarity(normalizeTitle(song.title ?? ""), want);
+    const score = 0.6 * titleSim + 0.4 * songDurationScore(song.durationSec, q.durationSec);
+    if (score > bestScore) {
+      best = song;
+      bestScore = score;
     }
   }
   return best;

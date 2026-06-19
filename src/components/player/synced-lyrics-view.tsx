@@ -160,6 +160,12 @@ export function SyncedLyricsView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset the search panel when the track changes
   useEffect(() => setSearchOpen(false), [incomingTrackId]);
 
+  // Open manual search when a match toast's "Search" action bumps the ui-store nonce.
+  const lyricsSearchNonce = useUiStore((s) => s.lyricsSearchNonce);
+  useEffect(() => {
+    if (lyricsSearchNonce > 0 && displayTrack) setSearchOpen(true);
+  }, [lyricsSearchNonce, displayTrack]);
+
   let content: React.ReactNode;
   if (searchOpen && displayTrack) {
     content = (

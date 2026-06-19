@@ -4,9 +4,19 @@
 // EXISTING action surface — the shortcut command bus, player-store actions, saveSettings
 // — never re-implementing behavior. It is loaded only under import.meta.env.DEV (see
 // App.tsx), so it is tree-shaken out of production builds entirely.
-import { getSettings, getTrack, saveSettings, setTrackTags } from "@/db/repositories";
+import {
+  createSession,
+  createUploadedTrack,
+  getSettings,
+  getTrack,
+  prependTrackIds,
+  saveSettings,
+  setTrackTags,
+} from "@/db/repositories";
 import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS } from "@/db/types";
+import { EXAMPLE_TRACK_TITLE, loadExampleTrackAssets } from "@/lib/example-track";
 import { log } from "@/lib/logger";
+import { fallbackUploadMediaMetadata } from "@/lib/media-metadata";
 import {
   getPerformanceTraceSamplerStatus,
   startPerformanceTraceSampler,
@@ -41,7 +51,8 @@ export interface PerfControlCommand {
     | "editMeta"
     | "renderTrace"
     | "liveRequest"
-    | "sessions";
+    | "sessions"
+    | "seedExample";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -75,6 +86,8 @@ interface PerfCommandHandlerDeps {
   liveRequest?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** List sessions (id/name/trackCount) so a perf run can switch playlists by size. */
   listSessions?: () => Promise<unknown>;
+  /** Seed a small playable set for harnesses that run against a fresh profile DB. */
+  seedExample?: () => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -227,6 +240,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         if (!deps.listSessions) throw new Error("listSessions not wired");
         return deps.listSessions();
       }
+      case "seedExample": {
+        if (!deps.seedExample) throw new Error("seedExample not wired");
+        return deps.seedExample();
+      }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
     }
@@ -368,6 +385,28 @@ export function startPerfControlBridge(): void {
           }))
           .sort((a, b) => b.trackCount - a.trackCount),
       };
+    },
+    seedExample: async () => {
+      const session = await createSession({
+        name: "Playback Memory Harness",
+        seedPrompt: "",
+        config: { autoExtend: false },
+        displayMode: "cover",
+      });
+      const { audio, cover } = await loadExampleTrackAssets();
+      const track = await createUploadedTrack({
+        sessionId: session.id,
+        title: EXAMPLE_TRACK_TITLE,
+        kind: "audio",
+        blob: audio,
+        mime: audio.type || "audio/mpeg",
+        durationSec: 0,
+        mediaMetadata: fallbackUploadMediaMetadata(audio, EXAMPLE_TRACK_TITLE),
+        embeddedCover: cover,
+      });
+      await prependTrackIds(session.id, [track.id]);
+      await usePlayerStore.getState().setActiveSession(session.id);
+      return { sessionId: session.id, trackId: track.id };
     },
     // Render-trace: reset per-surface commit counters before a scenario, snapshot after
     // — surfaces shows which re-rendered (and whether a hidden one wasted work).

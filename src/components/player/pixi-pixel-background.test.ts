@@ -98,7 +98,7 @@ describe("shouldFetchImageTexture", () => {
 });
 
 describe("readTextureBlobSource", () => {
-  it("keeps fetched bytes as reusable header bytes for ImageBitmap sizing", async () => {
+  it("reads only a blob-slice header for ImageBitmap sizing", async () => {
     const bytes = new Uint8Array(80 * 1024);
     bytes.fill(7);
     const response = new Response(bytes, {
@@ -110,7 +110,7 @@ describe("readTextureBlobSource", () => {
 
     expect(source?.blob.size).toBe(bytes.byteLength);
     expect(source?.blob.type).toBe("image/jpeg");
-    expect(source?.headerSource).toBe("fetched-bytes");
+    expect(source?.headerSource).toBe("blob-slice");
     expect(source?.headerBytes).toHaveLength(64 * 1024);
     expect(source?.headerBytes?.[0]).toBe(7);
   });

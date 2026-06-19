@@ -9,6 +9,7 @@
 
 import { getSettings } from "@/db/repositories";
 import i18n from "@/i18n/i18n";
+import { createDiagnosticLogger } from "@/lib/logger";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import type { SyncPhase, SyncProgress } from "@/sync/sync-orchestrator";
 import { type FolderImportProgress, useFolderImportStore } from "./folder-import-store";
@@ -17,6 +18,7 @@ import { useSyncStore } from "./sync-store";
 
 /** Active loading-toast id per operation key (`folder-import` / `r2:<driveId>`). */
 const toastIds = new Map<string, string>();
+const syncIndicatorLog = createDiagnosticLogger("sync.indicator");
 
 const cancelAction = (onClick: () => void): NotificationAction => ({
   label: i18n.t("drop.cancel"),
@@ -31,6 +33,31 @@ function skipDetail(encrypted: number, decodeFailed: number): string | undefined
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
+function roundSyncIndicatorMs(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function traceImportToast(
+  event: string,
+  progress: FolderImportProgress | null,
+  startedAt: number,
+  extra: Record<string, unknown> = {},
+): void {
+  syncIndicatorLog.debug(event, {
+    traceId: progress?.traceId,
+    category: "sync",
+    phase: "state",
+    durationMs: roundSyncIndicatorMs(performance.now() - startedAt),
+    folderPhase: progress?.phase ?? "clear",
+    done: progress?.done,
+    total: progress?.total,
+    imported: progress?.imported,
+    coverDone: progress?.coverDone,
+    coverTotal: progress?.coverTotal,
+    ...extra,
+  });
+}
+
 // --- local-folder import -------------------------------------------------------
 
 function reconcileImport(progress: FolderImportProgress | null): void {
@@ -40,8 +67,14 @@ function reconcileImport(progress: FolderImportProgress | null): void {
   if (!progress || progress.phase === "scanning") {
     // Stay silent during scan; only a cleared progress dismisses a stray toast.
     if (!progress && id) {
+      const startedAt = performance.now();
       notify.dismiss(id);
       toastIds.delete(key);
+      traceImportToast("folder-import.toast.dismiss", progress, startedAt, { hadToast: true });
+    } else if (progress?.phase === "scanning") {
+      traceImportToast("folder-import.toast.scan-silent", progress, performance.now(), {
+        hadToast: Boolean(id),
+      });
     }
     return;
   }
@@ -65,8 +98,14 @@ function reconcileImport(progress: FolderImportProgress | null): void {
             total: progress.total,
           });
     if (id) {
+      const startedAt = performance.now();
       notify.update(id, { message, detail });
+      traceImportToast("folder-import.toast.update", progress, startedAt, {
+        hadToast: true,
+        toastId: id,
+      });
     } else {
+      const startedAt = performance.now();
       toastIds.set(
         key,
         notify.loading(message, {
@@ -74,6 +113,10 @@ function reconcileImport(progress: FolderImportProgress | null): void {
           actions: [cancelAction(() => useFolderImportStore.getState().cancel())],
         }),
       );
+      traceImportToast("folder-import.toast.create", progress, startedAt, {
+        hadToast: false,
+        toastId: toastIds.get(key),
+      });
     }
     return;
   }
@@ -82,27 +125,47 @@ function reconcileImport(progress: FolderImportProgress | null): void {
   // one so the (now-stale) Cancel action is gone.
   const hadToast = Boolean(id);
   if (id) {
+    const dismissStartedAt = performance.now();
     notify.dismiss(id);
     toastIds.delete(key);
+    traceImportToast("folder-import.toast.dismiss", progress, dismissStartedAt, {
+      hadToast: true,
+      toastId: id,
+    });
   }
   const detail = skipDetail(progress.encrypted, progress.decodeFailed);
 
   if (progress.phase === "cancelled") {
     if (hadToast) {
+      const startedAt = performance.now();
       notify.info(i18n.t("folderImport.cancelled", { count: progress.imported }), { detail });
+      traceImportToast("folder-import.toast.terminal", progress, startedAt, {
+        kind: "cancelled",
+        hadToast,
+      });
     }
     return;
   }
   // completed
   if (progress.imported > 0) {
+    const startedAt = performance.now();
     notify.success(i18n.t("folderImport.imported", { count: progress.imported }), {
       detail,
       actions: [
         { label: i18n.t("folderImport.publishNow"), onClick: () => void publishDefaultDrive() },
       ],
     });
+    traceImportToast("folder-import.toast.terminal", progress, startedAt, {
+      kind: "success",
+      hadToast,
+    });
   } else if (detail) {
+    const startedAt = performance.now();
     notify.warning(detail);
+    traceImportToast("folder-import.toast.terminal", progress, startedAt, {
+      kind: "warning",
+      hadToast,
+    });
   }
 }
 

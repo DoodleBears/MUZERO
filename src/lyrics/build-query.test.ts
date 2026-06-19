@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Track } from "@/db/types";
-import { buildLyricsQuery } from "./build-query";
+import { buildLyricsQuery, buildLyricsQueryPlan } from "./build-query";
+import type { LyricsQuery } from "./provider";
 
 function track(over: Partial<Track> = {}): Track {
   return {
@@ -81,5 +82,40 @@ describe("buildLyricsQuery", () => {
       track({ origin: "streamed", streamSourceId: "bili", streamExternalId: "BV1#1" }),
     );
     expect(q?.neteaseSongId).toBeUndefined();
+  });
+});
+
+describe("buildLyricsQueryPlan", () => {
+  it("keeps the primary query verbatim", () => {
+    const q: LyricsQuery = {
+      trackName: "Song (Live)",
+      artistName: "A, B",
+      albumName: "Album",
+      durationSec: 200,
+    };
+    expect(buildLyricsQueryPlan(q).primary).toEqual(q);
+  });
+
+  it("derives a normalized variant (clean title + primary artist), keeping album/duration", () => {
+    const plan = buildLyricsQueryPlan({
+      trackName: "Song (Live)",
+      artistName: "A, B & C",
+      albumName: "Album",
+      durationSec: 200,
+    });
+    expect(plan.normalized).toEqual({
+      trackName: "Song",
+      artistName: "A",
+      albumName: "Album",
+      durationSec: 200,
+    });
+    expect(plan.normalizedDiffers).toBe(true);
+  });
+
+  it("marks normalizedDiffers false when nothing changes (avoids a redundant L1 request)", () => {
+    const plan = buildLyricsQueryPlan({ trackName: "Clean", artistName: "Solo", durationSec: 120 });
+    expect(plan.normalizedDiffers).toBe(false);
+    expect(plan.normalized.trackName).toBe("Clean");
+    expect(plan.normalized.artistName).toBe("Solo");
   });
 });

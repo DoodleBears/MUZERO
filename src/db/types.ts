@@ -981,6 +981,13 @@ export interface AppSettings {
    * songId identifies the official lyrics — see `resolveLyricsProviderForTrack`.
    */
   lyricsProviderId?: LyricsProviderId;
+  /**
+   * Show a brief in-app toast while auto-matching lyrics and when it settles
+   * (matched / low-confidence / not found). Visible Settings toggle (rule 3),
+   * default on; failures stay silent regardless. Bounded by the negative cache —
+   * a track only matches once, so it can't spam.
+   */
+  lyricsMatchToasts?: boolean;
 }
 
 /**
@@ -1070,6 +1077,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoFetchLyrics: true,
   autoCacheStreamed: true,
   lyricsProviderId: "auto",
+  lyricsMatchToasts: true,
   theme: "dark",
   appIcon: "dark",
   electronWindowRadius: 12,

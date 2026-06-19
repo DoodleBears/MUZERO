@@ -41,6 +41,7 @@ import {
   listGalleryImages,
   listGlobalSearchTracks,
   listMemories,
+  listReferencedLocalFileAccessGrants,
   listReferencedLocalFileSourcePaths,
   listTrackBackgrounds,
   markTrackReady,
@@ -667,6 +668,89 @@ describe("createUploadedTrack", () => {
     await expect(listReferencedLocalFileSourcePaths(db)).resolves.toEqual([
       "D:/media/referenced-mv.mp4",
     ]);
+  });
+
+  it("groups referenced local-file boot grants by remembered recursive folders", async () => {
+    const folderSession = await createSession(
+      { seedPrompt: "", config: { autoExtend: false } },
+      db,
+    );
+    const flatSession = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const looseSession = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await upsertImportFolder(
+      { path: "D:/music/recursive", setId: folderSession.id, recursive: true },
+      db,
+    );
+    await upsertImportFolder(
+      { path: "D:/music/recursive/nested", setId: folderSession.id, recursive: true },
+      db,
+    );
+    await upsertImportFolder(
+      { path: "D:/music/flat", setId: flatSession.id, recursive: false },
+      db,
+    );
+    await createReferencedUploadedTrack(
+      {
+        sessionId: folderSession.id,
+        title: "Folder Track",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 0,
+        sourcePath: "D:/music/recursive/a.mp3",
+      },
+      db,
+    );
+    await createReferencedUploadedTrack(
+      {
+        sessionId: folderSession.id,
+        title: "Nested Folder Track",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 0,
+        sourcePath: "D:/music/recursive/nested/b.mp3",
+      },
+      db,
+    );
+    await createReferencedUploadedTrack(
+      {
+        sessionId: folderSession.id,
+        title: "Child Folder Track",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 0,
+        sourcePath: "D:/music/recursive/nested/child-folder.mp3",
+      },
+      db,
+    );
+    await createReferencedUploadedTrack(
+      {
+        sessionId: flatSession.id,
+        title: "Flat Track",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 0,
+        sourcePath: "D:/music/flat/top.mp3",
+      },
+      db,
+    );
+    await createReferencedUploadedTrack(
+      {
+        sessionId: looseSession.id,
+        title: "Loose Track",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 0,
+        sourcePath: "D:/loose/drop.mp3",
+      },
+      db,
+    );
+
+    const grants = await listReferencedLocalFileAccessGrants(db);
+    expect(grants.totalReferencedPaths).toBe(5);
+    expect(grants.folderPaths).toEqual(["D:/music/recursive"]);
+    expect(new Set(grants.filePaths)).toEqual(
+      new Set(["D:/music/flat/top.mp3", "D:/loose/drop.mp3"]),
+    );
   });
 
   it("stores imported media metadata and embedded cover art out of the track row", async () => {
@@ -1616,6 +1700,41 @@ describe("import-folder provenance + watch list", () => {
     const known = await knownSourcePaths(["/music/a.mp3", "/music/c.mp3"], db);
     expect(known).toEqual(new Set(["/music/a.mp3"]));
     expect(await knownSourcePaths([], db)).toEqual(new Set());
+  });
+
+  it("chunks very large sourcePath queries without dropping matches", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await createReferencedUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "early",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 0,
+        sourcePath: "/huge/early.mp3",
+      },
+      db,
+    );
+    await createReferencedUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "late",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 0,
+        sourcePath: "/huge/late.mp3",
+      },
+      db,
+    );
+    const paths = [
+      "/huge/early.mp3",
+      ...Array.from({ length: 9000 }, (_, index) => `/huge/missing-${index}.mp3`),
+      "/huge/late.mp3",
+    ];
+
+    await expect(knownSourcePaths(paths, db)).resolves.toEqual(
+      new Set(["/huge/early.mp3", "/huge/late.mp3"]),
+    );
   });
 
   it("upserts folders by id-or-path without dropping others, and removes by id", async () => {

@@ -122,7 +122,10 @@ export function createElectronFileMediaStorageProvider(): MediaStorageProvider {
       if (!input.storageKey) return null;
       let bytes: Uint8Array<ArrayBuffer> | undefined;
       try {
-        bytes = await requireElectronMediaStorage().readMediaStorageFile?.({
+        const bridge = requireElectronMediaStorage();
+        const stat = await bridge.statMediaStorageFile?.({ storageKey: input.storageKey });
+        if (stat === null) return null;
+        bytes = await bridge.readMediaStorageFile?.({
           storageKey: input.storageKey,
         });
       } catch (error) {

@@ -4,7 +4,7 @@ import {
   coverPaletteFromThumbhash,
   type extractCoverPalette,
 } from "@/lib/cover-palette";
-import { newId } from "@/lib/id";
+import { newId, newIds } from "@/lib/id";
 import { log } from "@/lib/logger";
 import { noteDbRequery, notePerfWork } from "@/lib/perf-counters";
 import type { LyricsRecord } from "@/lyrics/provider";
@@ -336,6 +336,27 @@ export async function resetAllSystemShortcuts(db: MuzeroDB = defaultDb): Promise
 
 // ----------------------------------------------------------- import folders ----
 
+const SOURCE_PATH_QUERY_CHUNK_SIZE = 8192;
+
+async function tracksBySourcePaths(paths: readonly string[], db: MuzeroDB): Promise<Track[]> {
+  if (paths.length === 0) return [];
+  const uniquePaths = [...new Set(paths.filter((path) => path.length > 0))];
+  if (uniquePaths.length === 0) return [];
+  if (uniquePaths.length <= SOURCE_PATH_QUERY_CHUNK_SIZE) {
+    return db.tracks.where("sourcePath").anyOf(uniquePaths).toArray();
+  }
+  const rows: Track[] = [];
+  for (let offset = 0; offset < uniquePaths.length; offset += SOURCE_PATH_QUERY_CHUNK_SIZE) {
+    rows.push(
+      ...(await db.tracks
+        .where("sourcePath")
+        .anyOf(uniquePaths.slice(offset, offset + SOURCE_PATH_QUERY_CHUNK_SIZE))
+        .toArray()),
+    );
+  }
+  return rows;
+}
+
 /**
  * Of the given absolute paths, which are already in the library. Drives the
  * incremental local-folder sync: re-scanning a remembered folder imports only
@@ -345,9 +366,28 @@ export async function knownSourcePaths(
   paths: string[],
   db: MuzeroDB = defaultDb,
 ): Promise<Set<string>> {
-  if (paths.length === 0) return new Set();
-  const rows = await db.tracks.where("sourcePath").anyOf(paths).toArray();
+  const rows = await tracksBySourcePaths(paths, db);
   return new Set(rows.map((t) => t.sourcePath).filter((p): p is string => Boolean(p)));
+}
+
+export interface TrackSourcePathRef {
+  id: string;
+  sessionId: string;
+  sourcePath: string;
+}
+
+export async function listTrackSourcePathRefs(
+  paths: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<TrackSourcePathRef[]> {
+  const rows = await tracksBySourcePaths(paths, db);
+  return rows
+    .filter((track): track is Track & { sourcePath: string } => Boolean(track.sourcePath))
+    .map((track) => ({
+      id: track.id,
+      sessionId: track.sessionId,
+      sourcePath: track.sourcePath,
+    }));
 }
 
 /**
@@ -359,9 +399,125 @@ export async function listReferencedLocalFileSourcePaths(
   db: MuzeroDB = defaultDb,
 ): Promise<string[]> {
   const rows = await db.tracks
+    .where("sourcePath")
+    .above("")
     .filter((track) => track.status === "ready" && !!track.sourcePath && !track.blobId)
     .toArray();
   return [...new Set(rows.map((track) => track.sourcePath).filter((p): p is string => !!p))];
+}
+
+export interface ReferencedLocalFileAccessGrants {
+  /** Recursive folder roots that cover remembered local-folder imports. */
+  folderPaths: string[];
+  /** Exact-file grants still needed for drag/drop imports and non-recursive folders. */
+  filePaths: string[];
+  totalReferencedPaths: number;
+}
+
+function isNormalizedLocalPathWithinRoot(source: string, root: string): boolean {
+  return Boolean(root && source !== root && source.startsWith(`${root}/`));
+}
+
+interface FolderGrantCandidate {
+  normalizedPath: string;
+  path: string;
+}
+
+function minimalFolderGrantCandidates(paths: Iterable<string>): FolderGrantCandidate[] {
+  const byNormalized = new Map<string, string>();
+  for (const path of paths) {
+    const normalizedPath = normalizedLocalPath(path);
+    if (!normalizedPath || byNormalized.has(normalizedPath)) continue;
+    byNormalized.set(normalizedPath, path);
+  }
+  const ordered = [...byNormalized].sort(([a], [b]) => {
+    const byDepth = a.split("/").length - b.split("/").length;
+    return byDepth || a.localeCompare(b);
+  });
+  const result: FolderGrantCandidate[] = [];
+  for (const [normalizedPath, path] of ordered) {
+    if (
+      result.some((root) => isNormalizedLocalPathWithinRoot(normalizedPath, root.normalizedPath))
+    ) {
+      continue;
+    }
+    result.push({ normalizedPath, path });
+  }
+  return result;
+}
+
+function minimalFolderGrantPaths(paths: Iterable<string>): string[] {
+  return minimalFolderGrantCandidates(paths).map((candidate) => candidate.path);
+}
+
+export async function listReferencedLocalFileAccessGrants(
+  db: MuzeroDB = defaultDb,
+): Promise<ReferencedLocalFileAccessGrants> {
+  const [settings, paths] = await Promise.all([
+    getSettings(db),
+    listReferencedLocalFileSourcePaths(db),
+  ]);
+  const recursiveFolderCandidates = minimalFolderGrantCandidates(
+    (settings.importFolders ?? [])
+      .filter((folder) => folder.recursive ?? true)
+      .map((folder) => folder.path),
+  );
+  const folderPaths = new Set<string>();
+  const filePaths: string[] = [];
+  for (const path of paths) {
+    const normalizedPath = normalizedLocalPath(path);
+    const folder = recursiveFolderCandidates.find((candidate) =>
+      isNormalizedLocalPathWithinRoot(normalizedPath, candidate.normalizedPath),
+    );
+    if (folder) {
+      folderPaths.add(folder.path);
+    } else {
+      filePaths.push(path);
+    }
+  }
+  return {
+    folderPaths: minimalFolderGrantPaths(folderPaths),
+    filePaths,
+    totalReferencedPaths: paths.length,
+  };
+}
+
+export interface PendingReferencedNcmMetadataTrack {
+  id: string;
+  sessionId: string;
+  sourcePath: string;
+}
+
+function isPendingReferencedNcmMetadataTrack(
+  track: Track,
+): track is Track & { sourcePath: string } {
+  const sourcePath = track.sourcePath?.trim();
+  if (!sourcePath || track.blobId || track.status !== "ready") return false;
+  const isNcm =
+    track.mediaMetadata?.originalExtension?.toLowerCase() === "ncm" || /\.ncm$/i.test(sourcePath);
+  if (!isNcm) return false;
+  return track.durationSec <= 0 || track.mediaMetadata?.parser === "manual";
+}
+
+/**
+ * Lazy referenced `.ncm` metadata is intentionally in-memory while the app is
+ * running, but it must be resumable after a shutdown. The durable pending state
+ * is the placeholder track itself: sourcePath points at an `.ncm`, no copied
+ * blob exists, and metadata still looks manual/empty.
+ */
+export async function listPendingReferencedNcmMetadataTracks(
+  db: MuzeroDB = defaultDb,
+): Promise<PendingReferencedNcmMetadataTrack[]> {
+  const rows = await db.tracks
+    .where("sourcePath")
+    .above("")
+    .filter(isPendingReferencedNcmMetadataTrack)
+    .toArray();
+  return rows.map((track) => ({
+    id: track.id,
+    sessionId: track.sessionId,
+    sourcePath: track.sourcePath,
+  }));
 }
 
 /**
@@ -589,8 +745,13 @@ export async function insertTrackIdsAfter(
     if (fresh.length === 0) return;
 
     const insert = (ordered: string[]) => {
-      const index = afterTrackId ? ordered.indexOf(afterTrackId) : -1;
+      const index = afterTrackId
+        ? ordered.at(-1) === afterTrackId
+          ? ordered.length - 1
+          : ordered.indexOf(afterTrackId)
+        : -1;
       const at = index >= 0 ? index + 1 : 0;
+      if (at >= ordered.length) return [...ordered, ...fresh];
       return [...ordered.slice(0, at), ...fresh, ...ordered.slice(at)];
     };
 
@@ -1146,6 +1307,104 @@ export async function createReferencedUploadedTrack(
     kind: track.kind,
   });
   return track;
+}
+
+/** Create ready uploaded tracks that reference Electron-granted local files. */
+export interface CreateReferencedUploadedTrackInput {
+  sessionId: string;
+  title: string;
+  kind: TrackKind;
+  mime: string;
+  durationSec: number;
+  sourcePath: string;
+  mediaMetadata?: TrackMediaMetadata;
+}
+
+export async function createReferencedUploadedTracks(
+  inputs: CreateReferencedUploadedTrackInput[],
+  db: MuzeroDB = defaultDb,
+): Promise<Track[]> {
+  if (inputs.length === 0) return [];
+  const now = Date.now();
+  const ids = newIds("trk", inputs.length);
+  const tracks = inputs.map(
+    (input, index): Track => ({
+      id: ids[index] ?? newId("trk"),
+      sessionId: input.sessionId,
+      title: input.title,
+      kind: input.kind,
+      origin: "uploaded",
+      provider: "upload",
+      status: "ready",
+      durationSec: input.durationSec,
+      createdAt: now,
+      updatedAt: now,
+      playCount: 0,
+      liked: false,
+      tags: [],
+      mediaMetadata: input.mediaMetadata ?? {
+        originalMime: input.mime,
+        parser: "manual",
+        parsedAt: now,
+        title: input.title,
+      },
+      sourcePath: input.sourcePath,
+    }),
+  );
+  const startedAt = performance.now();
+  await db.tracks.bulkAdd(tracks);
+  notePerfWork("upload.referencedTrack.bulkAdd", performance.now() - startedAt, {
+    count: tracks.length,
+  });
+  return tracks;
+}
+
+/** Patch metadata for a reference-only local track after a lazy parser finishes. */
+export interface ReferencedTrackMetadataPatch {
+  trackId: string;
+  title?: string;
+  mime?: string;
+  durationSec?: number;
+  mediaMetadata?: TrackMediaMetadata;
+  remoteCoverUrl?: string;
+}
+
+function referencedTrackMetadataPatch(input: ReferencedTrackMetadataPatch): Partial<Track> {
+  const patch: Partial<Track> = { updatedAt: Date.now() };
+  if (input.title?.trim()) patch.title = input.title.trim();
+  if (input.durationSec !== undefined) patch.durationSec = input.durationSec;
+  if (input.mediaMetadata) patch.mediaMetadata = input.mediaMetadata;
+  if (input.remoteCoverUrl) patch.remoteCoverUrl = input.remoteCoverUrl;
+  if (input.mime && patch.mediaMetadata) {
+    patch.mediaMetadata = {
+      ...patch.mediaMetadata,
+      originalMime: patch.mediaMetadata.originalMime ?? input.mime,
+    };
+  }
+  return patch;
+}
+
+export async function updateReferencedTrackMetadata(
+  input: ReferencedTrackMetadataPatch,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.tracks.update(input.trackId, referencedTrackMetadataPatch(input));
+}
+
+export async function updateReferencedTracksMetadata(
+  inputs: readonly ReferencedTrackMetadataPatch[],
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  if (inputs.length === 0) return;
+  const startedAt = performance.now();
+  await db.transaction("rw", db.tracks, async () => {
+    for (const input of inputs) {
+      await db.tracks.update(input.trackId, referencedTrackMetadataPatch(input));
+    }
+  });
+  notePerfWork("upload.referencedTrack.metadataBatch", performance.now() - startedAt, {
+    count: inputs.length,
+  });
 }
 
 export async function markTrackGenerating(id: string, db: MuzeroDB = defaultDb): Promise<void> {

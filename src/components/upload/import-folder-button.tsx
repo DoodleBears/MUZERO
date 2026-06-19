@@ -23,6 +23,7 @@ interface ImportFolderButtonProps {
   setId?: string;
   variant?: React.ComponentProps<typeof Button>["variant"];
   className?: string;
+  labelKey?: "folderImport.cta" | "folderImport.chooseFolder" | "folderImport.linkLocalFolder";
 }
 
 /**
@@ -36,6 +37,7 @@ export function ImportFolderButton({
   setId,
   variant = "outline",
   className,
+  labelKey = "folderImport.cta",
 }: ImportFolderButtonProps) {
   const { t } = useTranslation();
   const isUploading = usePlayerStore((s) => s.isUploading);
@@ -57,7 +59,7 @@ export function ImportFolderButton({
         disabled={isUploading}
         onClick={() => (native ? void handleDesktop() : inputRef.current?.click())}
       >
-        <FolderInput /> {isUploading ? t("sessions.importing") : t("folderImport.cta")}
+        <FolderInput /> {isUploading ? t("sessions.importing") : t(labelKey)}
       </Button>
       {!native && (
         <input

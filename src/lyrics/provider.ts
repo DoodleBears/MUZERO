@@ -59,6 +59,25 @@ export interface LyricsRecord {
   plain?: string;
   instrumental: boolean;
   status: LyricsStatus;
+  /** Match provenance/confidence (auto-fetch only); absent for manual / legacy rows. */
+  match?: LyricsMatchInfo;
+}
+
+/**
+ * How a lyrics row was matched — confidence + the signals behind it. Persisted on
+ * `LyricsRecord`/`TrackLyrics` (non-indexed, no DB version bump) and used to (a)
+ * decide whether a low-confidence result should still write a negative cache and
+ * (b) annotate the UI. Absent on rows written before this existed → "unknown".
+ */
+export interface LyricsMatchInfo {
+  /** Composite 0..1 confidence from `scoreCandidate`. */
+  confidence: number;
+  /** |hit − query| seconds; absent when the query had no duration. */
+  durationDelta?: number;
+  /** Normalized-title similarity 0..1; absent for exact-signature hits. */
+  titleSim?: number;
+  /** Which ladder rung produced the match. */
+  via: "exact" | "norm" | "primaryArtist" | "noAlbum" | "titleOnly";
 }
 
 /** A provider match result. `null` from `fetch` means "no match found". */
@@ -76,6 +95,8 @@ export interface LyricsHit {
   instrumental: boolean;
   /** Which record the provider actually matched (debug / correction). */
   matched: { trackName: string; artistName: string; durationSec: number };
+  /** How confidently this was matched; attached by the ladder/auto pick. */
+  match?: LyricsMatchInfo;
 }
 
 export interface LyricsProvider {

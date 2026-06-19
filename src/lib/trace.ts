@@ -20,6 +20,11 @@ export interface TraceEntry extends Omit<DiagnosticEntry, "event" | "context"> {
 }
 
 const MAX_ENTRIES = 300;
+const TRACE_VERBOSE =
+  Boolean(import.meta.env?.DEV) ||
+  import.meta.env?.VITE_MUZERO_PROFILE === "1" ||
+  import.meta.env?.VITE_MUZERO_PROFILE === "true";
+const TRACE_PRODUCTION_LEVELS = new Set<TraceLevel>(["warn", "error"]);
 let nextId = 1;
 // Circular buffer: O(1) append. Every log.* call in src/** lands here (the
 // console is only a dev mirror), so the previous copy-per-append
@@ -60,6 +65,7 @@ export function traceEvent(
   message: string,
   ...data: unknown[]
 ): void {
+  if (!shouldRecordTrace(level)) return;
   appendTraceEntry({
     level,
     scope,
@@ -75,6 +81,7 @@ export function traceDiagnosticEvent(
   message: string,
   context?: DiagnosticContext,
 ): void {
+  if (!shouldRecordTrace(level)) return;
   appendTraceEntry({
     level,
     scope,
@@ -82,6 +89,10 @@ export function traceDiagnosticEvent(
     message,
     context: context ? (sanitizeDiagnosticData(context) as DiagnosticContext) : undefined,
   });
+}
+
+function shouldRecordTrace(level: TraceLevel): boolean {
+  return TRACE_VERBOSE || TRACE_PRODUCTION_LEVELS.has(level);
 }
 
 function appendTraceEntry(entry: Omit<TraceEntry, "id" | "at">): void {

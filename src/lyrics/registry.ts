@@ -16,8 +16,23 @@ import type { AppSettings, Track } from "@/db/types";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { createAmllTtmlProvider } from "./amll-ttml-provider";
 import { createLrclibProvider } from "./lrclib-provider";
+import { hitConfidence } from "./match-text";
 import { createNeteaseLyricsProvider } from "./netease-lyrics-provider";
 import type { LyricsHit, LyricsProvider, LyricsProviderId, LyricsQuery } from "./provider";
+
+/**
+ * Confidence at/above which a hit is taken immediately, skipping later providers —
+ * an exact-signature LRCLIB hit or an official NetEase-by-id hit. Below it, all
+ * sources are gathered and the best (word-level tier wins) is chosen.
+ */
+const SHORT_CIRCUIT_CONFIDENCE = 0.9;
+
+/** A hit precise enough to stop the cross-source sweep: exact/normalized signature or high confidence. */
+function isAuthoritative(hit: LyricsHit, q: LyricsQuery): boolean {
+  const via = hit.match?.via;
+  if (via === "exact" || via === "norm") return true;
+  return hitConfidence(hit, q) >= SHORT_CIRCUIT_CONFIDENCE;
+}
 
 export const LYRICS_PROVIDER_IDS: LyricsProviderId[] = ["auto", "lrclib", "netease", "amll"];
 
@@ -39,20 +54,40 @@ export function createAutoLyricsProvider(
   providersForQuery: (q: LyricsQuery) => LyricsProvider[],
   label = "Auto",
 ): LyricsProvider {
-  async function firstHit(
+  /**
+   * Walk the ordered providers: take the first authoritative (exact/high-confidence)
+   * hit immediately to save the extra round-trips; otherwise gather every hit and
+   * return the best by confidence — so a word-level NetEase yrc beats a first-arriving
+   * LRCLIB plain. Throws only if every provider errored and nothing was gathered.
+   */
+  async function bestHit(
     q: LyricsQuery,
     signal: AbortSignal | undefined,
-    run: (provider: LyricsProvider) => Promise<LyricsHit | null>,
   ): Promise<LyricsHit | null> {
     let lastError: unknown;
+    const gathered: LyricsHit[] = [];
     for (const provider of providersForQuery(q)) {
-      if (signal?.aborted) return null;
+      if (signal?.aborted) break;
       try {
-        const hit = await run(provider);
-        if (hit) return hit;
+        const hit = await provider.fetch(q, signal);
+        if (!hit) continue;
+        if (isAuthoritative(hit, q)) return hit;
+        gathered.push(hit);
       } catch (error) {
         lastError = error;
       }
+    }
+    if (gathered.length > 0) {
+      let best = gathered[0];
+      let bestConfidence = hitConfidence(best, q);
+      for (let i = 1; i < gathered.length; i++) {
+        const confidence = hitConfidence(gathered[i], q);
+        if (confidence > bestConfidence) {
+          best = gathered[i];
+          bestConfidence = confidence;
+        }
+      }
+      return best;
     }
     if (lastError) throw lastError;
     return null;
@@ -63,7 +98,7 @@ export function createAutoLyricsProvider(
     label,
 
     fetch(q, signal) {
-      return firstHit(q, signal, (provider) => provider.fetch(q, signal));
+      return bestHit(q, signal);
     },
 
     async search(q, signal) {

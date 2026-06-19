@@ -16,12 +16,13 @@ import type { StreamHttp } from "@/streamsrc/http";
 import { eapiEncrypt } from "@/streamsrc/netease/netease-crypto";
 import { createNeteaseSource } from "@/streamsrc/netease/netease-source";
 import { createStreamHttp } from "@/streamsrc/stream-http";
+import { attachMatch, normalizeTitle } from "./match-text";
 import {
   buildLyricBody,
   NETEASE_LYRIC_PATH,
   NETEASE_LYRIC_URL,
   parseNeteaseLyric,
-  pickClosestByDuration,
+  pickBestSong,
 } from "./netease-lyric-map";
 import type { LyricsHit, LyricsProvider, LyricsQuery } from "./provider";
 
@@ -91,7 +92,8 @@ export function createNeteaseLyricsProvider(deps: NeteaseLyricsDeps = {}): Lyric
   }
 
   async function searchSongs(q: LyricsQuery, signal?: AbortSignal) {
-    const query = [q.trackName, q.artistName].filter(Boolean).join(" ").trim();
+    // Feed the normalized title (version/feat suffixes stripped) to cloudsearch for recall.
+    const query = [normalizeTitle(q.trackName), q.artistName].filter(Boolean).join(" ").trim();
     if (!query) return [];
     return source.search(query, { limit: SEARCH_LIMIT, signal });
   }
@@ -101,9 +103,22 @@ export function createNeteaseLyricsProvider(deps: NeteaseLyricsDeps = {}): Lyric
     label: "网易云音乐",
 
     async fetch(q: LyricsQuery, signal?: AbortSignal): Promise<LyricsHit | null> {
-      if (q.neteaseSongId) return lyricById(q.neteaseSongId, signal);
-      const best = pickClosestByDuration(await searchSongs(q, signal), q.durationSec);
-      return best ? lyricById(best.externalId, signal) : null;
+      if (q.neteaseSongId) {
+        // Exact official lyrics by id — authoritative for this streamed track.
+        const hit = await lyricById(q.neteaseSongId, signal);
+        return hit ? { ...hit, match: { confidence: 1, via: "exact" } } : null;
+      }
+      const best = pickBestSong(await searchSongs(q, signal), q);
+      if (!best) return null;
+      const lyric = await lyricById(best.externalId, signal);
+      if (!lyric) return null;
+      // Populate `matched` from the chosen song so cross-source scoring/gating works.
+      const matched = {
+        trackName: best.title,
+        artistName: best.artist ?? "",
+        durationSec: best.durationSec ?? 0,
+      };
+      return attachMatch({ ...lyric, sourceId: best.externalId, matched }, q, "noAlbum");
     },
 
     async search(q: LyricsQuery, signal?: AbortSignal): Promise<LyricsHit[]> {

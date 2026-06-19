@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import { clearTrackLyrics, getTrackLyrics, setTrackLyrics } from "@/db/repositories";
 import { type AppSettings, DEFAULT_SETTINGS, type Track } from "@/db/types";
-import { lyricsRecordFromHit, runAutoFetchLyrics, shouldAutoFetchLyrics } from "./auto-fetch";
+import {
+  type LyricsFetchEvent,
+  lyricsRecordFromHit,
+  runAutoFetchLyrics,
+  shouldAutoFetchLyrics,
+} from "./auto-fetch";
 import type { LyricsHit, LyricsProvider } from "./provider";
 
 let db: MuzeroDB;
@@ -139,6 +144,11 @@ describe("lyricsRecordFromHit", () => {
   it("stamps a manual source when asked", () => {
     expect(lyricsRecordFromHit(HIT, "manual").source).toBe("manual");
   });
+
+  it("carries match info when the hit has it", () => {
+    const rec = lyricsRecordFromHit({ ...HIT, match: { confidence: 0.9, via: "norm" } });
+    expect(rec.match).toEqual({ confidence: 0.9, via: "norm" });
+  });
 });
 
 describe("shouldAutoFetchLyrics", () => {
@@ -261,5 +271,60 @@ describe("runAutoFetchLyrics", () => {
       db,
     });
     expect(await getTrackLyrics("trk_1", db)).toBeUndefined();
+  });
+
+  it("reports start then found with confidence", async () => {
+    const events: LyricsFetchEvent[] = [];
+    await runAutoFetchLyrics({
+      track: track(),
+      settings: settings(),
+      provider: provider({ ...HIT, match: { confidence: 0.95, via: "exact" } }),
+      db,
+      report: (e) => events.push(e),
+    });
+    expect(events[0]).toEqual({ phase: "start" });
+    expect(events[1]).toMatchObject({
+      phase: "found",
+      source: "lrclib",
+      confidence: 0.95,
+      instrumental: false,
+    });
+  });
+
+  it("reports start then notFound when nothing matches", async () => {
+    const events: LyricsFetchEvent[] = [];
+    await runAutoFetchLyrics({
+      track: track(),
+      settings: settings(),
+      provider: provider(null),
+      db,
+      report: (e) => events.push(e),
+    });
+    expect(events.map((e) => e.phase)).toEqual(["start", "notFound"]);
+  });
+
+  it("reports start then error on provider failure", async () => {
+    const events: LyricsFetchEvent[] = [];
+    await runAutoFetchLyrics({
+      track: track(),
+      settings: settings(),
+      provider: provider(new Error("net")),
+      db,
+      report: (e) => events.push(e),
+    });
+    expect(events.map((e) => e.phase)).toEqual(["start", "error"]);
+  });
+
+  it("does not report at all when the fetch is skipped (record exists)", async () => {
+    await setTrackLyrics({ trackId: "trk_1", record: lyricsRecordFromHit(HIT) }, db);
+    const events: LyricsFetchEvent[] = [];
+    await runAutoFetchLyrics({
+      track: track(),
+      settings: settings(),
+      provider: provider(HIT),
+      db,
+      report: (e) => events.push(e),
+    });
+    expect(events).toEqual([]);
   });
 });

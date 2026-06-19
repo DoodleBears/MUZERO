@@ -23,6 +23,7 @@ export function CanvasBlurBackground({
   const hasFrameRef = useRef(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [hasFrame, setHasFrame] = useState(false);
+  const [showFallbackImage, setShowFallbackImage] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +31,7 @@ export function CanvasBlurBackground({
       frameRef.current = null;
       hasFrameRef.current = false;
       setHasFrame(false);
+      setShowFallbackImage(true);
     }
 
     const image = new Image();
@@ -56,6 +58,15 @@ export function CanvasBlurBackground({
     };
   }, [src, blurPx, holdPreviousWhileLoading]);
 
+  useEffect(() => {
+    if (!hasFrame) {
+      setShowFallbackImage(true);
+      return;
+    }
+    const id = window.setTimeout(() => setShowFallbackImage(false), 320);
+    return () => window.clearTimeout(id);
+  }, [hasFrame]);
+
   const redraw = useCallback(() => {
     const frame = frameRef.current;
     const canvas = activeIndexRef.current === 0 ? canvasARef.current : canvasBRef.current;
@@ -81,15 +92,17 @@ export function CanvasBlurBackground({
       className={cn("absolute inset-0 overflow-hidden", className)}
       aria-hidden="true"
     >
-      <img
-        src={src}
-        alt=""
-        decoding="async"
-        className={cn(
-          "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-          hasFrame ? "opacity-0" : "opacity-100",
-        )}
-      />
+      {showFallbackImage ? (
+        <img
+          src={src}
+          alt=""
+          decoding="async"
+          className={cn(
+            "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
+            hasFrame ? "opacity-0" : "opacity-100",
+          )}
+        />
+      ) : null}
       <canvas
         ref={canvasARef}
         className={cn(

@@ -79,6 +79,7 @@ describe("createElectronBridge", () => {
       kind: "electron",
       pickFolder: vi.fn(),
       readDir: vi.fn(),
+      scanFolderForMedia: vi.fn(),
       readFile: vi.fn(),
       grantFolderAccess: vi.fn(),
       grantFileAccess: vi.fn(),
@@ -121,6 +122,24 @@ describe("createElectronBridge", () => {
     await bridge.grantFileAccess?.("D:/Music/clip.mp4");
 
     expect(api.grantFileAccess).toHaveBeenCalledWith("D:/Music/clip.mp4");
+  });
+
+  it("exposes native folder media scan when Electron provides it", async () => {
+    const api = installApi({
+      scanFolderForMedia: vi.fn(async () => ({
+        encryptedCount: 1,
+        media: [{ path: "D:/Music/a.mp3", name: "a.mp3", kind: "audio" }],
+        unsupportedCount: 2,
+      })),
+    });
+    const bridge = createElectronBridge();
+
+    const result = await bridge.scanFolderForMedia?.("D:/Music", { recursive: false });
+
+    expect(api.scanFolderForMedia).toHaveBeenCalledWith("D:/Music", { recursive: false });
+    expect(result?.media).toHaveLength(1);
+    expect(result?.encryptedCount).toBe(1);
+    expect(result?.unsupportedCount).toBe(2);
   });
 
   it("lazily grants local file media paths before requesting a token", async () => {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildLyricBody, parseNeteaseLyric, pickClosestByDuration } from "./netease-lyric-map";
+import {
+  buildLyricBody,
+  parseNeteaseLyric,
+  pickBestSong,
+  pickClosestByDuration,
+} from "./netease-lyric-map";
 
 describe("buildLyricBody", () => {
   it("builds the eapi lyric request body for a song id (yrc + translation + roman)", () => {
@@ -133,5 +138,33 @@ describe("pickClosestByDuration", () => {
     expect(pickClosestByDuration(hits)?.externalId).toBe("a");
     expect(pickClosestByDuration(hits, Number.NaN)?.externalId).toBe("a");
     expect(pickClosestByDuration([])).toBeNull();
+  });
+});
+
+describe("pickBestSong", () => {
+  const song = (externalId: string, title: string, durationSec: number) => ({
+    externalId,
+    title,
+    durationSec,
+  });
+
+  it("prefers the title-matching song even when another is closer in duration", () => {
+    const songs = [song("a", "Totally Different", 200), song("b", "Blue Highway", 260)];
+    const best = pickBestSong(songs, {
+      trackName: "Blue Highway",
+      artistName: "x",
+      durationSec: 210,
+    });
+    expect(best?.externalId).toBe("b");
+  });
+
+  it("uses duration to disambiguate same-title songs", () => {
+    const songs = [song("a", "Hello", 180), song("b", "Hello", 240)];
+    const best = pickBestSong(songs, { trackName: "Hello", artistName: "x", durationSec: 238 });
+    expect(best?.externalId).toBe("b");
+  });
+
+  it("returns null for an empty list", () => {
+    expect(pickBestSong([], { trackName: "x", artistName: "y" })).toBeNull();
   });
 });

@@ -392,8 +392,8 @@ export class MuzeroDB extends Dexie {
     // like used to `tracks.update(id,{liked})` → re-fire EVERY tracks liveQuery (the
     // play-queue's getTracksByIds(N) + search全表 listAllTracks), tanking FPS on big
     // queues. Now it writes `trackLikes` only. The one-time upgrade backfills existing
-    // liked tracks; `tracks.liked` stays (deprecated, no longer written) until a later
-    // version drops it (double-read transition). PRD 20260617-scalable-track-list.
+    // liked tracks; `tracks.liked` stays as a deprecated compatibility field
+    // (double-read transition). PRD 20260617-scalable-track-list.
     this.version(26)
       .stores({ trackLikes: "trackId, likedAt" })
       .upgrade(async (tx) => {
@@ -413,6 +413,32 @@ export class MuzeroDB extends Dexie {
         .modify((s: Partial<AppSettings>) => {
           if (s.lyricsMotionMode === "classic") s.lyricsMotionMode = "cascade";
         });
+    });
+
+    // v28 — remove the obsolete `tracks.liked` INDEX. Likes have lived in the
+    // `trackLikes` side table since v26, so keeping an index on the deprecated
+    // catalog field only adds write amplification during large local-folder imports.
+    // The field itself remains on rows for R2/export compatibility; only the index
+    // is dropped.
+    this.version(28).stores({
+      tracks: "id, sessionId, status, createdAt, *tags, kind, sourcePath",
+    });
+
+    // v29 — remove the unused local `tracks.*tags` multiEntry INDEX. Tag search
+    // and tag counts scan the loaded track rows (`track.tags`) in memory, and no
+    // runtime path queries Dexie by this index. Keeping it costs extra index work
+    // on every imported row, especially large local-folder bulkAdd batches.
+    // The `tags` field remains on each row.
+    this.version(29).stores({
+      tracks: "id, sessionId, status, createdAt, kind, sourcePath",
+    });
+
+    // v30 — trim the remaining unused local track indexes. Runtime Dexie queries
+    // only need `sessionId` (per-set reads / streamed-track dedupe) and `sourcePath`
+    // (folder-sync dedupe / local-media repair). `status`, `createdAt`, and `kind`
+    // are still row fields, but no product path queries tracks by those indexes.
+    this.version(30).stores({
+      tracks: "id, sessionId, sourcePath",
     });
   }
 }

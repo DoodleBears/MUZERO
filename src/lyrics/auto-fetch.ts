@@ -52,8 +52,22 @@ export function lyricsRecordFromHit(
     plain: hit.plain,
     instrumental: hit.instrumental,
     status: hit.instrumental ? "instrumental" : "found",
+    // Carry the match confidence/provenance so the UI can flag a low-confidence match.
+    ...(hit.match ? { match: hit.match } : {}),
   };
 }
+
+/**
+ * Lifecycle of an auto-fetch attempt, for the optional reporter (the player store
+ * drives the match-progress toast off this — kept out of this module so it stays
+ * UI-free and unit-testable). Only emitted when a fetch actually runs (bounded by
+ * `shouldAutoFetchLyrics` → once per track, so the toast can't spam).
+ */
+export type LyricsFetchEvent =
+  | { phase: "start" }
+  | { phase: "found"; source: LyricsSource; confidence?: number; instrumental: boolean }
+  | { phase: "notFound" }
+  | { phase: "error" };
 
 export function lyricsSourceForProvider(id: LyricsProviderId): LyricsSource {
   return id === "auto" ? "lrclib" : id;
@@ -67,15 +81,18 @@ export interface RunAutoFetchOpts {
   db?: MuzeroDB;
   /** Injected timestamp for tests; defaults to Date.now() in the repository. */
   now?: number;
+  /** Optional lifecycle reporter (drives the match-progress toast). No-op by default. */
+  report?: (event: LyricsFetchEvent) => void;
 }
 
 /** Look up + cache lyrics for a track if eligible. Never throws. */
 export async function runAutoFetchLyrics(opts: RunAutoFetchOpts): Promise<void> {
-  const { track, settings, provider, signal, db, now } = opts;
+  const { track, settings, provider, signal, db, now, report } = opts;
   const existing = await getTrackLyrics(track.id, db);
   if (!shouldAutoFetchLyrics(track, settings, existing)) return;
   const query = buildLyricsQuery(track);
   if (!query) return;
+  report?.({ phase: "start" });
   try {
     const hit = await provider.fetch(query, signal);
     if (signal?.aborted) return;
@@ -87,6 +104,16 @@ export async function runAutoFetchLyrics(opts: RunAutoFetchOpts): Promise<void> 
         fetchedAt: now,
       },
       db,
+    );
+    report?.(
+      hit
+        ? {
+            phase: "found",
+            source: hit.source,
+            confidence: hit.match?.confidence,
+            instrumental: hit.instrumental,
+          }
+        : { phase: "notFound" },
     );
   } catch (err) {
     if (signal?.aborted) return; // track switched away — not a real failure, don't cache
@@ -101,5 +128,6 @@ export async function runAutoFetchLyrics(opts: RunAutoFetchOpts): Promise<void> 
       },
       db,
     ).catch(() => {});
+    report?.({ phase: "error" });
   }
 }

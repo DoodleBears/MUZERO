@@ -5,9 +5,9 @@ import { createPerfCommandHandler, type PerfControlCommand } from "./perf-contro
 // The control endpoint's main-process module (CJS; electron required lazily inside
 // registerPerfControl) — loaded via require so the prod gate is regression-tested
 // directly without pulling a .cjs through TS module resolution.
-const { shouldEnablePerfControl, routeToCommand } = createRequire(import.meta.url)(
-  "../../electron/perf-control.cjs",
-) as {
+const { shouldEnablePerfControl, routeToCommand, snapshotProcessMetrics } = createRequire(
+  import.meta.url,
+)("../../electron/perf-control.cjs") as {
   shouldEnablePerfControl: (input: {
     isPackaged?: boolean;
     env?: Record<string, string>;
@@ -17,6 +17,18 @@ const { shouldEnablePerfControl, routeToCommand } = createRequire(import.meta.ur
     segments: string[],
     body: Record<string, unknown>,
   ) => { kind: string; [k: string]: unknown } | null;
+  snapshotProcessMetrics: (app: { getAppMetrics: () => unknown[] }) => {
+    processes: Array<{
+      memory: { privateMb: number; workingSetMb: number };
+      pid: number;
+      type: string;
+    }>;
+    totals: {
+      byType: Record<string, { count: number; workingSetMb: number }>;
+      workingSetMb: number;
+    };
+    units: string;
+  };
 };
 
 describe("shouldEnablePerfControl (prod regression guard)", () => {
@@ -71,11 +83,43 @@ describe("routeToCommand", () => {
       payload: { action: "inject", query: "晴天" },
     });
     expect(routeToCommand("GET", ["sessions"], {})).toEqual({ kind: "sessions" });
+    expect(routeToCommand("POST", ["seed", "example"], {})).toEqual({ kind: "seedExample" });
   });
 
   it("returns null for unknown routes", () => {
     expect(routeToCommand("DELETE", ["state"], {})).toBeNull();
     expect(routeToCommand("GET", ["nope"], {})).toBeNull();
+  });
+});
+
+describe("snapshotProcessMetrics", () => {
+  it("summarizes Electron process memory in MB by process type", () => {
+    const snapshot = snapshotProcessMetrics({
+      getAppMetrics: () => [
+        {
+          cpu: { percentCPUUsage: 1.23 },
+          memory: { privateBytes: 50 * 1024, sharedBytes: 4 * 1024, workingSetSize: 100 * 1024 },
+          name: "app",
+          pid: 101,
+          type: "Browser",
+        },
+        {
+          cpu: { percentCPUUsage: 2 },
+          memory: { privateBytes: 80 * 1024, sharedBytes: 8 * 1024, workingSetSize: 200 * 1024 },
+          pid: 202,
+          type: "Renderer",
+        },
+      ],
+    });
+
+    expect(snapshot.units).toBe("MB");
+    expect(snapshot.processes[0]).toMatchObject({
+      memory: { privateMb: 50, workingSetMb: 100 },
+      pid: 101,
+      type: "Browser",
+    });
+    expect(snapshot.totals.workingSetMb).toBe(300);
+    expect(snapshot.totals.byType.Renderer).toMatchObject({ count: 1, workingSetMb: 200 });
   });
 });
 
@@ -223,6 +267,21 @@ describe("createPerfCommandHandler", () => {
     await expect(handle({ kind: "sessions" })).resolves.toEqual({
       sessions: [{ id: "ses_1", trackCount: 5000 }],
     });
+  });
+
+  it("seedExample forwards to the wired seeder", async () => {
+    const seedExample = vi.fn(async () => ({ sessionId: "ses_seed", trackId: "trk_seed" }));
+    const handle = createPerfCommandHandler(makeDeps({ seedExample }));
+    await expect(handle({ kind: "seedExample" })).resolves.toEqual({
+      sessionId: "ses_seed",
+      trackId: "trk_seed",
+    });
+    expect(seedExample).toHaveBeenCalledOnce();
+  });
+
+  it("seedExample throws when the seeder is not wired", async () => {
+    const handle = createPerfCommandHandler(makeDeps({ seedExample: undefined }));
+    await expect(handle({ kind: "seedExample" })).rejects.toThrow(/not wired/);
   });
 
   it("throws on unknown command kinds", async () => {

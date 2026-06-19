@@ -1,3 +1,4 @@
+import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "./muzero-db";
 import { isTrackLiked, likedTrackIdSet, setTrackLiked } from "./repositories";
@@ -75,5 +76,52 @@ describe("likeRowsFromLegacyTracks (v26 backfill mapper, pure)", () => {
 
   it("returns [] when nothing is liked", () => {
     expect(likeRowsFromLegacyTracks([{ id: "a", liked: false }], 1)).toEqual([]);
+  });
+});
+
+describe("track catalog index migrations", () => {
+  it("drops unused track indexes while preserving compatibility fields", async () => {
+    const name = dbName;
+    db.close();
+
+    const legacy = new Dexie(name);
+    legacy.version(27).stores({
+      tracks: "id, sessionId, status, createdAt, liked, *tags, kind, sourcePath",
+      trackLikes: "trackId, likedAt",
+    });
+    await legacy.open();
+    await legacy.table("tracks").add({
+      id: "trk_legacy",
+      sessionId: "ses_1",
+      status: "ready",
+      createdAt: 1,
+      liked: true,
+      tags: ["rain", "night"],
+      kind: "audio",
+      sourcePath: "D:/music/song.mp3",
+    });
+    legacy.close();
+
+    const migrated = new MuzeroDB(name);
+    try {
+      await migrated.open();
+      expect(migrated.tracks.schema.idxByName.liked).toBeUndefined();
+      expect(migrated.tracks.schema.idxByName.tags).toBeUndefined();
+      expect(migrated.tracks.schema.idxByName.status).toBeUndefined();
+      expect(migrated.tracks.schema.idxByName.createdAt).toBeUndefined();
+      expect(migrated.tracks.schema.idxByName.kind).toBeUndefined();
+      expect(migrated.tracks.schema.idxByName.sessionId).toBeDefined();
+      expect(migrated.tracks.schema.idxByName.sourcePath).toBeDefined();
+      await expect(migrated.tracks.get("trk_legacy")).resolves.toMatchObject({
+        id: "trk_legacy",
+        createdAt: 1,
+        kind: "audio",
+        liked: true,
+        status: "ready",
+        tags: ["rain", "night"],
+      });
+    } finally {
+      migrated.close();
+    }
   });
 });

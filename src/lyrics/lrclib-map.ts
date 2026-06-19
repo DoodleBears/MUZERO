@@ -7,6 +7,7 @@
  * API: https://lrclib.net/docs
  */
 
+import { type GateLevel, passesGate, scoreCandidate } from "./match-text";
 import type { LyricsHit, LyricsQuery } from "./provider";
 
 export const LRCLIB_BASE_URL = "https://lrclib.net";
@@ -23,12 +24,20 @@ export function buildGetUrl(q: LyricsQuery): string {
   return `${LRCLIB_BASE_URL}/api/get?${params.toString()}`;
 }
 
+/** Relaxations for the search fallback rungs. */
+export interface SearchUrlOptions {
+  /** Drop `album_name` — album names are the least consistent field across catalogues (L2). */
+  dropAlbum?: boolean;
+  /** Keep only `track_name` — the widest-recall, artist-free rung (L3). */
+  titleOnly?: boolean;
+}
+
 /** GET /api/search — fuzzy fallback (no duration; ranked client-side). */
-export function buildSearchUrl(q: LyricsQuery): string {
+export function buildSearchUrl(q: LyricsQuery, opts: SearchUrlOptions = {}): string {
   const params = new URLSearchParams();
   params.set("track_name", q.trackName);
-  if (q.artistName) params.set("artist_name", q.artistName);
-  if (q.albumName) params.set("album_name", q.albumName);
+  if (!opts.titleOnly && q.artistName) params.set("artist_name", q.artistName);
+  if (!opts.titleOnly && !opts.dropAlbum && q.albumName) params.set("album_name", q.albumName);
   return `${LRCLIB_BASE_URL}/api/search?${params.toString()}`;
 }
 
@@ -79,25 +88,27 @@ export function parseSearchResults(json: unknown): LyricsHit[] {
   return out;
 }
 
-/** Tier: synced (0) beats plain-only (1) beats instrumental (2). */
-function tier(hit: LyricsHit): number {
-  if (hit.instrumental) return 2;
-  return hit.synced ? 0 : 1;
-}
-
-/** Pick the best match: prefer synced, then closest duration to the query. */
-export function pickBestHit(hits: LyricsHit[], q: LyricsQuery): LyricsHit | null {
-  if (hits.length === 0) return null;
-  const delta = (hit: LyricsHit): number => {
-    if (q.durationSec == null || !Number.isFinite(q.durationSec)) return 0;
-    return Math.abs(hit.matched.durationSec - q.durationSec);
-  };
-  let best = hits[0];
-  for (let i = 1; i < hits.length; i++) {
-    const hit = hits[i];
-    const tb = tier(best);
-    const th = tier(hit);
-    if (th < tb || (th === tb && delta(hit) < delta(best))) best = hit;
+/**
+ * Pick the best candidate by composite confidence (synced tier + duration nearness
+ * + title similarity), then enforce the accept/reject gate for the given rung. Unlike
+ * the old "closest duration wins", a candidate that clears relative ranking but fails
+ * the gate (e.g. only a 30s-off same-name demo exists) is judged a miss — `null` — so
+ * a wrong version never gets cached. Defaults to the `noAlbum` rung.
+ */
+export function pickBestHit(
+  hits: LyricsHit[],
+  q: LyricsQuery,
+  level: GateLevel = "noAlbum",
+): LyricsHit | null {
+  let best: LyricsHit | null = null;
+  let bestConfidence = -1;
+  for (const hit of hits) {
+    const score = scoreCandidate(hit, q);
+    if (!passesGate(score, level)) continue;
+    if (score.confidence > bestConfidence) {
+      best = hit;
+      bestConfidence = score.confidence;
+    }
   }
   return best;
 }

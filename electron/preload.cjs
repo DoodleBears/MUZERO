@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("muzero", {
   platform: process.platform,
   pickFolder: () => ipcRenderer.invoke("muzero:pickFolder"),
   readDir: (path) => ipcRenderer.invoke("muzero:readDir", path),
+  scanFolderForMedia: (path, options) => ipcRenderer.invoke("muzero:scanFolderForMedia", path, options),
   readFile: (path) => ipcRenderer.invoke("muzero:readFile", path),
   grantFolderAccess: (path) => ipcRenderer.invoke("muzero:grantFolder", path),
   grantFileAccess: (path) => ipcRenderer.invoke("muzero:grantFile", path),
