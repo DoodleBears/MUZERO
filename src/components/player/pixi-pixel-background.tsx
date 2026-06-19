@@ -369,13 +369,15 @@ export async function readTextureBlobSource(
 ): Promise<ImageBitmapBlobSource | null> {
   if (!response.ok) return null;
   throwIfAborted(signal);
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const blob = await response.blob();
   throwIfAborted(signal);
-  if (bytes.byteLength === 0) return null;
+  if (blob.size === 0) return null;
+  const headerBytes = new Uint8Array(await blob.slice(0, TEXTURE_HEADER_BYTES).arrayBuffer());
+  throwIfAborted(signal);
   return {
-    blob: new Blob([bytes], { type: response.headers.get("content-type") || "" }),
-    headerBytes: bytes.subarray(0, TEXTURE_HEADER_BYTES),
-    headerSource: "fetched-bytes",
+    blob,
+    headerBytes,
+    headerSource: "blob-slice",
   };
 }
 
