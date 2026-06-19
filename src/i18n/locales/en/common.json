@@ -43,8 +43,11 @@
     "uploadDesc": "Add your own audio or video files (MVs, voice memos, anything). Plays video-first, with a memory note + tags on each.",
     "uploadCta": "Upload files & create set",
     "importing": "Importing…",
+    "importExample": "Import sample song",
+    "importingExample": "Importing sample…",
     "yourSets": "Your sets",
     "uploadSet": "Upload set",
+    "exampleSet": "Example songs",
     "seedIdeas": [
       "late-night lo-fi for deep focus coding",
       "sunrise synthwave road trip",

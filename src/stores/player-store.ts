@@ -40,6 +40,11 @@ import i18n from "@/i18n/i18n";
 import { hasFolderAccess, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { createTraceId, type DiagnosticContext, sanitizeUrlForTrace } from "@/lib/diagnostics";
 import {
+  EXAMPLE_TRACK_AUDIO_FILE_NAME,
+  EXAMPLE_TRACK_TITLE,
+  loadExampleTrackAssets,
+} from "@/lib/example-track";
+import {
   basename,
   createFolderFs,
   type FolderFs,
@@ -317,6 +322,8 @@ interface PlayerState {
   addUploads: (files: FileList | File[]) => Promise<void>;
   /** Import uploaded files into a SPECIFIC set (e.g. the gallery detail page). */
   addUploadsToSet: (setId: string, files: FileList | File[]) => Promise<void>;
+  /** Import the bundled example song and its paired cover into a set. */
+  importExampleTrack: (setId?: string) => Promise<void>;
   /** Copy a referenced local-file track into managed storage for offline playback. */
   cacheReferencedTrackToDevice: (trackId: string) => Promise<void>;
   /** Desktop boot repair: re-authorize reference-only source paths after restart. */
@@ -1666,6 +1673,120 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         completed,
         files: list.length,
         phase: "done",
+      });
+      importProgressClearTimer = setTimeout(() => {
+        importProgressClearTimer = null;
+        usePlayerStore.setState({ importProgress: null });
+      }, IMPORT_PROGRESS_CLEAR_MS);
+    }
+  },
+
+  async importExampleTrack(setId) {
+    if (importProgressClearTimer) {
+      clearTimeout(importProgressClearTimer);
+      importProgressClearTimer = null;
+    }
+    let completed = 0;
+    set({
+      isUploading: true,
+      importProgress: {
+        phase: "importing",
+        total: 1,
+        completed,
+        current: { name: EXAMPLE_TRACK_AUDIO_FILE_NAME, mode: "copy" },
+      },
+    });
+    try {
+      let targetSetId = setId ?? get().activeSessionId ?? undefined;
+      if (!targetSetId) {
+        const session = await createSession({
+          name: i18n.t("sessions.exampleSet"),
+          seedPrompt: "",
+          config: { autoExtend: false },
+          displayMode: "cover",
+        });
+        targetSetId = session.id;
+        await get().setActiveSession(session.id);
+      }
+
+      const { audio, cover } = await loadExampleTrackAssets();
+      set({
+        importProgress: {
+          phase: "importing",
+          total: 1,
+          completed,
+          current: {
+            name: EXAMPLE_TRACK_AUDIO_FILE_NAME,
+            mode: "copy",
+            bytesLoaded: 0,
+            bytesTotal: audio.size,
+          },
+        },
+      });
+
+      const probed = await probeMediaFile(audio).catch((error: unknown): ProbedMedia => {
+        log.warn("player", "example track probe failed; importing with fallback duration", {
+          error: error instanceof Error ? error.name : typeof error,
+        });
+        return {
+          durationSec: 0,
+          kind: "audio",
+          mime: audio.type || "audio/mpeg",
+          title: EXAMPLE_TRACK_TITLE,
+        };
+      });
+      const track = await createUploadedTrack({
+        sessionId: targetSetId,
+        title: EXAMPLE_TRACK_TITLE,
+        kind: "audio",
+        blob: audio,
+        mime: probed.mime || audio.type || "audio/mpeg",
+        durationSec: probed.durationSec,
+        mediaMetadata: {
+          ...fallbackUploadMediaMetadata(audio, EXAMPLE_TRACK_TITLE),
+          originalMime: probed.mime || audio.type || "audio/mpeg",
+          title: EXAMPLE_TRACK_TITLE,
+        },
+        embeddedCover: cover,
+        onMediaProgress: ({ bytesLoaded, bytesTotal }) =>
+          set({
+            importProgress: {
+              phase: "importing",
+              total: 1,
+              completed,
+              current: {
+                name: EXAMPLE_TRACK_AUDIO_FILE_NAME,
+                mode: "copy",
+                bytesLoaded,
+                bytesTotal,
+              },
+            },
+          }),
+      });
+      await flushImportedTrackIds(targetSetId, [track.id]);
+      completed = 1;
+      set({
+        importProgress: {
+          phase: "importing",
+          total: 1,
+          completed,
+          current: {
+            name: EXAMPLE_TRACK_AUDIO_FILE_NAME,
+            mode: "copy",
+            bytesLoaded: audio.size,
+            bytesTotal: audio.size,
+          },
+        },
+      });
+      log.info("player", `imported bundled example track to ${targetSetId}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ djError: msg });
+      log.error("player", "example track import failed", msg);
+    } finally {
+      set({
+        isUploading: false,
+        importProgress: { phase: "done", total: 1, completed },
       });
       importProgressClearTimer = setTimeout(() => {
         importProgressClearTimer = null;

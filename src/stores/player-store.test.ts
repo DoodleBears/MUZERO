@@ -92,6 +92,7 @@ afterEach(async () => {
   vi.doUnmock("@/lib/media-metadata");
   vi.doUnmock("@/lib/video-poster-frame");
   vi.doUnmock("@/workers/cover-client");
+  vi.unstubAllGlobals();
   openedDb?.close();
   openedDb = null;
   document.body.innerHTML = "";
@@ -889,6 +890,71 @@ describe("queueEntriesKey (queue split-subscription gate)", () => {
 });
 
 describe("player-store bulk upload visibility", () => {
+  it("imports the bundled example song with its paired cover into a new set", async () => {
+    vi.doMock("@/lib/media-probe", async () => {
+      const actual = await vi.importActual<typeof import("@/lib/media-probe")>("@/lib/media-probe");
+      return {
+        ...actual,
+        probeMediaFile: vi.fn(async (file: File) => ({
+          durationSec: 143,
+          kind: "audio",
+          mime: file.type || "audio/mpeg",
+          title: "2:23 AM",
+        })),
+      };
+    });
+    vi.doMock("@/workers/cover-client", () => ({
+      extractCoverMetadataViaWorker: vi.fn(async () => ({
+        palette: [{ r: 10, g: 20, b: 30 }],
+        thumbhash: "XjM9LzMI9wiIh4hwj3CI+AiIcH/494cP",
+        timings: {
+          backlightMs: 0,
+          decodeMs: 0,
+          paletteMs: 0,
+          thumbnailMs: 0,
+          thumbhashMs: 0,
+          totalMs: 0,
+        },
+      })),
+    }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const isCover = url.endsWith(".jpg");
+      return new Response(new Uint8Array(isCover ? [9, 8, 7] : [1, 2, 3]), {
+        headers: { "content-type": isCover ? "image/jpeg" : "audio/mpeg" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { db, repos, usePlayerStore } = await loadRuntime();
+
+    await usePlayerStore.getState().importExampleTrack();
+
+    const sessions = await repos.listSessions();
+    expect(sessions).toHaveLength(1);
+    const session = sessions[0];
+    expect(session.name).toBe("Example songs");
+    expect(session.trackIds).toHaveLength(1);
+    expect(usePlayerStore.getState().activeSessionId).toBe(session.id);
+
+    const track = await db.tracks.get(session.trackIds[0]);
+    expect(track).toMatchObject({
+      durationSec: 143,
+      kind: "audio",
+      origin: "uploaded",
+      provider: "upload",
+      status: "ready",
+      title: "2:23 AM",
+    });
+    expect(track?.coverBlobId).toBeTruthy();
+    const media = track?.blobId ? await db.mediaBlobs.get(track.blobId) : undefined;
+    const cover = track?.coverBlobId ? await db.mediaBlobs.get(track.coverBlobId) : undefined;
+    expect(media).toMatchObject({ bytes: 3, mime: "audio/mpeg", role: "media" });
+    expect(cover).toMatchObject({ bytes: 3, mime: "image/jpeg", role: "cover" });
+    expect(fetchMock).toHaveBeenCalledWith("/examples/2_23_AM.mp3");
+    expect(fetchMock).toHaveBeenCalledWith("/examples/2_23_AM.jpg");
+  });
+
   it("publishes completed file uploads before the whole large selection finishes", async () => {
     const reachedLastProbe = deferredVoid();
     const releaseLastProbe = deferredVoid();

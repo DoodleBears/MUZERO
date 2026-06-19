@@ -43,8 +43,11 @@
     "uploadDesc": "自分の音声や動画ファイル（MV、ボイスメモ、何でも）を追加。動画優先で再生し、各曲にメモとタグを付けられます。",
     "uploadCta": "ファイルをアップロードしてセット作成",
     "importing": "取り込み中…",
+    "importExample": "サンプル曲を読み込む",
+    "importingExample": "サンプルを読み込み中…",
     "yourSets": "あなたのセット",
     "uploadSet": "アップロードセット",
+    "exampleSet": "サンプル曲",
     "seedIdeas": [
       "深夜の lo-fi で集中コーディング",
       "夜明けの synthwave ロードトリップ",

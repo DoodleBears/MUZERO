@@ -1,4 +1,4 @@
-import { FileMusic, UploadCloud } from "lucide-react";
+import { FileMusic, Sparkles, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -44,10 +44,42 @@ export function LibraryImportEmptyState({
         <p className="text-muted-foreground text-sm">{t("sessions.uploadDesc")}</p>
       </div>
       {showAddTracks && (
-        <LibraryImportActions mode={actions} setId={setId} className="justify-center" />
+        <div className="flex flex-wrap justify-center gap-2">
+          <LibraryImportActions mode={actions} setId={setId} className="justify-center" />
+          <ImportExampleTrackButton setId={setId} />
+        </div>
       )}
       <p className="max-w-sm text-muted-foreground text-xs">{t("drop.addSubtitle")}</p>
     </section>
+  );
+}
+
+function ImportExampleTrackButton({ setId }: { setId?: string }) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const importExampleTrack = usePlayerStore((s) => s.importExampleTrack);
+  const isUploading = usePlayerStore((s) => s.isUploading);
+
+  async function onImportExample() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await importExampleTrack(setId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      disabled={busy || isUploading}
+      onClick={() => void onImportExample()}
+    >
+      <Sparkles className="size-4" />
+      {busy ? t("sessions.importingExample") : t("sessions.importExample")}
+    </Button>
   );
 }
 

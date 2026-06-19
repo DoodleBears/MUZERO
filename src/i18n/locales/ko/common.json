@@ -43,8 +43,11 @@
     "uploadDesc": "내 오디오나 비디오 파일(MV, 음성 메모 등 무엇이든)을 추가하세요. 기본으로 비디오 우선 재생되며, 각 곡에 메모와 태그를 달 수 있어요.",
     "uploadCta": "파일 업로드 후 세트 만들기",
     "importing": "가져오는 중…",
+    "importExample": "샘플 곡 가져오기",
+    "importingExample": "샘플 가져오는 중…",
     "yourSets": "내 세트",
     "uploadSet": "업로드 세트",
+    "exampleSet": "샘플 곡",
     "seedIdeas": [
       "심야 lo-fi 집중 코딩",
       "해돋이 synthwave 로드 트립",

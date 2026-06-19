@@ -43,8 +43,11 @@
     "uploadDesc": "添加你自己的音频或视频文件（MV、语音备忘录，什么都行）。默认视频优先播放，每首都可加记忆备注和标签。",
     "uploadCta": "上传文件并创建歌单",
     "importing": "导入中……",
+    "importExample": "导入示例歌曲",
+    "importingExample": "正在导入示例……",
     "yourSets": "你的歌单",
     "uploadSet": "上传歌单",
+    "exampleSet": "示例歌曲",
     "seedIdeas": [
       "深夜 lo-fi 专注编码",
       "日出感 synthwave 公路旅行",
