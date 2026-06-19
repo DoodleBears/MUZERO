@@ -84,6 +84,20 @@ describe("createNeteaseLyricsProvider", () => {
     expect(await provider.fetch({ trackName: "nope", artistName: "nobody" })).toBeNull();
   });
 
+  it("populates matched metadata from the chosen song (so cross-source scoring works)", async () => {
+    const { http } = stubHttp({
+      songs: [song(2, 200_000)],
+      lyricBySongId: { any: { lrc: { lyric: SYNCED } } },
+    });
+    const provider = createNeteaseLyricsProvider({ http });
+    const hit = await provider.fetch({
+      trackName: "Song 2",
+      artistName: "Artist",
+      durationSec: 200,
+    });
+    expect(hit?.matched).toEqual({ trackName: "Song 2", artistName: "Artist", durationSec: 200 });
+  });
+
   it("getById returns null for uncollected lyrics", async () => {
     const { http } = stubHttp({ lyricBySongId: { any: { code: 200, lrc: { lyric: "" } } } });
     const provider = createNeteaseLyricsProvider({ http });

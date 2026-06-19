@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 归一化 + 评分纯函数地基：`match-text.ts`（normalizeTitle / primaryArtist / scoreCandidate）+ 穷举单测，无 IO | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | LRCLIB 多变体阶梯 + 时长容差闸门 + 候选评分接管 `pickBestHit` | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | NetEase 搜索路径复用评分（时长 + 标题相似）+ 逐字 tier 收益对齐 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | NetEase 搜索路径复用评分（时长 + 标题相似）+ 逐字 tier 收益对齐 | ✅ Done | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 匹配置信度落库（`LyricsRecord.match?`）+ 低置信不写负缓存 + 匹配进度 toast（正在匹配 → 结果，复用 `notify`）+ Settings 开关 + i18n | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -424,11 +424,15 @@ async fetch(q, signal) {
 - [ ] `registry.ts` `createAutoLyricsProvider.firstHit`：精确签名命中短路；否则收集候选跨源择优 + 高阈短路 + tie-break 保既有顺序。
 
 #### Phase 3 Checklist
-- [ ] NetEase songId 在 → 走精确，**不进搜索打分**（路径不回归）。
-- [ ] auto：LRCLIB 先返回 plain、NetEase 有 yrc → **采用 NetEase yrc**（tier 胜出，诉求③）。
-- [ ] auto：LRCLIB exact 高置信命中 → 短路，**不再打 NetEase**（省流验证）。
-- [ ] auto：某源 throw、另一源命中 → 返回命中（错误不阻断，现状语义保持）。
-- [ ] `make check` 绿。
+- [x] NetEase songId 在 → 走精确（`match.via="exact"`, confidence 1），**不进搜索打分**（路径不回归）。
+- [x] `pickBestSong`：标题相似优先于时长（同时长错标题不误选）；同标题用时长消歧；空表→null。
+- [x] NetEase 搜索路径 `matched` 由选中 song 回填 → 跨源评分/闸门可用。
+- [x] auto：LRCLIB 先返回 line-level、NetEase 有 yrc 且二者均非权威 → **采用 NetEase yrc**（tier 胜出，诉求③）。
+- [x] auto：高置信命中 → 短路，**不再打后续源**（省流验证）。
+- [x] auto：某源 throw、另一源命中 → 返回命中（错误不阻断，现状语义保持）。
+- [x] `src/lyrics/` 234 测试绿 + biome 干净 + tsc 干净。
+
+> **Phase 3 实现说明（2026-06-19）：** `attachMatch`/`hitConfidence` 提到 `match-text.ts`（generic，两 provider 共用）；`lrclib-*` 改 import 源。`netease-lyric-map.ts` 加 `pickBestSong`（0.6×标题相似 + 0.4×时长邻近）替代纯时长 `pickClosestByDuration`；`netease-lyrics-provider.ts` `fetch` 用它选 song + 回填 `matched` + 用归一化标题喂 cloudsearch；songId 路径标 `match.via="exact"`。`registry.ts` `firstHit`→`bestHit`：权威命中（via exact/norm 或 confidence ≥0.9）短路，否则跨源收集按 `hitConfidence` 择优（逐字 tier 胜出）。新增 9 例，`src/lyrics/` 共 234 例全绿。
 
 ### Phase 4: 置信落库决策 + 匹配进度 toast + 低置信署名 + Settings
 

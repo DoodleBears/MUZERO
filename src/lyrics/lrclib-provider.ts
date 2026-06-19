@@ -9,7 +9,6 @@
 import { getAppFetch } from "@/lib/platform";
 import { buildLyricsQueryPlan } from "./build-query";
 import {
-  attachMatch,
   buildGetByIdUrl,
   buildGetUrl,
   buildSearchUrl,
@@ -18,7 +17,7 @@ import {
   parseSearchResults,
   pickBestHit,
 } from "./lrclib-map";
-import { passesGate, scoreCandidate } from "./match-text";
+import { attachMatch, passesGate, scoreCandidate } from "./match-text";
 import { LyricsError, type LyricsHit, type LyricsProvider, type LyricsQuery } from "./provider";
 
 /**

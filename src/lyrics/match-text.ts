@@ -14,7 +14,7 @@
 
 import type { LyricFormat } from "./model";
 import { detectLyricsFormat } from "./parse";
-import type { LyricsHit, LyricsQuery } from "./provider";
+import type { LyricsHit, LyricsMatchInfo, LyricsQuery } from "./provider";
 
 /** Tunable thresholds for the accept/reject gate. Adjust = edit + revert, never a runtime flag. */
 export const MATCH_GATE = {
@@ -246,4 +246,27 @@ export function passesGate(score: CandidateScore, level: GateLevel): boolean {
   if (score.confidence < MATCH_GATE.minConfidence) return false;
   if (level === "titleOnly" && score.titleSim < MATCH_GATE.titleOnlyMinSim) return false;
   return true;
+}
+
+/** Attach match provenance/confidence to a chosen hit (pure). Used by every provider. */
+export function attachMatch(
+  hit: LyricsHit,
+  q: LyricsQuery,
+  via: LyricsMatchInfo["via"],
+): LyricsHit {
+  const score = scoreCandidate(hit, q);
+  return {
+    ...hit,
+    match: {
+      confidence: score.confidence,
+      durationDelta: score.durationDelta,
+      titleSim: score.titleSim,
+      via,
+    },
+  };
+}
+
+/** Confidence of a hit against a query — reuses a precomputed `match` when present. */
+export function hitConfidence(hit: LyricsHit, q: LyricsQuery): number {
+  return hit.match?.confidence ?? scoreCandidate(hit, q).confidence;
 }

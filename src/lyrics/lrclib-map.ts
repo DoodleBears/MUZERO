@@ -8,7 +8,7 @@
  */
 
 import { type GateLevel, passesGate, scoreCandidate } from "./match-text";
-import type { LyricsHit, LyricsMatchInfo, LyricsQuery } from "./provider";
+import type { LyricsHit, LyricsQuery } from "./provider";
 
 export const LRCLIB_BASE_URL = "https://lrclib.net";
 
@@ -111,22 +111,4 @@ export function pickBestHit(
     }
   }
   return best;
-}
-
-/** Attach match provenance/confidence to a chosen hit (pure). */
-export function attachMatch(
-  hit: LyricsHit,
-  q: LyricsQuery,
-  via: LyricsMatchInfo["via"],
-): LyricsHit {
-  const score = scoreCandidate(hit, q);
-  return {
-    ...hit,
-    match: {
-      confidence: score.confidence,
-      durationDelta: score.durationDelta,
-      titleSim: score.titleSim,
-      via,
-    },
-  };
 }

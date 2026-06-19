@@ -61,6 +61,43 @@ describe("lyrics registry", () => {
     await expect(auto.fetch(QUERY)).resolves.toBe(HIT);
   });
 
+  it("auto fetch short-circuits on a high-confidence hit (skips later providers)", async () => {
+    const first = provider("lrclib", HIT); // exact title/artist/duration → high confidence
+    const second = provider("netease", HIT);
+    const auto = createAutoLyricsProvider(() => [first, second]);
+
+    await expect(auto.fetch(QUERY)).resolves.toBe(HIT);
+    expect(first.fetch).toHaveBeenCalledTimes(1);
+    expect(second.fetch).not.toHaveBeenCalled();
+  });
+
+  it("auto fetch prefers a word-level hit over a line-level one when neither is authoritative", async () => {
+    const q: LyricsQuery = { trackName: "Song", artistName: "A", durationSec: 200 };
+    // Both ~12s off → confidence below the short-circuit threshold → both gathered.
+    const line: LyricsHit = {
+      source: "lrclib",
+      sourceId: "L",
+      synced: "[00:01.00]x",
+      format: "lrc",
+      instrumental: false,
+      matched: { trackName: "Song", artistName: "A", durationSec: 212 },
+    };
+    const word: LyricsHit = {
+      source: "netease",
+      sourceId: "W",
+      synced: "[00:01.000](0,1,0)x",
+      format: "yrc",
+      instrumental: false,
+      matched: { trackName: "Song", artistName: "A", durationSec: 212 },
+    };
+    const auto = createAutoLyricsProvider(() => [
+      provider("lrclib", line),
+      provider("netease", word),
+    ]);
+
+    expect((await auto.fetch(q))?.sourceId).toBe("W");
+  });
+
   it("auto search merges unique hits from available providers", async () => {
     const first = provider("lrclib", null, [HIT]);
     const second = provider("netease", null, [HIT]);
