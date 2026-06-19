@@ -2,6 +2,21 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.3.0 — 2026-06-20 · Much more accurate lyrics matching, and a friendlier empty library
+
+Automatic lyrics matching got a lot smarter: titles and artists are normalized before lookup, a relaxation ladder recovers misses without caching the wrong version, a duration gate rejects same-length covers, and across sources MUZERO now prefers word-by-word karaoke. A match-progress toast shows what's happening with a one-tap Search fallback. Starting from an empty library is easier too — direct import actions and a one-click sample song — while large local folder sync and overall import/playback stay smoother with lower memory.
+
+### Highlights
+- **lyrics** Much more accurate automatic lyrics matching — MUZERO now normalizes titles and artists (stripping version, feat., and full-width brackets) before looking up lyrics, then walks a relaxation ladder so a near-miss still finds a match without caching the wrong version. A duration gate rejects same-length covers, and when several sources have lyrics it prefers word-by-word karaoke — so a NetEase per-syllable file can win over a first-arriving plain text one.
+
+### Added
+- **lyrics** Match-progress toast with a one-tap Search fallback — While a track auto-fetches lyrics, a small toast shows matching → matched, and when MUZERO is unsure or finds nothing it offers a Search action that jumps straight to manual lyric search on Now Playing. Low-confidence results are no longer written to the negative cache, so a later retry can still find the right words. A Settings toggle turns the toasts off.
+- **library** Get started from an empty library — The empty-library screen now offers direct import actions — pick files or a folder right there — plus a one-click sample song so you can hear MUZERO play before importing anything of your own. Search reaches the same actions when it has nothing to show yet.
+
+### Changed
+- **library** Large local folder sync stays smooth — Syncing big local folders no longer stalls the app: the import path was optimized and appending freshly found tracks to the active queue is deferred during a sync, so the first songs stay playable while the rest stream in. _(desktop)_
+- **player** Less jank and lower memory in import and playback — A round of profiling trimmed jank across importing and playback and reduced how much memory the Now Playing background holds, so long listening sessions and big libraries stay lighter on the machine.
+
 ## v1.2.2 — 2026-06-18 · Jump back to source, clearer imports, and smarter video covers
 
 Now Playing can take you straight back to the song's source list, complete with a smooth cover-to-row transition and a current-track marker. Dropped media now asks which set to join, desktop imports can reference files in place with visible progress and recovery tools, and uploaded videos get automatic poster covers. Video tracks also gained separate background, visualizer, flow, dim, and immersive controls. Online tracks are downloaded before playback so seeking works, and volume shortcuts behave cleanly.
