@@ -60,6 +60,9 @@
   },
   "folderImport": {
     "cta": "导入文件夹",
+    "chooseFiles": "选择文件",
+    "chooseFolder": "选择文件夹",
+    "linkLocalFolder": "链接本地文件夹",
     "imported_other": "已从文件夹导入 {{count}} 个文件",
     "skippedEncrypted_other": "已跳过 {{count}} 个加密文件（DRM / 商店格式）",
     "nothingNew": "没有可导入的新文件",

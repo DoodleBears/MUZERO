@@ -18,6 +18,9 @@ vi.mock("react-i18next", () => ({
         "dock.memory": "Memory",
         "dock.playlist": "Playlist",
         "drop.addSubtitle": "Audio & video become tracks — drop anywhere on screen",
+        "folderImport.chooseFiles": "Choose files",
+        "folderImport.chooseFolder": "Choose folder",
+        "folderImport.linkLocalFolder": "Link local folder",
         "gallery.addTracks": "Add tracks",
         "gallery.modeAlbums": "Albums",
         "gallery.modeArtists": "Artists",
@@ -155,7 +158,8 @@ describe("empty-library onboarding", () => {
     render(<SearchPage />);
 
     expect(screen.getByTestId("library-import-empty-state")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add tracks" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose folder" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose files" })).toBeInTheDocument();
     expect(screen.getByText("Make a video / upload set")).toBeInTheDocument();
   });
 
@@ -167,7 +171,23 @@ describe("empty-library onboarding", () => {
     expect(screen.getByRole("button", { name: "Hearted" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Recently Played" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Most Played" })).toBeInTheDocument();
+    expect(screen.getByTestId("library-import-empty-state")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose folder" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose files" })).toBeInTheDocument();
     expect(screen.queryByText(/delete/i)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["albums"],
+    ["artists"],
+  ])("shows the shared import panel in an empty %s wall", (mode) => {
+    localStorage.setItem("muzero-gallery-mode", mode);
+
+    render(<SearchPage />);
+
+    expect(screen.getByTestId("library-import-empty-state")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose folder" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose files" })).toBeInTheDocument();
   });
 
   it("shows an import panel on Now Playing when no track exists anywhere", () => {

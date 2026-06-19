@@ -60,6 +60,9 @@
   },
   "folderImport": {
     "cta": "フォルダを読み込む",
+    "chooseFiles": "ファイルを選択",
+    "chooseFolder": "フォルダを選択",
+    "linkLocalFolder": "ローカルフォルダをリンク",
     "imported_other": "フォルダから {{count}} 件のファイルを読み込みました",
     "skippedEncrypted_other": "{{count}} 件の暗号化ファイル（DRM / ストア形式）をスキップしました",
     "nothingNew": "読み込む新しいファイルはありません",

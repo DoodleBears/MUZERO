@@ -60,6 +60,9 @@
   },
   "folderImport": {
     "cta": "폴더 가져오기",
+    "chooseFiles": "파일 선택",
+    "chooseFolder": "폴더 선택",
+    "linkLocalFolder": "로컬 폴더 연결",
     "imported_other": "폴더에서 파일 {{count}}개를 가져왔습니다",
     "skippedEncrypted_other": "암호화된 파일 {{count}}개를 건너뛰었습니다 (DRM / 스토어 형식)",
     "nothingNew": "가져올 새 파일이 없습니다",

@@ -60,6 +60,9 @@
   },
   "folderImport": {
     "cta": "Import folder",
+    "chooseFiles": "Choose files",
+    "chooseFolder": "Choose folder",
+    "linkLocalFolder": "Link local folder",
     "imported_one": "Imported {{count}} file from folder",
     "imported_other": "Imported {{count}} files from folder",
     "skippedEncrypted_one": "Skipped {{count}} encrypted file (DRM / store format)",

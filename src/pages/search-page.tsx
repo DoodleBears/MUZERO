@@ -141,6 +141,7 @@ import { canViewTransition } from "@/lib/view-transition";
 import { transitionState } from "@/lib/view-transition-react";
 import { orderedSetTrackIds } from "@/player/set-order";
 import { useCoverTargetStore } from "@/stores/cover-target-store";
+import { type FolderImportProgress, useFolderImportStore } from "@/stores/folder-import-store";
 import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -173,6 +174,16 @@ const SEARCH_PLACEHOLDER_KEY = {
   albums: "gallery.searchAlbums",
   artists: "gallery.searchArtists",
 } as const satisfies Record<Exclude<GalleryMode, "online">, string>;
+
+function isFolderImportBusy(progress: FolderImportProgress | null) {
+  return (
+    progress?.phase === "scanning" ||
+    progress?.phase === "importing" ||
+    progress?.phase === "covers" ||
+    progress?.phase === "completed" ||
+    progress?.phase === "cancelled"
+  );
+}
 const MODE_KEY = "muzero-gallery-mode";
 const LEGACY_VIEW_KEY = "muzero-gallery-view";
 const VIEW_KEYS = {
@@ -436,14 +447,16 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   }, [likedIdsImmediate, searchTabActive]);
   const likedIds = useLikedTrackIds(likedIdsActive);
 
-  const sessions = usePausedLiveQuery(() => listSessions(db), [], searchTabActive, []);
+  const folderImportBusy = useFolderImportStore((state) => isFolderImportBusy(state.progress));
+  const libraryQueriesActive = searchTabActive && !folderImportBusy;
+  const sessions = usePausedLiveQuery(() => listSessions(db), [], libraryQueriesActive, []);
   const allTracksImmediate =
     mode !== "sets" ||
     setQuery.trim() !== "" ||
     Boolean(selectedSetId || selectedSystemPlaylistId || selectedArtistKey || selectedAlbumKey);
   const [allTracksActive, setAllTracksActive] = useState(allTracksImmediate);
   useEffect(() => {
-    if (!searchTabActive) {
+    if (!libraryQueriesActive) {
       setAllTracksActive(false);
       return undefined;
     }
@@ -456,7 +469,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
       SEARCH_HEAVY_QUERY_RESUME_DELAY_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [allTracksImmediate, searchTabActive]);
+  }, [allTracksImmediate, libraryQueriesActive]);
   // Every tracks write re-runs the full-table query with a fresh array. Coalesce
   // bursts (folder import, DJ refill) so the O(N) consumers below — memory join,
   // artist/album indexes, worker search snapshot — re-run at most once per
@@ -1743,9 +1756,13 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
               <ContextMenu>
                 <ContextMenuTrigger className="block min-h-[40vh] px-3">
                   {shown.length === 0 ? (
-                    <p className="mt-12 text-center text-sm text-muted-foreground">
-                      {t("gallery.empty")}
-                    </p>
+                    sessions.length === 0 && setQuery.trim() === "" ? (
+                      <LibraryImportEmptyState className="mt-6" actions="direct" />
+                    ) : (
+                      <p className="mt-12 text-center text-sm text-muted-foreground">
+                        {t("gallery.empty")}
+                      </p>
+                    )
                   ) : (
                     <RenderTraceBoundary id="search:sets:grid" active={searchTabActive}>
                       <VirtualCardGrid
@@ -1827,7 +1844,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
               facetArtistItems.length === 0 &&
               facetAlbumItems.length === 0 ? (
                 isEmptyTrackLibrary ? (
-                  <LibraryImportEmptyState className="mt-10" showAddTracks={false} />
+                  <LibraryImportEmptyState className="mt-10" actions="direct" />
                 ) : (
                   <p className="mt-12 text-center text-sm text-muted-foreground">
                     {t("gallery.tracksEmpty")}
@@ -1885,9 +1902,13 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
             <>
               <EntitySortRow sort={entitySort} dir={entitySortDir} onSort={onEntitySortClick} />
               {albumItems.length === 0 ? (
-                <p className="mt-12 text-center text-muted-foreground text-sm">
-                  {t("gallery.albumsEmpty")}
-                </p>
+                allTracks.length === 0 && albumQuery.trim() === "" ? (
+                  <LibraryImportEmptyState className="mt-10" actions="direct" />
+                ) : (
+                  <p className="mt-12 text-center text-muted-foreground text-sm">
+                    {t("gallery.albumsEmpty")}
+                  </p>
+                )
               ) : (
                 <VirtualCardGrid
                   gridRef={galleryRef}
@@ -1930,9 +1951,13 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
             <>
               <EntitySortRow sort={entitySort} dir={entitySortDir} onSort={onEntitySortClick} />
               {artistItems.length === 0 ? (
-                <p className="mt-12 text-center text-muted-foreground text-sm">
-                  {t("gallery.artistsEmpty")}
-                </p>
+                allTracks.length === 0 && artistQuery.trim() === "" ? (
+                  <LibraryImportEmptyState className="mt-10" actions="direct" />
+                ) : (
+                  <p className="mt-12 text-center text-muted-foreground text-sm">
+                    {t("gallery.artistsEmpty")}
+                  </p>
+                )
               ) : (
                 <VirtualCardGrid
                   gridRef={galleryRef}
