@@ -56,6 +56,20 @@ describe("buildSearchUrl", () => {
     expect(qs.get("artist_name")).toBe("Borislav Slavov");
     expect(qs.has("duration")).toBe(false);
   });
+
+  it("drops the album when dropAlbum is set", () => {
+    const qs = new URL(buildSearchUrl(QUERY, { dropAlbum: true })).searchParams;
+    expect(qs.get("track_name")).toBe("I Want to Live");
+    expect(qs.get("artist_name")).toBe("Borislav Slavov");
+    expect(qs.has("album_name")).toBe(false);
+  });
+
+  it("keeps only the track name when titleOnly is set", () => {
+    const qs = new URL(buildSearchUrl(QUERY, { titleOnly: true })).searchParams;
+    expect(qs.get("track_name")).toBe("I Want to Live");
+    expect(qs.has("artist_name")).toBe(false);
+    expect(qs.has("album_name")).toBe(false);
+  });
 });
 
 describe("buildGetByIdUrl", () => {
@@ -156,5 +170,22 @@ describe("pickBestHit", () => {
 
   it("returns null for an empty list", () => {
     expect(pickBestHit([], QUERY)).toBeNull();
+  });
+
+  it("rejects a same-name candidate whose duration is far off (no wrong-version match)", () => {
+    // Only candidate is 30s off → beyond the hard duration gate → judged a miss.
+    const best = pickBestHit([synced(1, 233 + 30)], QUERY);
+    expect(best).toBeNull();
+  });
+
+  it("at the titleOnly level, rejects a duration-matching but wrong-title song", () => {
+    const wrong: LyricsHit = {
+      source: "lrclib",
+      sourceId: "9",
+      synced: "[00:01.00]x",
+      instrumental: false,
+      matched: { trackName: "Completely Different", artistName: "x", durationSec: 233 },
+    };
+    expect(pickBestHit([wrong], QUERY, "titleOnly")).toBeNull();
   });
 });

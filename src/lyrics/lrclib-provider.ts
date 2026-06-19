@@ -7,7 +7,9 @@
  */
 
 import { getAppFetch } from "@/lib/platform";
+import { buildLyricsQueryPlan } from "./build-query";
 import {
+  attachMatch,
   buildGetByIdUrl,
   buildGetUrl,
   buildSearchUrl,
@@ -16,6 +18,7 @@ import {
   parseSearchResults,
   pickBestHit,
 } from "./lrclib-map";
+import { passesGate, scoreCandidate } from "./match-text";
 import { LyricsError, type LyricsHit, type LyricsProvider, type LyricsQuery } from "./provider";
 
 /**
@@ -68,23 +71,44 @@ export function createLrclibProvider(cfg: LrclibProviderConfig = {}): LyricsProv
 
     async fetch(q: LyricsQuery, signal?: AbortSignal): Promise<LyricsHit | null> {
       const fetchFn = await resolveFetch();
+      // GET a URL → parsed JSON. 404 → null (no match, relax to the next rung);
+      // any other non-2xx → throw so the caller distinguishes a miss from a failure.
+      const getJson = async (url: string): Promise<unknown> => {
+        const res = await fetchFn(url, init(signal));
+        if (res.ok) return res.json().catch(() => null);
+        if (res.status === 404) return null;
+        throw new LyricsError(`LRCLIB ${new URL(url).pathname} failed (${res.status})`);
+      };
+      const plan = buildLyricsQueryPlan(q);
 
-      // 1) Exact signature match.
-      const getRes = await fetchFn(buildGetUrl(q), init(signal));
-      if (getRes.ok) {
-        const hit = parseHit(await getRes.json().catch(() => null));
-        if (hit) return hit;
-      } else if (getRes.status !== 404) {
-        throw new LyricsError(`LRCLIB /api/get failed (${getRes.status})`);
+      // L0 — exact signature (raw title + full artist + album + duration). Highest hit rate, cheapest.
+      const l0 = parseHit(await getJson(buildGetUrl(plan.primary)));
+      if (l0 && passesGate(scoreCandidate(l0, q), "exact")) return attachMatch(l0, q, "exact");
+      if (signal?.aborted) return null;
+
+      // L1 — normalized title + primary artist (skip when normalization changed nothing).
+      if (plan.normalizedDiffers) {
+        const l1 = parseHit(await getJson(buildGetUrl(plan.normalized)));
+        if (l1 && passesGate(scoreCandidate(l1, q), "norm")) return attachMatch(l1, q, "norm");
+        if (signal?.aborted) return null;
       }
 
-      // 2) Fuzzy search fallback, ranked by synced/duration.
-      const searchRes = await fetchFn(buildSearchUrl(q), init(signal));
-      if (!searchRes.ok) {
-        if (searchRes.status === 404) return null;
-        throw new LyricsError(`LRCLIB /api/search failed (${searchRes.status})`);
-      }
-      return pickBestHit(parseSearchResults(await searchRes.json().catch(() => null)), q);
+      // L2 — fuzzy search without album, client-ranked + gated.
+      const l2 = pickBestHit(
+        parseSearchResults(await getJson(buildSearchUrl(plan.normalized, { dropAlbum: true }))),
+        q,
+        "noAlbum",
+      );
+      if (l2) return attachMatch(l2, q, "noAlbum");
+      if (signal?.aborted) return null;
+
+      // L3 — title-only (artist dropped): widest recall, strongest gate (title-similarity floor).
+      const l3 = pickBestHit(
+        parseSearchResults(await getJson(buildSearchUrl(plan.normalized, { titleOnly: true }))),
+        q,
+        "titleOnly",
+      );
+      return l3 ? attachMatch(l3, q, "titleOnly") : null;
     },
 
     async search(q: LyricsQuery, signal?: AbortSignal): Promise<LyricsHit[]> {

@@ -54,6 +54,50 @@ describe("createLrclibProvider.fetch", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("attaches match info (confidence + via) to an exact hit", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(GET_HIT));
+    const provider = createLrclibProvider({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    const hit = await provider.fetch(QUERY);
+    expect(hit?.match?.via).toBe("exact");
+    expect(hit?.match?.confidence).toBeGreaterThan(0.8);
+  });
+
+  it("recovers via the normalized + primary-artist rung when the exact signature 404s", async () => {
+    // Title has a version suffix and the artist is a collab; the exact /api/get
+    // (raw title + full artist) misses, but L1 (normalized title + primary artist) hits.
+    const q: LyricsQuery = {
+      trackName: "Song (Live)",
+      artistName: "A, B",
+      durationSec: 200,
+    };
+    const fetchImpl = vi.fn(async (input: unknown) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/api/get")) {
+        const clean =
+          url.searchParams.get("track_name") === "Song" &&
+          url.searchParams.get("artist_name") === "A";
+        return clean
+          ? jsonResponse({ ...GET_HIT, trackName: "Song", artistName: "A", duration: 200 })
+          : jsonResponse({}, 404);
+      }
+      return jsonResponse([]);
+    });
+    const provider = createLrclibProvider({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    const hit = await provider.fetch(q);
+    expect(hit?.match?.via).toBe("norm");
+    expect(hit?.synced).toBe("[00:01.00]x");
+  });
+
+  it("rejects a far-duration search candidate rather than caching a wrong version", async () => {
+    const fetchImpl = vi.fn(async (input: unknown) => {
+      if (String(input).includes("/api/get")) return jsonResponse({}, 404);
+      // The only search hit is 40s off — must be rejected at every rung → null.
+      return jsonResponse([{ ...GET_HIT, id: 5, duration: 240 }]);
+    });
+    const provider = createLrclibProvider({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    expect(await provider.fetch(QUERY)).toBeNull();
+  });
+
   it("returns null when get 404s and search is empty", async () => {
     const fetchImpl = vi.fn(async (input: unknown) =>
       String(input).includes("/api/get") ? jsonResponse({}, 404) : jsonResponse([]),

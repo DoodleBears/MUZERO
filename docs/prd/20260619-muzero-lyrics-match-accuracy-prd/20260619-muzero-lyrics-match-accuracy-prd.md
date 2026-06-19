@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 归一化 + 评分纯函数地基：`match-text.ts`（normalizeTitle / primaryArtist / scoreCandidate）+ 穷举单测，无 IO | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | LRCLIB 多变体阶梯 + 时长容差闸门 + 候选评分接管 `pickBestHit` | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | LRCLIB 多变体阶梯 + 时长容差闸门 + 候选评分接管 `pickBestHit` | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | NetEase 搜索路径复用评分（时长 + 标题相似）+ 逐字 tier 收益对齐 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 匹配置信度落库（`LyricsRecord.match?`）+ 低置信不写负缓存 + 匹配进度 toast（正在匹配 → 结果，复用 `notify`）+ Settings 开关 + i18n | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -404,13 +404,16 @@ async fetch(q, signal) {
 - [ ] `lrclib-provider.ts`：`fetch` 改阶梯（过闸即停 + 出站硬上限 + abort 退出）+ `withMatch` 注入 `match`。
 
 #### Phase 2 Checklist
-- [ ] L0 精确命中 → 仅 1 次出站、`match.via="exact"`（短路验证）。
-- [ ] L0 miss（artist 合唱）→ L1/L2 用 `primaryArtist` 召回成功。
-- [ ] album 错 → L2 去 album 召回（验证 dropAlbum）。
-- [ ] 只剩同名错版本（Δduration 25s）→ **判 null（拒绝）**，不接受、不写负缓存语义来源。
-- [ ] L3 只标题：标题相似 0.9 + 时长邻近 → 接受；标题相似 0.5 → 拒绝（titleOnly 闸门）。
-- [ ] 出站硬上限触发时 `log.debug` 记级数、返回当前最优/null。
-- [ ] `make check` 绿。
+- [x] L0 精确命中 → 仅 1 次出站、`match.via="exact"` + confidence 落 hit（短路验证）。
+- [x] L0 miss（title 版本后缀 + artist 合唱）→ L1 用归一化标题 + `primaryArtist` 召回成功（`via="norm"`）。
+- [x] `buildSearchUrl(q,{dropAlbum})` 去 album、`{titleOnly}` 只留 track_name（URL 单测）。
+- [x] 只剩同名错版本（Δduration 30/40s）→ `pickBestHit`/`fetch` **判 null（拒绝）**，不接受。
+- [x] titleOnly 级：时长邻近但标题不符（`Completely Different`）→ 拒绝（titleOnly 闸门）。
+- [x] `normalizedDiffers=false` 时跳过 L1，不发冗余请求（plan 单测 + provider 调用次数）。
+- [x] 现有 LRCLIB 单测全保持绿（pickBestHit/fetch 语义兼容）。
+- [x] `src/lyrics/` 228 测试绿 + biome 干净 + tsc 干净。
+
+> **Phase 2 实现说明（2026-06-19）：** `build-query.ts` 加 `buildLyricsQueryPlan(q)`（primary + normalized + `normalizedDiffers`）。`lrclib-map.ts`：`buildSearchUrl` 加 `{dropAlbum,titleOnly}` 选项；`pickBestHit` 改为 `scoreCandidate` 最高置信 + `passesGate`（过不了→null），新增 `attachMatch`。`lrclib-provider.ts` `fetch` 改 L0→L1→L2→L3 阶梯：L0/L1 精确签名（gate `exact`/`norm`），L2 search 去 album（`noAlbum`），L3 只标题（`titleOnly` 强闸门）；每级 abort 退出，404 降级、5xx throw。出站天然 ≤4（L1 可跳）。新增 11 例，`src/lyrics/` 共 228 例全绿。
 
 ### Phase 3: NetEase 搜索打分 + auto 跨源择优
 
