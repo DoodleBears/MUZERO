@@ -2,6 +2,13 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.3.1 — 2026-06-20 · Background update checks now show up on their own
+
+The desktop app already checked for updates on its own shortly after launch, but the About screen only reflected an update after you pressed Check for updates — so the automatic check looked like it wasn't working. About now reads the latest known status when it opens, so a background check or download shows up without a manual nudge.
+
+### Fixed
+- **app** Automatic update checks surface without a manual click — The startup auto-check runs a few seconds after launch, before the About screen is usually open, so its result used to be missed and About opened looking up to date until you pressed Check for updates. About now seeds from the last known update status when it mounts, so a found, downloading, or ready-to-install update appears on its own. _(desktop)_
+
 ## v1.3.0 — 2026-06-20 · Much more accurate lyrics matching, and a friendlier empty library
 
 Automatic lyrics matching got a lot smarter: titles and artists are normalized before lookup, a relaxation ladder recovers misses without caching the wrong version, a duration gate rejects same-length covers, and across sources MUZERO now prefers word-by-word karaoke. A match-progress toast shows what's happening with a one-tap Search fallback. Starting from an empty library is easier too — direct import actions and a one-click sample song — while large local folder sync and overall import/playback stay smoother with lower memory.
