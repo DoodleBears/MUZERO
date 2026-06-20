@@ -239,6 +239,10 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
       trace,
     });
     if (playback.kind === "login-required") return { kind: "requires-login" };
+    // Genuine no-video (audio-only YouTube Music entry) → let the caller fall back to audio.
+    if (playback.kind === "unavailable" && playback.reason === "no video format") {
+      return { kind: "no-video" };
+    }
     if (playback.kind !== "ok") return { kind: "error", message: playback.reason };
     const video: PlayableVideoTrack = {
       // Blob transport: youtubei already downloaded the bytes (range fetcher + PoToken).

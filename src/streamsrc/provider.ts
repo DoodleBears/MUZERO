@@ -110,6 +110,9 @@ export type StreamVideoResolveResult =
   | { kind: "ok"; video: PlayableVideoTrack }
   | { kind: "requires-login" }
   | { kind: "no-permission"; reason: string }
+  /** No video track exists for this item (e.g. a YouTube Music audio-only entry) — the
+   *  caller should fall back to downloading the audio stream, not treat it as a failure. */
+  | { kind: "no-video" }
   | { kind: "error"; message: string };
 
 export interface StreamSearchOptions {

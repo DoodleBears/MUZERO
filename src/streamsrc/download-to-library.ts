@@ -76,6 +76,9 @@ export async function downloadStreamedVideoToLibrary(
   const videoRes = await source.resolveVideo(externalId, { quality: input.quality });
   if (videoRes.kind === "requires-login") return { kind: "requires-login" };
   if (videoRes.kind === "no-permission") return { kind: "no-permission", reason: videoRes.reason };
+  // No video track (e.g. an audio-only YouTube Music entry) → download the audio instead of
+  // failing. "有视频则下载视频，否则音频" — playlist downloads stay resilient per-item.
+  if (videoRes.kind === "no-video") return downloadAudioOnly(input, deps);
   if (videoRes.kind !== "ok") return { kind: "error", message: videoRes.message };
 
   const audioRes = await source.resolve(externalId, {});

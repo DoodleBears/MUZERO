@@ -44,19 +44,27 @@ function outputFormatFor(container: MuxContainer): OutputFormat {
   }
 }
 
-/** Copy every packet from a sink into a packet source; metadata (decoder config) on first. */
+/**
+ * Copy every packet from a sink into a packet source; metadata (decoder config) on first.
+ * `tsOffset` shifts every packet's presentation timestamp (≥0) — DASH streams (esp. YouTube)
+ * can start at a small negative timestamp (encoder/priming delay) that the muxer rejects with
+ * "Timestamps must be non-negative"; we shift BOTH tracks by the same offset to keep A/V sync.
+ */
 async function pumpPackets<M>(
   sink: EncodedPacketSink,
   add: (packet: EncodedPacket, meta?: M) => Promise<void>,
   firstMeta: M | undefined,
+  tsOffset: number,
   onTimestamp?: (ts: number) => void,
 ): Promise<void> {
   let packet = await sink.getFirstPacket();
   let first = true;
   while (packet) {
-    await add(packet, first ? firstMeta : undefined);
+    const shifted =
+      tsOffset > 0 ? packet.clone({ timestamp: packet.timestamp + tsOffset }) : packet;
+    await add(shifted, first ? firstMeta : undefined);
     first = false;
-    onTimestamp?.(packet.timestamp);
+    onTimestamp?.(shifted.timestamp);
     packet = await sink.getNextPacket(packet);
   }
 }
@@ -97,18 +105,31 @@ export async function muxCopyTracks(
     output.addAudioTrack(audioSource);
     await output.start();
 
+    const videoSink = new EncodedPacketSink(videoTrack);
+    const audioSink = new EncodedPacketSink(audioTrack);
+    // Peek each track's start (metadata-only = cheap) and, if the earliest is negative, shift
+    // BOTH tracks up so the timeline starts at 0 — the muxer rejects negative timestamps.
+    const [vFirst, aFirst] = await Promise.all([
+      videoSink.getFirstPacket({ metadataOnly: true }),
+      audioSink.getFirstPacket({ metadataOnly: true }),
+    ]);
+    const minTs = Math.min(vFirst?.timestamp ?? 0, aFirst?.timestamp ?? 0);
+    const tsOffset = minTs < 0 ? -minTs : 0;
+
     await pumpPackets(
-      new EncodedPacketSink(videoTrack),
+      videoSink,
       (packet, meta) => videoSource.add(packet, meta),
       videoConfig ? { decoderConfig: videoConfig } : undefined,
+      tsOffset,
       totalDuration > 0 && onProgress
         ? (ts) => onProgress(Math.max(0, Math.min(1, ts / totalDuration)))
         : undefined,
     );
     await pumpPackets(
-      new EncodedPacketSink(audioTrack),
+      audioSink,
       (packet, meta) => audioSource.add(packet, meta),
       audioConfig ? { decoderConfig: audioConfig } : undefined,
+      tsOffset,
     );
 
     await output.finalize();

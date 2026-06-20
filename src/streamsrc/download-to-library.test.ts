@@ -223,6 +223,33 @@ describe("downloadStreamedVideoToLibrary", () => {
     expect((await db.tracks.get(track.id))?.coverBlobId).toBeTruthy();
   });
 
+  it("falls back to an audio track when there is no video (有视频则视频，否则音频)", async () => {
+    const session = await createSession(
+      { name: "Downloads", seedPrompt: "", config: { autoExtend: false }, displayMode: "video" },
+      db,
+    );
+    const mux = vi.fn(); // must NOT mux — there's no video
+    const source = stubSource({
+      id: "youtube",
+      resolveVideo: async () => ({ kind: "no-video" }),
+      resolve: async () => ({
+        kind: "ok",
+        stream: { blob: new Blob([new Uint8Array(300)]), mime: "audio/mp4" },
+      }),
+    });
+    const res = await downloadStreamedVideoToLibrary(
+      { source, sessionId: session.id, externalId: "audioOnlyId", title: "Music only" },
+      deps({ mux }),
+    );
+    expect(res.kind).toBe("downloaded");
+    if (res.kind !== "downloaded") return;
+    const track = await db.tracks.get(res.trackId);
+    expect(track?.kind).toBe("audio"); // fell back to audio
+    expect(track?.blobId).toBeTruthy();
+    expect(mux).not.toHaveBeenCalled();
+    expect((await db.sessions.get(session.id))?.trackIds).toContain(res.trackId);
+  });
+
   it("propagates a login wall without creating a track", async () => {
     const session = await createSession(
       { name: "Downloads", seedPrompt: "", config: { autoExtend: false }, displayMode: "video" },

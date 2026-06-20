@@ -223,13 +223,13 @@ describe("createBiliSource.resolveVideo / listVideoQualities", () => {
     expect(opts?.[0]).toMatchObject({ key: "1080", label: "1080P", codec: "avc" });
   });
 
-  it("returns an error result when playurl has no video", async () => {
+  it("returns a no-video result when playurl has no video (→ caller falls back to audio)", async () => {
     const { source } = deps([
       ["/x/web-interface/nav", NAV],
       ["/player/wbi/playurl", { code: 0, data: { dash: { video: [] } } }],
     ]);
     const res = await source.resolveVideo?.("BV1xx411c7mD#998877");
-    expect(res?.kind).toBe("error");
+    expect(res?.kind).toBe("no-video");
   });
 
   it("listParts maps multi-P pages to parts (bvid#cid), and [] for single-part", async () => {

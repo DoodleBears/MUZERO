@@ -745,7 +745,11 @@ export function startPerfControlBridge(): void {
       if (payload.subscribe && payload.importId) {
         const { subscribeToPlaylist } = await import("@/stores/playlist-auto-sync");
         const { getSession } = await import("@/db/repositories");
-        const pl = playlists.find((p) => p.id === String(payload.importId));
+        // YouTube has no user-playlist list → fetch the playlist meta for its name/cover.
+        const pl =
+          playlists.find((p) => p.id === String(payload.importId)) ??
+          (await source.getPlaylistMeta?.(String(payload.importId))) ??
+          undefined;
         const setId = await subscribeToPlaylist(
           sourceId,
           String(payload.importId),
@@ -830,6 +834,7 @@ export function startPerfControlBridge(): void {
           bytesDone: j.bytesDone,
           totalBytes: j.totalBytes,
           attempts: j.attempts,
+          lastError: j.lastError,
           trackId: j.trackId,
         })),
       };

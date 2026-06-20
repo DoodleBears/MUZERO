@@ -285,9 +285,9 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
   ): Promise<StreamVideoResolveResult> {
     try {
       const streams = await fetchVideoStreams(externalId, opts?.signal);
-      if (!streams.length) return { kind: "error", message: "no video stream" };
+      if (!streams.length) return { kind: "no-video" };
       const pick = selectVideoByResolution(streams, { maxHeight: parseMaxHeight(opts?.quality) });
-      if (!pick?.urls.length) return { kind: "error", message: "no video stream" };
+      if (!pick?.urls.length) return { kind: "no-video" };
       const video: PlayableVideoTrack = {
         url: pick.urls[0],
         headers: { Referer: REFERER, "User-Agent": USER_AGENT },
