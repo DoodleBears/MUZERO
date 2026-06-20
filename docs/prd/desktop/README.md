@@ -13,4 +13,4 @@
 
 | PRD | 状态 | 摘要 |
 |---|---|---|
-| _（暂无新桌面 PRD；历史桌面 PRD 见 [`docs/prd/`](../) 根目录）_ | — | — |
+| [20260620-muzero-video-quality-download-import](20260620-muzero-video-quality-download-import-prd/20260620-muzero-video-quality-download-import-prd.md) | Draft | Bilibili/YouTube 视频清晰度选择 + 直接下载到本地导入；DASH 分轨用 mediabunny **copy-remux**（无重编码、原生容器 mp4/webm，**不打包 FFmpeg**）。external-streaming-sources 的视频向扩展 |
