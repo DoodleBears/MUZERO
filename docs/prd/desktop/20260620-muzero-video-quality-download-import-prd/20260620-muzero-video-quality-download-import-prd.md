@@ -130,7 +130,7 @@ src/
 │   │   └── bili-video.ts            # 新：parseDashVideo() + selectVideoByResolution()（镜像 bili-resolve 的 audio 选择）✅
 │   ├── youtube/
 │   │   └── youtube-formats.ts       # 扩：pickAdaptiveVideo()（镜像 pickAdaptiveAudio）
-│   ├── video-quality.ts             # 新：跨源统一「清晰度档」模型 + 归一化（label/height/hdr/codec）
+│   ├── video-quality.ts             # 新：跨源 label/排序（videoQualityLabel + sortVideoQualitiesDesc，bili 已消费）✅
 │   ├── download-plan.ts             # 新：buildDownloadPlan()（纯，pair video+audio → DownloadPlan）✅
 │   ├── mux/
 │   │   ├── mux-mediabunny.ts        # 新：渲染层 copy-remux（transmux 无重编码；WebCodecs transcode 为可选分支）
@@ -376,7 +376,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 - [x] **Bilibili 视频轨解析/选档（低风险，先行）**：新文件 `bili-video.ts` 的 `parseDashVideo` + `selectVideoByResolution`（镜像音频；codec 容器兼容默认 AVC-first，可配置）。✅ 9 单测全绿。
 - [x] **Bilibili 视频 resolve**：`bili-source.ts` 加 `resolveVideo`/`listVideoQualities`，视频侧 `fnval` 由 `16` 提至 `4048`——复用已验证的 view→cid→playurl（§1.4），音频路径未动（34 bili 测全绿，含既有音频）；provider.ts 加 `PlayableVideoTrack`/`VideoQualityOption`/`resolveVideo?`/`listVideoQualities?`。✅
 - [ ] **YouTube（脆弱，独立验收）**：`youtube-formats.ts` 加 `pickAdaptiveVideo`（按 `height/fps/hdr` 选档，codec 仅决定容器配对、**不硬编码画质排名**）；复用 [`youtube-ytjs.ts`](../../../../src/streamsrc/youtube/youtube-ytjs.ts) 的 sig/n + PoToken（§4.6）。
-- [ ] `video-quality.ts` 跨源清晰度归一（label/height/fps/hdr/codec/requiresLogin）。
+- [x] `video-quality.ts` 跨源 label/排序（`videoQualityLabel`/`sortVideoQualitiesDesc`，bili `listVideoQualities` 已消费）。✅ 跨源「归一」由 `provider.VideoQualityOption` 统一契约达成，无需独立 normalize 层（YT 落地时复用同 util）。
 - [ ] `provider.ts` 加可选 `listVideoQualities`/`resolveVideo`；bili/youtube source 实装，netease 不实装。
 - [x] `mux/mux-strategy.ts` `chooseMuxStrategy` + `classifyAudioCodec`（默认 copy、音轨配对视频容器族、mkv 归档兜底、force-mp4 才 transcode）+ `download-plan.ts` `buildDownloadPlan`（纯）。✅ 16 单测全绿（`resolveDownloadPlan` 的 provider-calling 包装并入 Phase 2 orchestrator）。
 - [x] `Track`（`downloadedVideoHeight`/`downloadedContainer`/`downloadedCodecs`）/`StreamSourceConfig`（`videoQuality`）附加非索引字段，零 Dexie 迁移。✅

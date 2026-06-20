@@ -23,6 +23,7 @@ import type {
   StreamVideoResolveResult,
   VideoQualityOption,
 } from "../provider";
+import { videoQualityLabel } from "../video-quality";
 import { type BiliQualityKey, parseDashAudio, selectAudioByPreference } from "./bili-resolve";
 import {
   type BiliVideoCodec,
@@ -207,7 +208,7 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
       .sort((a, b) => (b.height ?? 0) - (a.height ?? 0))
       .map((s) => ({
         key: String(s.height ?? 0),
-        label: videoLabel(s),
+        label: videoQualityLabel(s.height ?? 0, s.frameRate),
         height: s.height ?? 0,
         fps: s.frameRate,
         codec: s.codec,
@@ -240,13 +241,6 @@ function parseMaxHeight(quality?: string): number | undefined {
   if (!quality || quality === "max") return undefined;
   const n = Number(quality);
   return Number.isFinite(n) && n > 0 ? n : undefined;
-}
-
-/** Display label like `1080P` / `2160P60` (fps suffix only above 30). */
-function videoLabel(s: BiliVideoStream): string {
-  const h = s.height ?? 0;
-  const fps = s.frameRate && s.frameRate > 30 ? String(s.frameRate) : "";
-  return `${h}P${fps}`;
 }
 
 interface RawSearchItem {
