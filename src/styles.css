@@ -325,6 +325,12 @@
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     filter: none !important;
+    /* `will-change: transform` (Tailwind `will-change-transform` on every lyric line +
+       the cascade engine's inline hint) forces each line onto its OWN permanent GPU
+       compositing layer. On a transparent macOS window those layers are never cleared as
+       they move, so old line/shadow frames freeze behind the scroll — the "残影". Drop the
+       hint so the lines repaint into the shared surface instead of orphaned layers. */
+    will-change: auto !important;
   }
 
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls,
