@@ -190,6 +190,14 @@ function routeToCommand(method, segments, body) {
   ) {
     return { kind: "recoverCover", payload: body };
   }
+  if (
+    method === "POST" &&
+    segments.length === 2 &&
+    segments[0] === "stream" &&
+    segments[1] === "resolve-link"
+  ) {
+    return { kind: "resolveLink", payload: body };
+  }
   return null;
 }
 

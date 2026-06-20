@@ -41,6 +41,7 @@ import {
 import { muxCopyTracks } from "@/streamsrc/mux/mux-mediabunny";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
+import { parseBareStreamId, parseStreamLink } from "@/streamsrc/stream-link";
 import { getSearchPerfSnapshot, resetSearchPerf } from "@/workers/search-client";
 import { getSearchDriver } from "./search-drive";
 
@@ -65,7 +66,8 @@ export interface PerfControlCommand {
     | "streamProbe"
     | "streamDownload"
     | "downloadToLibrary"
-    | "recoverCover";
+    | "recoverCover"
+    | "resolveLink";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -109,6 +111,8 @@ interface PerfCommandHandlerDeps {
   downloadToLibrary?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** Backfill an existing streamed track's official cover (no video re-download). */
   recoverCover?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Detect a link / bare id and resolve it targeted (getTracksByIds) — paste-to-resolve. */
+  resolveLink?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -280,6 +284,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "recoverCover": {
         if (!deps.recoverCover) throw new Error("recoverCover not wired");
         return deps.recoverCover(command.payload ?? {});
+      }
+      case "resolveLink": {
+        if (!deps.resolveLink) throw new Error("resolveLink not wired");
+        return deps.resolveLink(command.payload ?? {});
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
@@ -633,6 +641,24 @@ export function startPerfControlBridge(): void {
             }
           : null,
       };
+    },
+    // Detect a link / bare id (mirrors the ⌘F overlay) and resolve it targeted via the
+    // source's getTracksByIds — proves "paste URL / type BV → the right video, no keyword search".
+    resolveLink: async (payload) => {
+      const text = String(payload.text ?? "");
+      const ref = parseStreamLink(text) ?? parseBareStreamId(text);
+      if (!ref) return { ref: null, hit: null };
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(ref.source, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source?.getTracksByIds) return { ref, hit: null };
+      const [hit] = await source.getTracksByIds([ref.id]);
+      return { ref, hit: hit ?? null };
     },
     // Backfill an existing streamed track's official cover (no video re-download).
     recoverCover: async (payload) => {

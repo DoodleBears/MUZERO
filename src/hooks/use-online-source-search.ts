@@ -13,6 +13,7 @@ import { createStreamSource, STREAM_SOURCE_IDS } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import {
   expandStreamLink,
+  parseBareStreamId,
   parseStreamLink,
   qqShortLinkUrl,
   type StreamLinkRef,
@@ -78,10 +79,11 @@ export function useOnlineSourceSearch(
         getCookie: (sid) => streamSources?.[sid]?.cookie,
       });
 
-    // A pasted share link resolves immediately (no debounce) and works even if the
-    // source's search chip is off — the intent is explicit. A short link (no id in the
-    // URL) takes one redirect hop to expand before it parses.
-    const directRef = parseStreamLink(q);
+    // A pasted share link OR a bare id (BV…/av…/YouTube 11-char) resolves immediately
+    // (no debounce, targeted via getTracksByIds — no keyword search) and works even if the
+    // source's search chip is off — the intent is explicit. A short link (no id in the URL)
+    // takes one redirect hop to expand before it parses.
+    const directRef = parseStreamLink(q) ?? parseBareStreamId(q);
     const shortUrl = directRef ? null : qqShortLinkUrl(q);
     if (directRef || shortUrl) {
       setSearching(true);

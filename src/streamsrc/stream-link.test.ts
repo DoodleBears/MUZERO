@@ -1,6 +1,91 @@
 import { describe, expect, it } from "vitest";
 import type { StreamHttp, StreamHttpResponse } from "./http";
-import { expandStreamLink, parseStreamLink, qqShortLinkUrl, scrapeQqLink } from "./stream-link";
+import {
+  expandStreamLink,
+  parseBareStreamId,
+  parseStreamLink,
+  qqShortLinkUrl,
+  scrapeQqLink,
+} from "./stream-link";
+
+describe("parseStreamLink — Bilibili / YouTube", () => {
+  it("parses a bilibili video link to its BV id", () => {
+    expect(parseStreamLink("https://www.bilibili.com/video/BV1HLz9BJEgi")).toEqual({
+      source: "bili",
+      kind: "song",
+      id: "BV1HLz9BJEgi",
+    });
+  });
+
+  it("ignores trailing slash + tracking query params on a bilibili link", () => {
+    expect(
+      parseStreamLink(
+        "https://www.bilibili.com/video/BV1HLz9BJEgi/?spm_id_from=333.788.recommend_more_video.0&trackid=web_related_0&vd_source=d45f427294bdd32326714d1ff2f39cae",
+      ),
+    ).toEqual({ source: "bili", kind: "song", id: "BV1HLz9BJEgi" });
+  });
+
+  it("parses a youtube shorts link", () => {
+    expect(parseStreamLink("https://www.youtube.com/shorts/0EbmNplrNqE")).toEqual({
+      source: "youtube",
+      kind: "song",
+      id: "0EbmNplrNqE",
+    });
+  });
+
+  it("parses watch?v=, youtu.be, and playlist links", () => {
+    expect(parseStreamLink("https://www.youtube.com/watch?v=EvuXIk2Bh78&t=10s")).toEqual({
+      source: "youtube",
+      kind: "song",
+      id: "EvuXIk2Bh78",
+    });
+    expect(parseStreamLink("https://youtu.be/EvuXIk2Bh78")).toEqual({
+      source: "youtube",
+      kind: "song",
+      id: "EvuXIk2Bh78",
+    });
+    expect(parseStreamLink("https://www.youtube.com/playlist?list=PL12345")).toEqual({
+      source: "youtube",
+      kind: "playlist",
+      id: "PL12345",
+    });
+  });
+});
+
+describe("parseBareStreamId", () => {
+  it("recognizes a bare BV number", () => {
+    expect(parseBareStreamId("BV1HLz9BJEgi")).toEqual({
+      source: "bili",
+      kind: "song",
+      id: "BV1HLz9BJEgi",
+    });
+    expect(parseBareStreamId("  BV1HLz9BJEgi  ")).toEqual({
+      source: "bili",
+      kind: "song",
+      id: "BV1HLz9BJEgi",
+    });
+    expect(parseBareStreamId("av170001")).toEqual({ source: "bili", kind: "song", id: "av170001" });
+  });
+
+  it("recognizes a bare 11-char YouTube id (BV is 12 chars → no collision)", () => {
+    expect(parseBareStreamId("0EbmNplrNqE")).toEqual({
+      source: "youtube",
+      kind: "song",
+      id: "0EbmNplrNqE",
+    });
+    expect(parseBareStreamId("EvuXIk2Bh78")).toEqual({
+      source: "youtube",
+      kind: "song",
+      id: "EvuXIk2Bh78",
+    });
+  });
+
+  it("returns null for ordinary text queries", () => {
+    expect(parseBareStreamId("周杰伦 七里香")).toBeNull();
+    expect(parseBareStreamId("hello")).toBeNull();
+    expect(parseBareStreamId("a song title here")).toBeNull();
+  });
+});
 
 describe("parseStreamLink", () => {
   it("parses a plain netease song link", () => {
