@@ -10,6 +10,7 @@ import type {
   CustomLlmProvider,
   DeviceRecord,
   DjSession,
+  DownloadJob,
   EntityCover,
   MediaBlob,
   Memory,
@@ -61,6 +62,7 @@ export class MuzeroDB extends Dexie {
   llmCustomProviders!: EntityTable<CustomLlmProvider, "id">;
   playbackCache!: EntityTable<PlaybackCacheEntry, "id">;
   coverDerivatives!: EntityTable<CoverDerivative, "id">;
+  downloadJobs!: EntityTable<DownloadJob, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -439,6 +441,13 @@ export class MuzeroDB extends Dexie {
     // are still row fields, but no product path queries tracks by those indexes.
     this.version(30).stores({
       tracks: "id, sessionId, sourcePath",
+    });
+
+    // v31 — persistent download queue (download-queue-resume-autosync PRD). The queue
+    // runner pulls by `status` (pending/active) frequently, so it IS indexed (unlike the
+    // memory-filtered streamed-track queries). Additive new table, no backfill.
+    this.version(31).stores({
+      downloadJobs: "id, status, createdAt",
     });
   }
 }

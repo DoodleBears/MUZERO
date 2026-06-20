@@ -456,8 +456,52 @@ export interface DjSession {
    * an incremental re-sync into the same set. Additive, non-indexed (no version bump).
    */
   streamPlaylistRef?: { source: StreamSourceId; id: string };
+  /** Auto-sync cadence for a set bound to an external playlist/favlist (`streamPlaylistRef`). */
+  autoSyncFrequency?: PlaylistAutoSyncFrequency;
+  /** After an auto-sync adds new items, enqueue them for video download. */
+  autoDownloadNew?: boolean;
+  /** Last successful auto-sync (ms epoch); drives the scheduler's interval. */
+  lastAutoSyncAt?: number;
   /** Safe display-only source snapshot for sets imported from a cloud drive. */
   cloudSource?: CloudSourceAttribution;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** How often a bound playlist/favlist auto-syncs (mirrors cloud `CloudDriveAutoSyncFrequency`). */
+export type PlaylistAutoSyncFrequency = "manual" | "app-start" | "15min" | "30min" | "60min";
+
+export type DownloadJobStatus = "pending" | "active" | "paused" | "done" | "failed";
+
+/**
+ * A persisted video/audio download task — the unit of the download queue (concurrency,
+ * retry, restart-recovery) and resume (`bytesDone` offset). Lives in the `downloadJobs`
+ * table; bytes go to a `.part` file in persistent media storage, never inline.
+ */
+export interface DownloadJob {
+  id: string;
+  source: StreamSourceId;
+  /** Source-stable id (Bilibili `bvid` / `bvid#cid`, YouTube videoId). */
+  externalId: string;
+  title: string;
+  /** Video quality key; absent when `audioOnly`. */
+  quality?: string;
+  audioOnly?: boolean;
+  status: DownloadJobStatus;
+  /** Bytes downloaded so far (the resume offset). */
+  bytesDone: number;
+  /** Total bytes when known (Content-Length / Content-Range total). */
+  totalBytes?: number;
+  /** Storage key of the partial (`.part`) file while downloading; cleared on done/cancel. */
+  partStorageKey?: string;
+  /** The set the finished track lands in (the Downloads set). */
+  sessionId?: string;
+  /** Cover URL snapshot for the queue panel. */
+  coverUrl?: string;
+  /** The created local track once `done`. */
+  trackId?: string;
+  attempts: number;
+  lastError?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -655,6 +699,8 @@ export interface AppSettings {
   streamOnlineSetId?: string;
   /** The set that collects videos downloaded into the library (origin streamed + blobId). */
   streamDownloadsSetId?: string;
+  /** Max concurrent downloads in the queue (default 2). */
+  downloadConcurrency?: number;
   /** ⌘F: pressing Enter on an online result downloads (video) instead of streaming.
    *  Undefined = on (the default). Set false to keep Enter = play. */
   enterDownloadsVideo?: boolean;
