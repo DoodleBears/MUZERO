@@ -68,7 +68,8 @@ export interface PerfControlCommand {
     | "downloadToLibrary"
     | "recoverCover"
     | "resolveLink"
-    | "syncPlaylists";
+    | "syncPlaylists"
+    | "downloadQueue";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -116,6 +117,8 @@ interface PerfCommandHandlerDeps {
   resolveLink?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** List a source's user playlists (Bilibili 收藏夹 sync); optional `importId` to import one. */
   syncPlaylists?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Drive/inspect the persistent download queue (list/enqueue/seedActive/recover/clearAll). */
+  downloadQueue?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -295,6 +298,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "syncPlaylists": {
         if (!deps.syncPlaylists) throw new Error("syncPlaylists not wired");
         return deps.syncPlaylists(command.payload ?? {});
+      }
+      case "downloadQueue": {
+        if (!deps.downloadQueue) throw new Error("downloadQueue not wired");
+        return deps.downloadQueue(command.payload ?? {});
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
@@ -734,6 +741,63 @@ export function startPerfControlBridge(): void {
         downloaded = await downloadHitsAsVideo(hits, { quality: payload.quality as string });
       }
       return { playlists, imported, downloaded };
+    },
+    // Drive/inspect the persistent download queue for E2E (list/enqueue/seedActive/recover/clearAll).
+    downloadQueue: async (payload) => {
+      const action = String(payload.action ?? "list");
+      const repo = await import("@/db/download-job-repo");
+      const action$ = await import("@/streamsrc/download-action");
+      if (action === "enqueue") {
+        const job = await action$.enqueueDownload({
+          source: String(payload.source ?? "bili") as StreamSourceId,
+          externalId: String(payload.externalId ?? ""),
+          title: String(payload.title ?? payload.externalId ?? ""),
+          quality: payload.quality as string | undefined,
+        });
+        return { enqueued: job.id };
+      }
+      if (action === "seedActive") {
+        // Simulate a job left mid-flight by a previous run (for the restart-recovery test).
+        const { newId } = await import("@/lib/id");
+        const now = Date.now();
+        const id = newId("dlj");
+        await repo.putDownloadJob({
+          id,
+          source: String(payload.source ?? "bili") as StreamSourceId,
+          externalId: String(payload.externalId ?? ""),
+          title: String(payload.title ?? "seed"),
+          quality: payload.quality as string | undefined,
+          status: "active",
+          bytesDone: 0,
+          attempts: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return { seeded: id };
+      }
+      if (action === "recover") {
+        await action$.recoverDownloadQueue();
+        return { recovered: true };
+      }
+      if (action === "clearAll") {
+        const jobs = await repo.listDownloadJobs();
+        for (const j of jobs) await repo.deleteDownloadJob(j.id);
+        return { cleared: jobs.length };
+      }
+      const jobs = await repo.listDownloadJobs();
+      return {
+        jobs: jobs.map((j) => ({
+          id: j.id,
+          source: j.source,
+          externalId: j.externalId,
+          status: j.status,
+          title: j.title,
+          bytesDone: j.bytesDone,
+          totalBytes: j.totalBytes,
+          attempts: j.attempts,
+          trackId: j.trackId,
+        })),
+      };
     },
     // Backfill an existing streamed track's official cover (no video re-download).
     recoverCover: async (payload) => {

@@ -206,6 +206,14 @@ function routeToCommand(method, segments, body) {
   ) {
     return { kind: "syncPlaylists", payload: body };
   }
+  if (
+    method === "POST" &&
+    segments.length === 2 &&
+    segments[0] === "download" &&
+    segments[1] === "queue"
+  ) {
+    return { kind: "downloadQueue", payload: body };
+  }
   return null;
 }
 

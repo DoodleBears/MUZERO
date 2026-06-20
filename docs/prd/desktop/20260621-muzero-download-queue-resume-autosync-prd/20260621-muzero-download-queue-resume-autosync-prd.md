@@ -239,9 +239,9 @@ export function createPlaylistAutoSyncScheduler(deps): { tick; start; stop };
 - [x] `downloads-panel.tsx`（useLiveQuery 实时列队列 + 状态/进度 + 重试/移除/清除已完成）挂进 Settings→在线源；i18n×4（`download.queueTitle`/`statusActive`…）。streamsrc 392 测无回归。
 
 #### Phase 1 Checklist
-- [ ] 收藏夹「下载为视频」入队后，关闭重开 app → 未完成任务自动继续。
-- [ ] 并发上限生效（默认 2 同时下）；失败任务退避重试、可手动重试。
-- [ ] 529 条入队不卡 UI；面板进度准确。
+- [x] **入队 + 重启恢复 实时 E2E**（harness `download-queue.mjs`）：enqueue `BV1X163BQEo8`@360 → 自动 active→done(~6s)+ trackId；seedActive（模拟上次残留的 active）→ 4s 后仍 stuck active（运行器不自动跑 active）→ `recover()`（== App.tsx 启动调用）→ pending→active→done。✅
+- [x] 并发上限 / 失败退避重试 / dedupe / 恢复 — 运行器 5 单测覆盖；默认并发 2。
+- [ ] 529 条大批量的 UI 流畅度 + 面板准确度（真机大规模压测，待 P2 真字节进度后一起验）。
 
 ### Phase 2: 断点续传
 **Goal:** 任务分片 Range 下载、分片落盘、记录 `bytesDone`；中断后从断点续（含直链过期重解析）；低内存。
@@ -300,6 +300,7 @@ export function createPlaylistAutoSyncScheduler(deps): { tick; start; stop };
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-21 | DoodleBear | Initial draft：下载队列（持久/并发/重试/恢复）+ 断点续传（Range 分片 + 直链重解析）+ 歌单/收藏夹自动同步（镜像 cloud auto-sync-scheduler）。承接视频下载 PRD（PR #1）的两个确认后续增强 |
+| 2026-06-21 | DoodleBear | Phase 1 实现 + **实时 E2E 验证**：P1a 表/repo、P1b 状态机(7测)、P1c 运行器(5测)+入队改造+App 启动恢复+下载面板。harness `download-queue.mjs` 真机验证 enqueue→done + recover 复活 stuck-active。P2 续传纯核心(`resumable-range`,8测)完成 |
 
 ---
 
