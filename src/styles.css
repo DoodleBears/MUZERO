@@ -307,29 +307,23 @@
     box-shadow: none !important;
   }
 
-  /* Transparent lyrics capture: strip blurred "outside the box" effects (text-shadow,
-     box-shadow, drop-shadow, backdrop-filter) across the WHOLE document — not just the
-     visible lyrics. On a transparent window these effects are promoted to their own
-     compositing layer that the OS does NOT keep in sync with the text layer's transform:
-     as the lyrics move, the shadow stays frozen behind them (the "残影"), and a hidden
-     (opacity-0) layer's detached shadow can even keep painting on its own. There's no
-     reliable way to force the shadow layer to track the text on a transparent window
-     (a Chromium compositing bug), so we remove the detachable effects entirely in this
-     mode — only the lyrics are visible here anyway. The solid text fill repaints
-     cleanly; a non-blurred text STROKE (painted in the glyph's own layer) is the
-     ghost-free way to keep legibility. */
+  /* Transparent lyrics capture: strip EVERY effect that gets its own compositing layer
+     (text-shadow, box-shadow, backdrop-filter, and ALL `filter` — i.e. the karaoke word
+     `drop-shadow` AND the cascade engine's per-row `blur`) across the WHOLE document.
+     On a transparent window the OS does NOT keep these layers in sync with the text
+     layer's transform: as the lyrics move, the shadow/blur stays frozen behind them (the
+     "残影"), and a hidden (opacity-0) layer's detached effect can even keep painting on
+     its own. There's no reliable way to force them to track the text on a transparent
+     window (a Chromium compositing bug), so we remove them entirely in this mode — only
+     the lyrics are visible here anyway, and the solid text fill repaints cleanly. (The
+     cascade per-row blur is intentionally sacrificed here; it's the inactive-line softening,
+     not core to readability. A non-blurred text STROKE stays ghost-free for legibility.) */
   html[data-muzero-lyrics-overlay="true"],
   html[data-muzero-lyrics-overlay="true"] * {
     text-shadow: none !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-  }
-
-  /* Karaoke word spans carry the line's shadow as a `filter: drop-shadow(...)`; clear
-     it without touching the cascade engine's per-row `filter: blur()` (on the row
-     buttons, not the word spans). */
-  html[data-muzero-lyrics-overlay="true"] [data-word] {
     filter: none !important;
   }
 
