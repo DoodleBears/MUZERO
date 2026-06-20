@@ -6,7 +6,7 @@ import type { Rgb } from "@/lib/visualizer-color";
 
 const SAMPLE_MAX_EDGE = 96;
 const BACKLIGHT_MAX_EDGE = 192;
-const THUMBNAIL_MAX_EDGE = 160;
+const THUMBNAIL_MAX_EDGE = 320;
 const THUMBNAIL_MIME = "image/webp";
 const ALL_TARGETS = ["backlight", "palette", "thumbnail", "thumbhash"] as const;
 const DEFAULT_TARGETS = ["palette", "thumbhash"] as const;
@@ -207,9 +207,9 @@ async function canvasToBlob(
   mime: string,
 ): Promise<Blob | null> {
   if ("convertToBlob" in canvas) {
-    return canvas.convertToBlob({ quality: 0.82, type: mime });
+    return canvas.convertToBlob({ quality: 0.9, type: mime });
   }
-  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mime, 0.82));
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mime, 0.9));
 }
 
 function normalizeTimings(

@@ -18,7 +18,9 @@ import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
 import type { CoverMetadataResult } from "@/workers/cover-derivative-core";
 
-export const COVER_DERIVATIVE_VERSION = 1;
+// v2: thumbnail max edge 160→320 + quality 0.82→0.9. Bumping invalidates the old
+// `cvd_…` ids so existing covers regenerate sharper derivatives on next access.
+export const COVER_DERIVATIVE_VERSION = 2;
 export const COVER_THUMBNAIL_DERIVATIVE_BUDGET_BYTES = 64 * 1024 * 1024;
 
 type CoverDerivativeSource = Pick<CoverDerivative, "sourceKey" | "sourceKind" | "sourceRef">;
