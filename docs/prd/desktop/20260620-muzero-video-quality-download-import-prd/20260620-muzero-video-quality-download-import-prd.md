@@ -482,7 +482,8 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 
 - **网易云视频下载**：网易云源是纯音频（不实现 `resolveVideo`），本 PRD 不涉及其 MV。
 - **Tauri / web 壳的视频下载 parity**：v1 仅 Electron（同 streamsrc PRD，`hasStreamingSources()` gate）。Tauri http 插件 + 自定义协议补齐后可点亮，推迟。
-- **整单批量「下载」、后台队列、断点续传**：歌单/playlist 可**导入**为 streamed track 进集（YouTube playlist 已支持，见下），但「把整个歌单的字节全下载到本地」仍是后续增强（B站多 P 已支持「下载全部分 P」）。后台下载队列 + 断点续传未做。
+- **下载队列 + 断点续传（确认需要，后续增强）**：整单「下载为视频」已做（P5b，顺序逐条 + 逐条进度通知），但目前是**内存级 fire-and-forget**——每条整块拉进内存再 mux，**无持久队列、无断点续传**；app 关闭或中断后未完成的不会自动继续，大收藏夹（如默认夹 529 条）体验受限。后续应建**持久下载队列**（落 DB、并发上限、失败重试、关闭/重启后恢复）+ **断点续传**（HTTP Range 续传 + 分片落盘，而非整块内存）。
+- **自动 / 定时同步歌单（后续增强）**：**导入绑定 + 手动增量 re-sync 已存在**（`DjSession.streamPlaylistRef` 绑定外部歌单；`addStreamedPlaylistToSet` 重拉 + 按 source+externalId 去重只加新条目；导入对话框检测到绑定集会推荐「同步进它」）——netease/qq 一直有，**Bili 收藏夹经 P5a 自动继承**（`fetchPlaylistHits` 走 `source.importPlaylist`，源无关）。缺的是**自动/定时**触发：目前只有云盘 R2 有 `auto-sync-scheduler`，**streamed 歌单的自动同步未做**（需启动时/定时增量 re-sync 绑定集 + 可选「同步后下载新视频」）。
 - **字幕 / 弹幕（danmaku）下载与烧录**：不在本期；如需另开 PRD。
 - **音频-only「下载成文件」改造**：已有 `runStreamCache`（缓存进 blob）+ `downloadTrackMedia`（本地 blob 另存）覆盖；本 PRD 聚焦视频。
 - **移动端**：移动端走 [native PRD](../../mobile/) 的独立栈（Media3 / AVFoundation），不复用本桌面方案。
@@ -560,6 +561,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | 2026-06-21 | DoodleBear | 调研 Bilibili 收藏夹同步（新增 Phase 5 §）：结论=**bili 当前无歌单/收藏夹同步**（只有 `getTracksByIds`，`getUserPlaylists`/`importPlaylist`/`getPlaylistMeta` 仅 netease/qq 实现，Settings「同步歌单」按钮对 bili 返回空）。设计：新建 `bili-playlists.ts` 镜像 netease/qq，走 `/x/v3/fav/folder/created/list-all`(mid 取自 nav) + `/x/v3/fav/resource/list`(WBI+SESSDATA+翻页)，favlist 链接识别;收藏夹 hits 复用既有导入 + 视频下载链路（按收藏夹视频导入并下载）。活源参考 yt-dlp（bilibili-API-collect 已关停）|
 | 2026-06-21 | DoodleBear | **P5a 实现**：`bili-playlists.ts`（`parseFavFolders`/`parseFavInfo`/`parseFavResourceList`，7 单测）+ bili source `getUserPlaylists`/`getPlaylistMeta`/`importPlaylist`（nav→mid、fav folder/resource API、WBI+翻页 cap 50 页，15 单测）+ `parseStreamLink` 认 favlist(`favlist?fid=`/`medialist/detail/ml`)。TDD 全绿 + tsc。**真账号 E2E**：`syncPlaylists` 列出 35 收藏夹、导入「MUZERO-TEST」3 条(bvid+标题)|
 | 2026-06-21 | DoodleBear | **P5b 实现**：`downloadHitsAsVideo`（顺序逐条、每条独立进度通知、默认清晰度）+ `downloadPlaylistVideos`（import→下载）；`PlaylistImportDialog` 加「下载为视频」按钮（仅视频源）+ i18n×4。**真账号 E2E**：导入 MUZERO-TEST + 下载 1 条@360p → `{ok:1,total:1}`。Phase 5 完成 |
+| 2026-06-21 | DoodleBear | 调研同步现状（§7 补充）：**绑定 + 手动增量 re-sync 已存在**（`streamPlaylistRef` + `addStreamedPlaylistToSet` 去重，源无关，Bili 收藏夹经 P5a 自动继承）；**缺自动/定时同步**（仅云盘 R2 有 scheduler）+ **下载队列/断点续传**（当前内存级 fire-and-forget）——二者列为确认的后续增强 |
 
 ---
 
