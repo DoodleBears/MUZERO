@@ -95,15 +95,36 @@ export async function downloadStreamedVideoToLibrary(
     const muxed = await deps.mux(videoBlob, audioBlob, container);
     deps.onProgress?.("mux", 1);
 
+    // Enrich title / meta / OFFICIAL cover from the source for explicit-id downloads that
+    // came without search-hit metadata (Bilibili `view.pic`, YouTube thumbnail).
+    let { title, meta, coverUrl } = input;
+    if ((!coverUrl || !title || title === externalId) && source.getTracksByIds) {
+      try {
+        const [hit] = await source.getTracksByIds([externalId]);
+        if (hit) {
+          coverUrl ??= hit.coverUrl;
+          if (!title || title === externalId) title = hit.title;
+          meta ??= {
+            artist: hit.artist,
+            album: hit.album,
+            coverUrl: hit.coverUrl,
+            durationSec: hit.durationSec,
+          };
+        }
+      } catch {
+        // best-effort enrichment
+      }
+    }
+
     const track = await createStreamedTrack(
       {
         sessionId: input.sessionId,
         sourceId: source.id,
         externalId,
-        title: input.title,
+        title,
         kind: "video",
-        coverUrl: input.coverUrl,
-        meta: input.meta,
+        coverUrl,
+        meta,
       },
       db,
     );
@@ -111,7 +132,7 @@ export async function downloadStreamedVideoToLibrary(
     await cacheStreamedTrackBlob(track.id, muxed, CONTAINER_MIME[container], db, deps.storage);
     await db.tracks.update(track.id, {
       kind: "video",
-      durationSec: input.meta?.durationSec ?? track.durationSec,
+      durationSec: meta?.durationSec ?? track.durationSec,
       downloadedVideoHeight: videoRes.video.height,
       downloadedContainer: container,
       downloadedCodecs: `${videoRes.video.codec}+${classifyAudioCodec(audioRes.stream.mime)}`,
@@ -121,9 +142,9 @@ export async function downloadStreamedVideoToLibrary(
     // Cover (best-effort; never fails the download): prefer the source's official cover,
     // else extract a poster frame from the downloaded video itself.
     await applyDownloadedCover(track.id, {
-      coverUrl: input.coverUrl,
+      coverUrl,
       video: muxed,
-      durationSec: input.meta?.durationSec,
+      durationSec: meta?.durationSec,
       fetchBytes: deps.fetchBytes,
       posterFrame: deps.posterFrame,
       db,
@@ -190,4 +211,62 @@ async function applyDownloadedCover(
       // best-effort: a cover is a nice-to-have, not required
     }
   }
+}
+
+export interface RecoverCoverDeps {
+  fetchBytes: (url: string, headers?: Record<string, string>) => Promise<Blob>;
+  /** Read a stored media blob by id (for the poster fallback) — injected from the repo. */
+  readMedia?: (blobId: string) => Promise<Blob | null>;
+  posterFrame?: (video: Blob, durationSec?: number) => Promise<{ blob: Blob; mime: string } | null>;
+  db?: MuzeroDB;
+  storage?: MediaBlobStorageOptions;
+}
+
+/**
+ * Add/refresh a cover on an EXISTING streamed track WITHOUT re-downloading the video:
+ * fetch the source's official cover (preferred), else extract a poster from the already-
+ * stored media blob. For backfilling tracks downloaded before cover support existed.
+ */
+export async function recoverStreamedTrackCover(
+  trackId: string,
+  source: StreamSourceProvider,
+  deps: RecoverCoverDeps,
+): Promise<{ ok: boolean; via?: "official" | "poster"; coverUrl?: string }> {
+  const db = deps.db ?? defaultDb;
+  const track = await db.tracks.get(trackId);
+  if (!track?.streamExternalId) return { ok: false };
+
+  let coverUrl: string | undefined;
+  if (source.getTracksByIds) {
+    try {
+      const [hit] = await source.getTracksByIds([track.streamExternalId]);
+      coverUrl = hit?.coverUrl;
+    } catch {
+      // fall through
+    }
+  }
+  if (coverUrl) {
+    try {
+      const blob = await deps.fetchBytes(coverUrl);
+      if (blob.size > 0) {
+        await setTrackCover({ trackId, blob, mime: blob.type || "image/jpeg" }, db, deps.storage);
+        return { ok: true, via: "official", coverUrl };
+      }
+    } catch {
+      // fall through to poster
+    }
+  }
+  if (deps.posterFrame && deps.readMedia && track.blobId) {
+    try {
+      const media = await deps.readMedia(track.blobId);
+      const poster = media ? await deps.posterFrame(media, track.durationSec) : null;
+      if (poster && poster.blob.size > 0) {
+        await setTrackCover({ trackId, blob: poster.blob, mime: poster.mime }, db, deps.storage);
+        return { ok: true, via: "poster" };
+      }
+    } catch {
+      // best-effort
+    }
+  }
+  return { ok: false };
 }

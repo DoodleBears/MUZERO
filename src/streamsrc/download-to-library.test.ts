@@ -160,6 +160,69 @@ describe("downloadStreamedVideoToLibrary", () => {
     expect(fetchBytes).not.toHaveBeenCalled(); // blob transport → no network fetch
   });
 
+  it("prefers the source official cover via getTracksByIds (enriches title too)", async () => {
+    const session = await createSession(
+      { name: "Downloads", seedPrompt: "", config: { autoExtend: false }, displayMode: "video" },
+      db,
+    );
+    const posterFrame = vi.fn();
+    const source = stubSource({
+      getTracksByIds: async () => [
+        {
+          source: "bili",
+          externalId: "BVx",
+          title: "官方标题",
+          artist: "UP",
+          coverUrl: "https://cdn/official.jpg",
+          durationSec: 100,
+        },
+      ],
+    });
+    // No input cover/title → enrichment fills them from getTracksByIds.
+    const res = await downloadStreamedVideoToLibrary(
+      { source, sessionId: session.id, externalId: "BVx", title: "BVx" },
+      deps({ posterFrame }),
+    );
+    expect(res.kind).toBe("downloaded");
+    if (res.kind !== "downloaded") return;
+    const track = await db.tracks.get(res.trackId);
+    expect(track?.title).toBe("官方标题");
+    expect(track?.coverBlobId).toBeTruthy();
+    expect(posterFrame).not.toHaveBeenCalled(); // official cover won → no poster fallback
+  });
+
+  it("recoverStreamedTrackCover backfills an existing track's official cover (no re-download)", async () => {
+    const session = await createSession(
+      { name: "Downloads", seedPrompt: "", config: { autoExtend: false }, displayMode: "video" },
+      db,
+    );
+    const { createStreamedTrack } = await import("./streamed-track-repo");
+    const track = await createStreamedTrack(
+      {
+        sessionId: session.id,
+        sourceId: "bili",
+        externalId: "BVrec",
+        title: "no-cover",
+        kind: "video",
+      },
+      db,
+    );
+    expect(track.coverBlobId).toBeFalsy();
+    const source = stubSource({
+      getTracksByIds: async () => [
+        { source: "bili", externalId: "BVrec", title: "t", coverUrl: "https://cdn/pic.jpg" },
+      ],
+    });
+    const { recoverStreamedTrackCover } = await import("./download-to-library");
+    const out = await recoverStreamedTrackCover(track.id, source, {
+      fetchBytes: async () => new Blob([new Uint8Array(64)], { type: "image/jpeg" }),
+      db,
+      storage: { provider: memoryStorage() },
+    });
+    expect(out).toMatchObject({ ok: true, via: "official" });
+    expect((await db.tracks.get(track.id))?.coverBlobId).toBeTruthy();
+  });
+
   it("propagates a login wall without creating a track", async () => {
     const session = await createSession(
       { name: "Downloads", seedPrompt: "", config: { autoExtend: false }, displayMode: "video" },

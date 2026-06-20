@@ -231,4 +231,32 @@ describe("createBiliSource.resolveVideo / listVideoQualities", () => {
     const res = await source.resolveVideo?.("BV1xx411c7mD#998877");
     expect(res?.kind).toBe("error");
   });
+
+  it("getTracksByIds resolves official cover (pic) + title + author via the view API", async () => {
+    const VIEW_FULL = {
+      code: 0,
+      data: {
+        bvid: "BV1X163BQEo8",
+        title: "官方标题",
+        pic: "//i2.hdslb.com/bfs/archive/cover.jpg",
+        duration: 245,
+        owner: { name: "UP主B" },
+        cid: 12345,
+      },
+    };
+    const { source } = deps([
+      ["/x/web-interface/nav", NAV],
+      ["/wbi/view", VIEW_FULL],
+    ]);
+    const hits = (await source.getTracksByIds?.(["BV1X163BQEo8#12345"])) ?? [];
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      source: "bili",
+      externalId: "BV1X163BQEo8",
+      title: "官方标题",
+      artist: "UP主B",
+      durationSec: 245,
+      coverUrl: "https://i2.hdslb.com/bfs/archive/cover.jpg",
+    });
+  });
 });

@@ -81,6 +81,13 @@ export interface YoutubeRuntime {
     videoId: string,
     opts?: { trace?: YoutubeTrace },
   ) => Promise<YoutubeVideoQuality[]>;
+  /** Lightweight metadata (title/author/official thumbnail/duration) for a videoId. */
+  resolveMeta?: (videoId: string) => Promise<{
+    title: string;
+    author?: string;
+    coverUrl?: string;
+    durationSec?: number;
+  } | null>;
 }
 
 export interface YoutubeSourceDeps {
@@ -252,6 +259,28 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     }));
   }
 
+  async function getTracksByIds(
+    ids: string[],
+    _opts?: { signal?: AbortSignal },
+  ): Promise<StreamSearchHit[]> {
+    if (!deps.runtime?.resolveMeta) return [];
+    const out: StreamSearchHit[] = [];
+    for (const id of ids) {
+      const meta = await deps.runtime.resolveMeta(id);
+      if (meta) {
+        out.push({
+          source: "youtube",
+          externalId: id,
+          title: meta.title,
+          artist: meta.author,
+          durationSec: meta.durationSec,
+          coverUrl: meta.coverUrl,
+        });
+      }
+    }
+    return out;
+  }
+
   return {
     id: "youtube",
     label: "YouTube",
@@ -261,6 +290,7 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     resolve,
     resolveVideo,
     listVideoQualities,
+    getTracksByIds,
   };
 }
 

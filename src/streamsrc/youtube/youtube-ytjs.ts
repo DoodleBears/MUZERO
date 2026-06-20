@@ -646,6 +646,38 @@ export function createYtjsRuntime(): YoutubeRuntime {
           bandwidth: s.bitrate,
         }));
     },
+    async resolveMeta(videoId) {
+      let yt: Innertube;
+      try {
+        yt = await getInnertube();
+      } catch {
+        return null;
+      }
+      try {
+        const info = (await yt.getBasicInfo(videoId)) as unknown as {
+          basic_info?: {
+            title?: string;
+            author?: string;
+            duration?: number;
+            thumbnail?: Array<{ url?: string; width?: number }>;
+          };
+        };
+        const bi = info.basic_info;
+        const best = (bi?.thumbnail ?? []).reduce<{ url?: string; width?: number } | null>(
+          (a, b) => ((b.width ?? 0) > (a?.width ?? 0) ? b : a),
+          null,
+        );
+        return {
+          title: bi?.title ?? videoId,
+          author: bi?.author ?? undefined,
+          // basic_info thumbnails are official i.ytimg.com URLs; fall back to the canonical one.
+          coverUrl: best?.url ?? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+          durationSec: typeof bi?.duration === "number" ? bi.duration : undefined,
+        };
+      } catch {
+        return { title: videoId, coverUrl: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` };
+      }
+    },
   };
 }
 

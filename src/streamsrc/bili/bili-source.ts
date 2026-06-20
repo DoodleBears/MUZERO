@@ -148,6 +148,39 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
     return data?.cid ?? data?.pages?.[0]?.cid ?? null;
   }
 
+  /** Resolve bvids to hits via the `view` API — official cover (`pic`) + title + author. */
+  async function getTracksByIds(
+    ids: string[],
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamSearchHit[]> {
+    const out: StreamSearchHit[] = [];
+    for (const raw of ids) {
+      const bvid = raw.split("#")[0];
+      if (!bvid) continue;
+      const url = await signedUrl(VIEW_URL, { bvid }, opts?.signal);
+      const json = await getJson(url, opts?.signal);
+      const data = json.data as
+        | {
+            bvid?: string;
+            title?: string;
+            pic?: string;
+            duration?: number;
+            owner?: { name?: string };
+          }
+        | undefined;
+      if (!data?.bvid) continue;
+      out.push({
+        source: "bili",
+        externalId: data.bvid,
+        title: stripEm(data.title ?? bvid),
+        artist: data.owner?.name,
+        durationSec: typeof data.duration === "number" ? data.duration : undefined,
+        coverUrl: normalizeCover(data.pic),
+      });
+    }
+    return out;
+  }
+
   /** Fetch the DASH video tracks via the same signed playurl (richer fnval). */
   async function fetchVideoStreams(
     externalId: string,
@@ -225,6 +258,7 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
     resolve,
     resolveVideo,
     listVideoQualities,
+    getTracksByIds,
   };
 }
 

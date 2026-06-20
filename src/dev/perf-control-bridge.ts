@@ -34,7 +34,10 @@ import {
 import { normalizeTab, useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { buildDownloadPlan } from "@/streamsrc/download-plan";
-import { downloadStreamedVideoToLibrary } from "@/streamsrc/download-to-library";
+import {
+  downloadStreamedVideoToLibrary,
+  recoverStreamedTrackCover,
+} from "@/streamsrc/download-to-library";
 import { muxCopyTracks } from "@/streamsrc/mux/mux-mediabunny";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
@@ -61,7 +64,8 @@ export interface PerfControlCommand {
     | "seedExample"
     | "streamProbe"
     | "streamDownload"
-    | "downloadToLibrary";
+    | "downloadToLibrary"
+    | "recoverCover";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -103,6 +107,8 @@ interface PerfCommandHandlerDeps {
   streamDownload?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** Download a streamed video INTO the library (task #9): creates a playable track. */
   downloadToLibrary?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Backfill an existing streamed track's official cover (no video re-download). */
+  recoverCover?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -270,6 +276,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "downloadToLibrary": {
         if (!deps.downloadToLibrary) throw new Error("downloadToLibrary not wired");
         return deps.downloadToLibrary(command.payload ?? {});
+      }
+      case "recoverCover": {
+        if (!deps.recoverCover) throw new Error("recoverCover not wired");
+        return deps.recoverCover(command.payload ?? {});
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
@@ -622,6 +632,45 @@ export function startPerfControlBridge(): void {
               downloadedCodecs: track.downloadedCodecs,
             }
           : null,
+      };
+    },
+    // Backfill an existing streamed track's official cover (no video re-download).
+    recoverCover: async (payload) => {
+      const trackId = String(payload.trackId ?? "");
+      if (!trackId) throw new Error("trackId required");
+      const track = await getTrack(trackId);
+      if (!track?.streamSourceId) throw new Error("not a streamed track");
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(track.streamSourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error("source unavailable");
+      const bridge = resolveDesktopBridge();
+      const { resolveMediaBlob } = await import("@/db/media-blob-storage");
+      const result = await recoverStreamedTrackCover(trackId, source, {
+        fetchBytes: async (url, headers) => {
+          const proxied = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
+          const resp = await fetch(proxied);
+          if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+          return resp.blob();
+        },
+        readMedia: async (blobId) => (await resolveMediaBlob(blobId))?.blob ?? null,
+        posterFrame: async (video, durationSec) => {
+          const { extractUsefulVideoPosterFrame } = await import("@/lib/video-poster-frame");
+          const file = new File([video], "video.mp4", { type: video.type || "video/mp4" });
+          const poster = await extractUsefulVideoPosterFrame(file, { durationSec });
+          return poster ? { blob: poster.blob, mime: poster.mime } : null;
+        },
+      });
+      const after = await getTrack(trackId);
+      return {
+        result,
+        hasCover: Boolean(after?.coverBlobId),
+        remoteCoverUrl: after?.remoteCoverUrl,
       };
     },
     seedExample: async () => {
