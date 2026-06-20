@@ -13,7 +13,7 @@ import {
   saveSettings,
   setTrackTags,
 } from "@/db/repositories";
-import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS } from "@/db/types";
+import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, type StreamSourceId } from "@/db/types";
 import { EXAMPLE_TRACK_TITLE, loadExampleTrackAssets } from "@/lib/example-track";
 import { log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata } from "@/lib/media-metadata";
@@ -32,6 +32,8 @@ import {
 } from "@/shortcuts/actions";
 import { normalizeTab, useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { createStreamSource } from "@/streamsrc/registry";
+import { createStreamHttp } from "@/streamsrc/stream-http";
 import { getSearchPerfSnapshot, resetSearchPerf } from "@/workers/search-client";
 import { getSearchDriver } from "./search-drive";
 
@@ -52,7 +54,8 @@ export interface PerfControlCommand {
     | "renderTrace"
     | "liveRequest"
     | "sessions"
-    | "seedExample";
+    | "seedExample"
+    | "streamProbe";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -88,6 +91,8 @@ interface PerfCommandHandlerDeps {
   listSessions?: () => Promise<unknown>;
   /** Seed a small playable set for harnesses that run against a fresh profile DB. */
   seedExample?: () => Promise<unknown>;
+  /** Probe a stream source's video resolve/quality-list against the live API (dev E2E). */
+  streamProbe?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -244,6 +249,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         if (!deps.seedExample) throw new Error("seedExample not wired");
         return deps.seedExample();
       }
+      case "streamProbe": {
+        if (!deps.streamProbe) throw new Error("streamProbe not wired");
+        return deps.streamProbe(command.payload ?? {});
+      }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
     }
@@ -385,6 +394,64 @@ export function startPerfControlBridge(): void {
           }))
           .sort((a, b) => b.trackCount - a.trackCount),
       };
+    },
+    // Probe a stream source's video resolve against the LIVE API (dev E2E for the
+    // video-download work). Builds the source the same way the app does; returns only
+    // sanitized shape (heights/codecs/mime/header-keys) — never the signed URL or cookie.
+    streamProbe: async (payload) => {
+      const sourceId = String(payload.sourceId ?? "bili") as StreamSourceId;
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error(`source ${sourceId} unavailable`);
+
+      // Resolve a live externalId: explicit, or the first hit of a real search.
+      let externalId = String(payload.externalId ?? "");
+      let searchHits: Array<{ externalId: string; title: string }> = [];
+      if (!externalId && payload.search) {
+        const hits = await source.search(String(payload.search), { limit: 5 });
+        searchHits = hits.map((h) => ({ externalId: h.externalId, title: h.title }));
+        externalId = hits[0]?.externalId ?? "";
+      }
+      if (!externalId) throw new Error("externalId or search required");
+
+      // Audio resolve is the known-good baseline; comparing isolates video-path issues.
+      const audioRes = await source.resolve(externalId, {});
+      const audio =
+        audioRes.kind === "ok"
+          ? { kind: "ok", mime: audioRes.stream.mime, quality: audioRes.stream.quality }
+          : audioRes;
+
+      const qualities = source.listVideoQualities
+        ? await source.listVideoQualities(externalId)
+        : [];
+      let video: unknown = { kind: "no-resolveVideo" };
+      if (source.resolveVideo) {
+        const r = await source.resolveVideo(externalId, {
+          quality: payload.quality as string | undefined,
+        });
+        video =
+          r.kind === "ok"
+            ? {
+                kind: "ok",
+                height: r.video.height,
+                width: r.video.width,
+                fps: r.video.fps,
+                codec: r.video.codec,
+                mime: r.video.mime,
+                bandwidth: r.video.bandwidth,
+                hasUrl: Boolean(r.video.url),
+                headerKeys: Object.keys(r.video.headers ?? {}),
+                expiresAt: r.video.expiresAt,
+              }
+            : r;
+      }
+      return { sourceId, externalId, searchHits, audio, qualities, video };
     },
     seedExample: async () => {
       const session = await createSession({

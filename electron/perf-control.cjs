@@ -161,6 +161,9 @@ function routeToCommand(method, segments, body) {
   ) {
     return { kind: "seedExample" };
   }
+  if (method === "POST" && segments.length === 2 && segments[0] === "stream" && segments[1] === "probe") {
+    return { kind: "streamProbe", payload: body };
+  }
   return null;
 }
 

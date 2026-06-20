@@ -385,6 +385,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 
 #### Phase 1 Checklist
 - [x] Bilibili：canned playurl（含 `dash.video[]`）能列出清晰度档并选中目标分辨率直链。✅
+- [x] **Bilibili 实时 E2E（harness）**：经 dev 控制端点 `streamProbe` + [`scripts/stream-probe.mjs`](../../../../scripts/stream-probe.mjs) 打真实 Bilibili——search→`resolveVideo` 返回 **480P AVC `video/mp4`**（带 Referer/UA、`expiresAt`），`listVideoQualities`=[480P,360P]（匿名封顶 480P，高清需登录，符合预期），audio 基线 ok。✅
 - [ ] YouTube：`pickAdaptiveVideo` 对 canned player 响应选档（YT 切片待做，§1.4 脆弱独立验收）。
 - [x] Bilibili：视频侧 `fnval=4048` 取流后**音频路径回归无变化**（既有音频 resolve/播放测试全绿）。✅
 - [x] `chooseMuxStrategy` 对 AVC+AAC→mp4 copy、VP9/AV1+Opus→webm copy、强制 mp4 跨编码→transcode 全分支命中（穷举单测）。✅
