@@ -308,14 +308,18 @@
   }
 
   /* Transparent lyrics capture: strip blurred "outside the box" effects (text-shadow,
-     box-shadow, drop-shadow, backdrop-filter). On a transparent window Chromium does
-     not clear those regions as the lyrics scroll/cascade or the control bar fades, so
-     they smear into a "残影" shadow ghost. The solid text fill / pill background still
-     repaint cleanly; only the soft halos leave residue. (Legibility halos aren't
-     needed for an OBS overlay the user composites; a non-blurred text STROKE, which is
-     painted at the glyph edge, is kept and never ghosts.) */
-  html[data-muzero-lyrics-overlay="true"] .lyrics-immersive-surface,
-  html[data-muzero-lyrics-overlay="true"] .lyrics-immersive-surface * {
+     box-shadow, drop-shadow, backdrop-filter) across the WHOLE document — not just the
+     visible lyrics. On a transparent window these effects are promoted to their own
+     compositing layer that the OS does NOT keep in sync with the text layer's transform:
+     as the lyrics move, the shadow stays frozen behind them (the "残影"), and a hidden
+     (opacity-0) layer's detached shadow can even keep painting on its own. There's no
+     reliable way to force the shadow layer to track the text on a transparent window
+     (a Chromium compositing bug), so we remove the detachable effects entirely in this
+     mode — only the lyrics are visible here anyway. The solid text fill repaints
+     cleanly; a non-blurred text STROKE (painted in the glyph's own layer) is the
+     ghost-free way to keep legibility. */
+  html[data-muzero-lyrics-overlay="true"],
+  html[data-muzero-lyrics-overlay="true"] * {
     text-shadow: none !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
@@ -325,7 +329,7 @@
   /* Karaoke word spans carry the line's shadow as a `filter: drop-shadow(...)`; clear
      it without touching the cascade engine's per-row `filter: blur()` (on the row
      buttons, not the word spans). */
-  html[data-muzero-lyrics-overlay="true"] .lyrics-immersive-surface [data-word] {
+  html[data-muzero-lyrics-overlay="true"] [data-word] {
     filter: none !important;
   }
 
