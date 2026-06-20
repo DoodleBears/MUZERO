@@ -120,7 +120,8 @@
     "close": "닫기",
     "parts": "파트(분할)",
     "allParts": "전체 {{count}}개 다운로드",
-    "downloadingPart": "다운로드 중 {{done}} / {{total}}…"
+    "downloadingPart": "다운로드 중 {{done}} / {{total}}…",
+    "allVideos": "동영상으로 다운로드"
   },
   "streamSources": {
     "title": "온라인 소스",

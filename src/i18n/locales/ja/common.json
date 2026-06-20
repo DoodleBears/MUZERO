@@ -120,7 +120,8 @@
     "close": "閉じる",
     "parts": "パート（分割）",
     "allParts": "すべて（{{count}}）をダウンロード",
-    "downloadingPart": "ダウンロード中 {{done}} / {{total}}…"
+    "downloadingPart": "ダウンロード中 {{done}} / {{total}}…",
+    "allVideos": "動画としてダウンロード"
   },
   "streamSources": {
     "title": "オンラインソース",

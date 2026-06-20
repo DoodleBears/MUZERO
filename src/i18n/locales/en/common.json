@@ -127,7 +127,8 @@
     "close": "Close",
     "parts": "Parts",
     "allParts": "Download all {{count}}",
-    "downloadingPart": "Downloading {{done}} / {{total}}…"
+    "downloadingPart": "Downloading {{done}} / {{total}}…",
+    "allVideos": "Download as video"
   },
   "streamSources": {
     "title": "Online sources",

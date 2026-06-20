@@ -727,8 +727,11 @@ export function startPerfControlBridge(): void {
       }
       let downloaded: unknown = null;
       if (payload.importId && payload.downloadAll) {
-        const { downloadPlaylistVideos } = await import("@/streamsrc/download-action");
-        downloaded = await downloadPlaylistVideos(sourceId, String(payload.importId));
+        const { downloadHitsAsVideo } = await import("@/streamsrc/download-action");
+        const all = (await source.importPlaylist?.(String(payload.importId))) ?? [];
+        const limit = payload.limit ? Number(payload.limit) : undefined;
+        const hits = limit ? all.slice(0, limit) : all;
+        downloaded = await downloadHitsAsVideo(hits, { quality: payload.quality as string });
       }
       return { playlists, imported, downloaded };
     },

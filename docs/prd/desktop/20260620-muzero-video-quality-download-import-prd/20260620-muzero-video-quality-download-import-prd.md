@@ -19,7 +19,7 @@
 | 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | ✅ 核心完成：Bili/YT 下载 + mux + **入库为可离线播放 track**（实时 E2E）；saveFile / Worker / UI 待接 | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | ⛔ Won't do（2026-06-20 用户决策：能下载+导入+播放即够，不做「强制格式」，copy→原生容器已覆盖） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔄 核心完成：⌘F 在线行下载按钮 + 清晰度对话框 + 进度 + i18n×4（转码强制 mp4 UI 待 Phase 3） | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Bilibili 收藏夹/合集同步 → 视频导入 | 🔄 **P5a 同步完成**（`bili-playlists` + `getUserPlaylists`/`getPlaylistMeta`/`importPlaylist` + favlist 链接识别；实时 E2E：真账号列出 35 收藏夹 + 导入「MUZERO-TEST」3 条）；P5b 整单批量下载为视频待做 | [Phase 5](#phase-5调研--设计-bilibili-收藏夹--合集同步--视频导入) |
+| 5 | Bilibili 收藏夹/合集同步 → 视频导入 | ✅ **P5a 同步 + P5b 整单视频下载 完成**（真账号 E2E：35 收藏夹列出 + 导入 + 「下载为视频」逐条进度通知、默认清晰度落库） | [Phase 5](#phase-5调研--设计-bilibili-收藏夹--合集同步--视频导入) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -469,7 +469,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 
 **Phase 5 切分**：
 - **P5a 同步**（✅ 完成 + 实时 E2E）：[`bili-playlists.ts`](../../../../src/streamsrc/bili/bili-playlists.ts)（`parseFavFolders`/`parseFavInfo`/`parseFavResourceList`，纯函数 7 单测）+ bili source `getUserPlaylists`(nav→mid → `fav/folder/created/list-all`)/`getPlaylistMeta`/`importPlaylist`(`fav/resource/list` WBI+翻页，cap 50 页/1000 条) + [`parseStreamLink`](../../../../src/streamsrc/stream-link.ts) 认 favlist(`favlist?fid=` / `medialist/detail/ml<id>`)。**真账号 E2E**：列出 35 收藏夹（默认 529、设计相关 427…）+ 导入「MUZERO-TEST」3 条（bvid+标题）。Settings「同步歌单」对 B站即生效、粘贴收藏夹链接可导入。
-- **P5b 整单视频下载**（待做）：收藏夹导入后「下载全部为视频」（批量 = 循环 `downloadStreamedHit`，用默认 1080p + 后台通知进度，复用 `startBackgroundBatchDownload` 模式；后台队列/断点续传见 §7 仍为后续增强）。
+- **P5b 整单视频下载**（✅ 完成 + 实时 E2E）：[`download-action.ts`](../../../../src/streamsrc/download-action.ts) `downloadHitsAsVideo`（**顺序**逐条下载，**每条自己的进度通知**——和单个搜索下载一致；默认清晰度 prefer-match-else-degrade，遇登录墙停止）+ `downloadPlaylistVideos`（importPlaylist → downloadHitsAsVideo）。UI：[`PlaylistImportDialog`](../../../../src/components/stream/playlist-import-dialog.tsx) 加「下载为视频」按钮（`canDownloadVideo` gate，仅 bili/youtube），点击后台逐条下载进 Downloads 集。E2E：导入 MUZERO-TEST（3 条）+ 下载 1 条@360p → `{ok:1,total:1}`。后台队列/断点续传仍为 §7 后续增强（顺序下载已避免 N 并发风控）。
 
 **合规**：沿用 §8——参考 yt-dlp/yutto 活源、不依赖已关停的 bilibili-API-collect；个人本地 + BYO `SESSDATA`；翻页加轻度限速/抖动降低风控（社区脚本经验）；不解密 DRM。
 
@@ -559,6 +559,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | 2026-06-20 | DoodleBear | 对齐现状基线：新增 §1.4「Bilibili 音频整条已打通」——同一已验证 playurl 响应已含 `dash.video[]`（现被丢弃），故 Bili 视频是对已验证请求的纯增量（仅加 `parseDashVideo`/`resolveVideo` + 视频侧 `fnval` 16→4048，不动音频路径）；§4.1 + §6 改为「Bili 低风险先行、YouTube 脆弱独立验收」 |
 | 2026-06-21 | DoodleBear | 调研 Bilibili 收藏夹同步（新增 Phase 5 §）：结论=**bili 当前无歌单/收藏夹同步**（只有 `getTracksByIds`，`getUserPlaylists`/`importPlaylist`/`getPlaylistMeta` 仅 netease/qq 实现，Settings「同步歌单」按钮对 bili 返回空）。设计：新建 `bili-playlists.ts` 镜像 netease/qq，走 `/x/v3/fav/folder/created/list-all`(mid 取自 nav) + `/x/v3/fav/resource/list`(WBI+SESSDATA+翻页)，favlist 链接识别;收藏夹 hits 复用既有导入 + 视频下载链路（按收藏夹视频导入并下载）。活源参考 yt-dlp（bilibili-API-collect 已关停）|
 | 2026-06-21 | DoodleBear | **P5a 实现**：`bili-playlists.ts`（`parseFavFolders`/`parseFavInfo`/`parseFavResourceList`，7 单测）+ bili source `getUserPlaylists`/`getPlaylistMeta`/`importPlaylist`（nav→mid、fav folder/resource API、WBI+翻页 cap 50 页，15 单测）+ `parseStreamLink` 认 favlist(`favlist?fid=`/`medialist/detail/ml`)。TDD 全绿 + tsc。**真账号 E2E**：`syncPlaylists` 列出 35 收藏夹、导入「MUZERO-TEST」3 条(bvid+标题)|
+| 2026-06-21 | DoodleBear | **P5b 实现**：`downloadHitsAsVideo`（顺序逐条、每条独立进度通知、默认清晰度）+ `downloadPlaylistVideos`（import→下载）；`PlaylistImportDialog` 加「下载为视频」按钮（仅视频源）+ i18n×4。**真账号 E2E**：导入 MUZERO-TEST + 下载 1 条@360p → `{ok:1,total:1}`。Phase 5 完成 |
 
 ---
 
