@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { updateSession } from "@/db/repositories";
 import type { DjSession, PlaylistAutoSyncFrequency, StreamSourceId } from "@/db/types";
+import { useSettings } from "@/hooks/use-app-data";
 import { notify } from "@/stores/notification-store";
 import { subscribeToPlaylist } from "@/stores/playlist-auto-sync";
 import { canDownloadVideo } from "@/streamsrc/download-action";
@@ -53,9 +54,14 @@ export function PlaylistSyncControls({
   matched: DjSession | undefined;
 }) {
   const { t } = useTranslation();
+  const settings = useSettings();
   const [busy, setBusy] = useState(false);
   const frequency = matched?.autoSyncFrequency ?? "manual";
-  const autoDownload = matched?.autoDownloadNew === true;
+  // New subscriptions default to the global "auto-download playlist videos" setting (video
+  // sources only); an already-bound set keeps its own recorded choice.
+  const autoDownload = matched
+    ? matched.autoDownloadNew === true
+    : canDownloadVideo(source) && settings.autoDownloadPlaylistVideos !== false;
 
   async function apply(next: { frequency: PlaylistAutoSyncFrequency; autoDownloadNew: boolean }) {
     setBusy(true);

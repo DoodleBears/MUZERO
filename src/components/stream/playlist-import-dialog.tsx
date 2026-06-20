@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
-import { useSessions } from "@/hooks/use-app-data";
+import { useSessions, useSettings } from "@/hooks/use-app-data";
 import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { canDownloadVideo, downloadPlaylistVideos } from "@/streamsrc/download-action";
@@ -28,6 +28,7 @@ export function PlaylistImportDialog({
 }) {
   const { t } = useTranslation();
   const sessions = useSessions();
+  const settings = useSettings();
   const importStreamedPlaylist = usePlayerStore((s) => s.importStreamedPlaylist);
   const addStreamedPlaylistToSet = usePlayerStore((s) => s.addStreamedPlaylistToSet);
   const [busy, setBusy] = useState(false);
@@ -67,8 +68,22 @@ export function PlaylistImportDialog({
 
   const onProgress = (done: number, total: number) => setProgress({ done, total });
 
+  // Default for video sources: import the favlist AND download each item as a local video
+  // (Settings → "auto-download playlist videos", on by default). Audio sources / setting-off
+  // keep the streaming-reference import (with the optional "download to device" checkbox).
+  const defaultDownloadsVideo =
+    canDownloadVideo(pl.source) && settings.autoDownloadPlaylistVideos !== false;
+
   const createNewSet = () =>
     run(async () => {
+      if (defaultDownloadsVideo) {
+        const { queued } = await downloadPlaylistVideos(pl.source, pl.id, {
+          name: pl.name,
+          coverUrl: pl.coverUrl,
+        });
+        notify.success(t("download.queuedVideos", { count: queued }));
+        return;
+      }
       const count = await importStreamedPlaylist(pl.source, pl.id, pl.name, {
         coverUrl: pl.coverUrl,
         download,
@@ -173,27 +188,36 @@ export function PlaylistImportDialog({
           </div>
         </div>
 
-        <label
-          htmlFor="playlist-import-download"
-          className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5 transition-colors hover:bg-accent/50"
-        >
-          <Checkbox
-            id="playlist-import-download"
-            checked={download}
-            onCheckedChange={(checked) => setDownload(checked === true)}
-            disabled={busy}
-            className="mt-0.5"
-          />
-          <span className="min-w-0">
-            <span className="flex items-center gap-1.5 font-medium text-sm">
-              <ArrowDownToLine className="size-3.5 shrink-0" />
-              {t("playlistImport.download")}
+        {defaultDownloadsVideo ? (
+          // Video source + default-download-video: the primary action already downloads each
+          // item as video — show a hint instead of the audio-cache checkbox.
+          <p className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2.5 text-muted-foreground text-xs">
+            <ArrowDownToLine className="size-3.5 shrink-0" />
+            {t("playlistImport.willDownloadVideo")}
+          </p>
+        ) : (
+          <label
+            htmlFor="playlist-import-download"
+            className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5 transition-colors hover:bg-accent/50"
+          >
+            <Checkbox
+              id="playlist-import-download"
+              checked={download}
+              onCheckedChange={(checked) => setDownload(checked === true)}
+              disabled={busy}
+              className="mt-0.5"
+            />
+            <span className="min-w-0">
+              <span className="flex items-center gap-1.5 font-medium text-sm">
+                <ArrowDownToLine className="size-3.5 shrink-0" />
+                {t("playlistImport.download")}
+              </span>
+              <span className="block text-muted-foreground text-xs">
+                {t("playlistImport.downloadHint")}
+              </span>
             </span>
-            <span className="block text-muted-foreground text-xs">
-              {t("playlistImport.downloadHint")}
-            </span>
-          </span>
-        </label>
+          </label>
+        )}
 
         {busy && (
           <div className="space-y-1">
@@ -231,9 +255,9 @@ export function PlaylistImportDialog({
             {t("playlistImport.cancel")}
           </button>
           <div className="flex items-center gap-2">
-            {/* Video sources (Bilibili / YouTube): download every item as a local video,
-                each with its own progress notification, at the default quality. */}
-            {canDownloadVideo(pl.source) && (
+            {/* Setting OFF: offer an explicit one-time "download as video" alongside refs-import.
+                Setting ON (defaultDownloadsVideo): the primary button already downloads. */}
+            {canDownloadVideo(pl.source) && !defaultDownloadsVideo && (
               <button
                 type="button"
                 disabled={busy}
@@ -250,8 +274,16 @@ export function PlaylistImportDialog({
               onClick={createNewSet}
               className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              <ListPlus className="size-4" />
-              {busy ? t("streamSources.importing") : t("playlistImport.newSet")}
+              {defaultDownloadsVideo ? (
+                <Download className="size-4" />
+              ) : (
+                <ListPlus className="size-4" />
+              )}
+              {busy
+                ? t("streamSources.importing")
+                : defaultDownloadsVideo
+                  ? t("playlistImport.newSetWithVideo")
+                  : t("playlistImport.newSet")}
             </button>
           </div>
         </div>

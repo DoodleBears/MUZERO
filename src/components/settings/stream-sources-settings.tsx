@@ -236,6 +236,19 @@ export function StreamSourcesSettings() {
             />
             <span>{t("streamSources.enterDownloads")}</span>
           </label>
+          <label
+            htmlFor="stream-auto-download-playlist"
+            className="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              id="stream-auto-download-playlist"
+              checked={settings.autoDownloadPlaylistVideos !== false}
+              onCheckedChange={(checked) =>
+                void saveSettings({ autoDownloadPlaylistVideos: checked === true })
+              }
+            />
+            <span>{t("streamSources.autoDownloadPlaylist")}</span>
+          </label>
           <StreamCacheControls />
           <DownloadsPanel />
           <PlaylistSyncPanel />

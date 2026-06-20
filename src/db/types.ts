@@ -704,6 +704,10 @@ export interface AppSettings {
   /** ⌘F: pressing Enter on an online result downloads (video) instead of streaming.
    *  Undefined = on (the default). Set false to keep Enter = play. */
   enterDownloadsVideo?: boolean;
+  /** When importing/subscribing a video-source (Bilibili/YouTube) favlist/playlist, download
+   *  each item as a local video by default (video-else-audio). Undefined = on (the default).
+   *  Set false to import as streaming references only (download stays a manual choice). */
+  autoDownloadPlaylistVideos?: boolean;
   /** Default video-download resolution ("max" | "2160" | "1080" …). Used for batch
    *  downloads + as the implicit quality; the source degrades to the closest available.
    *  Undefined = "1080" (see DEFAULT_VIDEO_QUALITY). */
