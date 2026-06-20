@@ -35,6 +35,7 @@ import {
   electronWindowAppearanceCssVars,
   resolveBorderColorMode,
 } from "@/lib/electron-window-appearance";
+import { resolveLyricsOverlayRevealed } from "@/lib/lyrics-overlay-reveal";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { cn } from "@/lib/utils";
 import { setViewTransitionSuppressed } from "@/lib/view-transition";
@@ -82,6 +83,7 @@ export default function App() {
   const setTab = useNavStore((s) => s.setTab);
   const init = usePlayerStore((s) => s.init);
   const clickThroughHover = useDesktopWindowStore((s) => s.clickThroughHover);
+  const windowPinMode = useDesktopWindowStore((s) => s.pinMode);
   const initDesktopWindow = useDesktopWindowStore((s) => s.init);
   const hasAmbientTrack = usePlayerStore(
     (s) => s.currentIndex >= 0 && Boolean(s.queue[s.currentIndex]),
@@ -227,6 +229,9 @@ export default function App() {
   const lyricsPlacementActive =
     isNowTab && visualizerBackgroundActive && visualizerPlacement === "lyrics";
   const lyricsOverlayPinned = lyricsPlacementActive && settings.desktopWindowPinMode === "pin";
+  // Live window lock state (pin-click-through). When locked, only the centered
+  // control-bar region may reveal the controls — see resolveLyricsOverlayRevealed.
+  const lyricsOverlayLocked = lyricsOverlayPinned && windowPinMode === "pin-click-through";
   const lyricsOnlyIdle = lyricsPlacementActive && (idle || lyricsOverlayPinned);
   const visualizerIdleOnly = idle && visualizerBackgroundActive && visualizerPlacement === "idle";
   const chromeHidden =
@@ -393,7 +398,11 @@ export default function App() {
           <ImmersiveLyricsOverlay
             lyricsOnly={lyricsOnlyIdle}
             pinned={lyricsOverlayPinned}
-            revealed={!idle || clickThroughHover}
+            revealed={resolveLyricsOverlayRevealed({
+              clickThroughHover,
+              idle,
+              locked: lyricsOverlayLocked,
+            })}
           />
         )}
 
