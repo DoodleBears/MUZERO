@@ -234,8 +234,8 @@ export function createPlaylistAutoSyncScheduler(deps): { tick; start; stop };
 **Tasks:**
 - [x] `downloadJobs` 表（v31）+ repo（[`download-job-repo.ts`](../../../../src/db/download-job-repo.ts)）+ 类型（`DownloadJob`/`DownloadJobStatus`/`PlaylistAutoSyncFrequency` + `DjSession.autoSync*` + `AppSettings.downloadConcurrency`）。tsc 绿。
 - [x] `download-queue.ts` 纯状态机 + 单测（createDownloadJob/sameTarget 去重/selectNextJobs 并发/jobsToRecover 恢复/canRetry+retryBackoffMs 退避；7 测绿）。
-- [ ] `download-queue-runner.ts` 运行器（注入式）+ 单测（并发/重试/恢复）。
-- [ ] `download-action`/player-store 入队改造（`downloadHitsAsVideo`/收藏夹「下载为视频」→ enqueue）。
+- [x] `download-queue-runner.ts` 运行器（注入式 deps：now/newId/concurrency/list/put/update/runJob/scheduleRetry）+ 单测（并发上限、dedupe、重启恢复 active→pending→重跑、retriable 重试+退避到上限、非 retriable 终止；5 测绿）。
+- [ ] `download-action`/player-store 入队改造（`downloadHitsAsVideo`/收藏夹「下载为视频」→ enqueue）+ app 启动 recover。
 - [ ] `downloads-panel.tsx` + i18n。
 
 #### Phase 1 Checklist
