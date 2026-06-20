@@ -35,6 +35,19 @@ describe("useTransparentWindowRepaint", () => {
     expect(repaint).toHaveBeenCalled();
   });
 
+  it("uses a shorter settle delay for fast-fading layers (e.g. the control bar)", () => {
+    const { rerender } = renderHook(
+      ({ active }) => useTransparentWindowRepaint(active, { fadeMs: 200 }),
+      { initialProps: { active: true } },
+    );
+
+    rerender({ active: false });
+    act(() => vi.advanceTimersByTime(120));
+    expect(repaint).not.toHaveBeenCalled(); // still within the 200ms fade
+    act(() => vi.advanceTimersByTime(200)); // total 320 > 200 + buffer
+    expect(repaint).toHaveBeenCalled();
+  });
+
   it("does not repaint when the background appears or stays unchanged", () => {
     const { rerender } = renderHook(({ active }) => useTransparentWindowRepaint(active), {
       initialProps: { active: false },

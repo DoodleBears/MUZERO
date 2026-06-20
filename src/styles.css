@@ -307,6 +307,28 @@
     box-shadow: none !important;
   }
 
+  /* Transparent lyrics capture: strip blurred "outside the box" effects (text-shadow,
+     box-shadow, drop-shadow, backdrop-filter). On a transparent window Chromium does
+     not clear those regions as the lyrics scroll/cascade or the control bar fades, so
+     they smear into a "残影" shadow ghost. The solid text fill / pill background still
+     repaint cleanly; only the soft halos leave residue. (Legibility halos aren't
+     needed for an OBS overlay the user composites; a non-blurred text STROKE, which is
+     painted at the glyph edge, is kept and never ghosts.) */
+  html[data-muzero-lyrics-overlay="true"] .lyrics-immersive-surface,
+  html[data-muzero-lyrics-overlay="true"] .lyrics-immersive-surface * {
+    text-shadow: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Karaoke word spans carry the line's shadow as a `filter: drop-shadow(...)`; clear
+     it without touching the cascade engine's per-row `filter: blur()` (on the row
+     buttons, not the word spans). */
+  html[data-muzero-lyrics-overlay="true"] .lyrics-immersive-surface [data-word] {
+    filter: none !important;
+  }
+
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls,
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls * {
     -webkit-app-region: no-drag;

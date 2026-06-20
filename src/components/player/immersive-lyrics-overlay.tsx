@@ -34,7 +34,7 @@ export function ImmersiveLyricsOverlay({
   if (!current) return null;
   return (
     <motion.div
-      className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center px-6"
+      className="lyrics-immersive-surface pointer-events-none fixed inset-0 z-20 flex items-center justify-center px-6"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4 }}
