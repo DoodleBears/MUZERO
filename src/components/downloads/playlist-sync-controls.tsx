@@ -13,6 +13,7 @@ import { updateSession } from "@/db/repositories";
 import type { DjSession, PlaylistAutoSyncFrequency, StreamSourceId } from "@/db/types";
 import { notify } from "@/stores/notification-store";
 import { subscribeToPlaylist } from "@/stores/playlist-auto-sync";
+import { canDownloadVideo } from "@/streamsrc/download-action";
 
 const FREQUENCIES: PlaylistAutoSyncFrequency[] = ["manual", "app-start", "15min", "30min", "60min"];
 
@@ -103,7 +104,7 @@ export function PlaylistSyncControls({
           ))}
         </SelectContent>
       </Select>
-      {frequency !== "manual" && (
+      {frequency !== "manual" && canDownloadVideo(source) && (
         <label
           htmlFor={`auto-dl-${source}-${playlistId}`}
           className="flex cursor-pointer items-center gap-1.5 text-muted-foreground text-xs"
