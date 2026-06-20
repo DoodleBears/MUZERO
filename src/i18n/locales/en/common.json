@@ -128,7 +128,16 @@
     "parts": "Parts",
     "allParts": "Download all {{count}}",
     "downloadingPart": "Downloading {{done}} / {{total}}…",
-    "allVideos": "Download as video"
+    "allVideos": "Download as video",
+    "queueTitle": "Downloads",
+    "queueEmpty": "No downloads yet",
+    "queueClear": "Clear finished",
+    "statusPending": "Queued",
+    "statusActive": "Downloading",
+    "statusFailed": "Failed",
+    "statusPaused": "Paused",
+    "retry": "Retry",
+    "remove": "Remove"
   },
   "streamSources": {
     "title": "Online sources",

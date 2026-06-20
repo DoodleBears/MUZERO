@@ -121,7 +121,16 @@
     "parts": "パート（分割）",
     "allParts": "すべて（{{count}}）をダウンロード",
     "downloadingPart": "ダウンロード中 {{done}} / {{total}}…",
-    "allVideos": "動画としてダウンロード"
+    "allVideos": "動画としてダウンロード",
+    "queueTitle": "ダウンロード",
+    "queueEmpty": "ダウンロードはまだありません",
+    "queueClear": "完了分をクリア",
+    "statusPending": "待機中",
+    "statusActive": "ダウンロード中",
+    "statusFailed": "失敗",
+    "statusPaused": "一時停止",
+    "retry": "再試行",
+    "remove": "削除"
   },
   "streamSources": {
     "title": "オンラインソース",

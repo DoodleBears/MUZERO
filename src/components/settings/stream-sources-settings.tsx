@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { DownloadsPanel } from "@/components/downloads/downloads-panel";
 import { StreamCacheControls } from "@/components/settings/stream-cache-controls";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { QrLoginDialog } from "@/components/stream/qr-login-dialog";
@@ -234,6 +235,7 @@ export function StreamSourcesSettings() {
             <span>{t("streamSources.enterDownloads")}</span>
           </label>
           <StreamCacheControls />
+          <DownloadsPanel />
         </CardContent>
       </Card>
       {qrSource && STREAM_LOGIN_CONFIGS[qrSource] && (

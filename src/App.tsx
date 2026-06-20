@@ -56,6 +56,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import { startSyncIndicator } from "@/stores/sync-indicator";
 import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
+import { recoverDownloadQueue } from "@/streamsrc/download-action";
 import { useTraySync } from "@/tray/use-tray-sync";
 import { resolveVisualizerPlacement } from "@/visualizer/placement";
 
@@ -137,6 +138,11 @@ export default function App() {
   // Visible per-drive R2 auto-sync scheduler. It delegates to the same
   // orchestrated Sync now path and self-guards per drive.
   useEffect(() => startCloudAutoSyncScheduler(), []);
+
+  // Resume downloads left mid-flight by a previous run (persistent download queue).
+  useEffect(() => {
+    void recoverDownloadQueue();
+  }, []);
 
   // Dev / profiling-build automation control endpoint bridge. In a normal prod build
   // both flags fold to false → the import is dead code → tree-shaken. The dedicated

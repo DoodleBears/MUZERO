@@ -121,7 +121,16 @@
     "parts": "选集（分 P）",
     "allParts": "下载全部 {{count}} P",
     "downloadingPart": "正在下载 {{done}} / {{total}}…",
-    "allVideos": "下载为视频"
+    "allVideos": "下载为视频",
+    "queueTitle": "下载",
+    "queueEmpty": "暂无下载",
+    "queueClear": "清除已完成",
+    "statusPending": "排队中",
+    "statusActive": "下载中",
+    "statusFailed": "失败",
+    "statusPaused": "已暂停",
+    "retry": "重试",
+    "remove": "移除"
   },
   "streamSources": {
     "title": "在线音源",

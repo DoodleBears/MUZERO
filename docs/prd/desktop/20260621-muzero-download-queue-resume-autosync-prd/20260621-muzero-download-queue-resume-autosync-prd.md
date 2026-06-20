@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 持久下载队列（落 DB + 并发上限 + 重试 + 重启恢复 + UI 面板） | 🔄 P1a 数据层完成（表/repo/类型/迁移） | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 持久下载队列（落 DB + 并发上限 + 重试 + 重启恢复 + UI 面板） | ✅ 完成（表/状态机/运行器/入队改造/App 启动恢复/下载面板；真字节进度待 P2） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 断点续传（Range 分片拉取 + 分片落盘 + 直链过期重解析） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 歌单/收藏夹自动定时同步（调度器 + 可选「同步即下载」） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -235,8 +235,8 @@ export function createPlaylistAutoSyncScheduler(deps): { tick; start; stop };
 - [x] `downloadJobs` 表（v31）+ repo（[`download-job-repo.ts`](../../../../src/db/download-job-repo.ts)）+ 类型（`DownloadJob`/`DownloadJobStatus`/`PlaylistAutoSyncFrequency` + `DjSession.autoSync*` + `AppSettings.downloadConcurrency`）。tsc 绿。
 - [x] `download-queue.ts` 纯状态机 + 单测（createDownloadJob/sameTarget 去重/selectNextJobs 并发/jobsToRecover 恢复/canRetry+retryBackoffMs 退避；7 测绿）。
 - [x] `download-queue-runner.ts` 运行器（注入式 deps：now/newId/concurrency/list/put/update/runJob/scheduleRetry）+ 单测（并发上限、dedupe、重启恢复 active→pending→重跑、retriable 重试+退避到上限、非 retriable 终止；5 测绿）。
-- [ ] `download-action`/player-store 入队改造（`downloadHitsAsVideo`/收藏夹「下载为视频」→ enqueue）+ app 启动 recover。
-- [ ] `downloads-panel.tsx` + i18n。
+- [x] `download-action` 入队改造：`downloadHitsAsVideo`/`downloadPlaylistVideos`（收藏夹「下载为视频」）→ `enqueueDownload`；queue 单例（runner + repo deps + 真 runJob 包 `downloadStreamedHit`）；`recoverDownloadQueue` 在 `App.tsx` 启动调用（恢复未完成）。
+- [x] `downloads-panel.tsx`（useLiveQuery 实时列队列 + 状态/进度 + 重试/移除/清除已完成）挂进 Settings→在线源；i18n×4（`download.queueTitle`/`statusActive`…）。streamsrc 392 测无回归。
 
 #### Phase 1 Checklist
 - [ ] 收藏夹「下载为视频」入队后，关闭重开 app → 未完成任务自动继续。

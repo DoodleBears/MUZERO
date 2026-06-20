@@ -5,12 +5,23 @@
  * decision/persist core stays pure + unit-tested; this module only assembles runtime IO.
  */
 
+import {
+  clearFinishedDownloadJobs,
+  deleteDownloadJob,
+  listDownloadJobs,
+  putDownloadJob,
+  updateDownloadJob,
+} from "@/db/download-job-repo";
 import { createSession, getSession, getSettings, saveSettings } from "@/db/repositories";
+import type { DownloadJob } from "@/db/types";
 import i18n from "@/i18n/i18n";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
+import { newId } from "@/lib/id";
 import { extractUsefulVideoPosterFrame } from "@/lib/video-poster-frame";
 import { notify } from "@/stores/notification-store";
 import { muxCopyTracksViaWorker } from "@/workers/video-mux-client";
+import type { EnqueueInput } from "./download-queue";
+import { createDownloadQueueRunner, type DownloadQueueRunner } from "./download-queue-runner";
 import {
   type DownloadStreamedVideoResult,
   downloadStreamedVideoToLibrary,
@@ -236,27 +247,103 @@ export function startBackgroundDownload(
 export async function downloadHitsAsVideo(
   hits: StreamSearchHit[],
   opts?: { quality?: string },
-): Promise<{ ok: number; total: number }> {
-  let ok = 0;
+): Promise<{ queued: number }> {
   for (const hit of hits) {
-    const result = await downloadWithNotification(hit, { quality: opts?.quality });
-    if (result.kind === "downloaded") ok += 1;
-    else if (result.kind === "requires-login") break;
+    await enqueueDownload({
+      source: hit.source,
+      externalId: hit.externalId,
+      title: hit.title,
+      coverUrl: hit.coverUrl,
+      quality: opts?.quality,
+    });
   }
-  return { ok, total: hits.length };
+  return { queued: hits.length };
 }
 
-/** Import a source playlist/favlist's videos, then download each as video (per-video progress). */
+/** Import a source playlist/favlist's videos, then enqueue each for video download. */
 export async function downloadPlaylistVideos(
   sourceId: StreamSearchHit["source"],
   mediaId: string,
   opts?: { quality?: string },
-): Promise<{ ok: number; total: number }> {
+): Promise<{ queued: number }> {
   const settings = await getSettings();
   const source = makeSource(sourceId, settings.streamSources?.[sourceId]?.cookie);
-  if (!source?.importPlaylist) return { ok: 0, total: 0 };
+  if (!source?.importPlaylist) return { queued: 0 };
   const hits = await source.importPlaylist(mediaId);
   return downloadHitsAsVideo(hits, opts);
+}
+
+// ---- Persistent download queue (PRD 20260621): concurrency + retry + restart recovery ----
+
+let queueConcurrency = 2;
+let queueRunner: DownloadQueueRunner | null = null;
+
+function getQueueRunner(): DownloadQueueRunner {
+  if (queueRunner) return queueRunner;
+  queueRunner = createDownloadQueueRunner({
+    now: () => Date.now(),
+    newId: () => newId("dlj"),
+    getConcurrency: () => queueConcurrency,
+    listJobs: () => listDownloadJobs(),
+    putJob: (job) => putDownloadJob(job),
+    updateJob: (id, patch) => updateDownloadJob(id, patch),
+    runJob: async (job, onProgress) => {
+      const result = await downloadStreamedHit(
+        {
+          source: job.source,
+          externalId: job.externalId,
+          title: job.title,
+          coverUrl: job.coverUrl,
+        },
+        {
+          quality: job.quality,
+          audioOnly: job.audioOnly,
+          // P1: byte-fraction only (×100). Phase 2 (resume) reports real bytes.
+          onProgress: (stage, ratio) => {
+            if (stage === "fetch") onProgress(Math.round(ratio * 100), 100);
+          },
+        },
+      );
+      if (result.kind === "downloaded")
+        return { ok: true, trackId: result.trackId, retriable: false };
+      if (result.kind === "requires-login") return { ok: false, retriable: false, error: "login" };
+      if (result.kind === "no-permission")
+        return { ok: false, retriable: false, error: result.reason };
+      return { ok: false, retriable: true, error: result.message }; // network/expired → retry
+    },
+    scheduleRetry: (delayMs, cb) => {
+      setTimeout(cb, delayMs);
+    },
+  });
+  return queueRunner;
+}
+
+/** Add a download to the persistent queue (deduped). The runner drives it per concurrency. */
+export function enqueueDownload(input: EnqueueInput): Promise<DownloadJob> {
+  return getQueueRunner().enqueue(input);
+}
+
+/** On app start: refresh concurrency from settings + resume jobs left mid-flight (rule: persist + recover). */
+export async function recoverDownloadQueue(): Promise<void> {
+  const settings = await getSettings();
+  queueConcurrency = Math.max(1, settings.downloadConcurrency ?? 2);
+  await getQueueRunner().recover();
+}
+
+/** Panel action: re-queue a failed/cancelled job (keeps bytesDone for resume). */
+export async function retryDownload(id: string): Promise<void> {
+  await updateDownloadJob(id, { status: "pending", lastError: undefined });
+  void getQueueRunner().tick();
+}
+
+/** Panel action: remove a job from the queue. */
+export async function removeDownload(id: string): Promise<void> {
+  await deleteDownloadJob(id);
+}
+
+/** Panel action: clear all finished (done) jobs. */
+export async function clearFinishedDownloads(): Promise<number> {
+  return clearFinishedDownloadJobs();
 }
 
 /** Fire-and-forget batch (分P) download at the default quality, with N/total progress. */
