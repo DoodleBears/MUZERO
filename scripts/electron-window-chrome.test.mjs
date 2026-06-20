@@ -5,12 +5,16 @@ const require = createRequire(import.meta.url);
 const { resolveWindowChrome } = require("../electron/window-chrome.cjs");
 
 describe("resolveWindowChrome", () => {
-  it("runs the macOS window transparent so lyrics-only mode can be see-through", () => {
+  it("runs the macOS window transparent with a 1/255-alpha backing (kills motion trails)", () => {
     const chrome = resolveWindowChrome("darwin");
     // `transparent` can't be toggled at runtime, so the window must be created
     // transparent up front; the DOM paints the opaque app background in normal states.
     expect(chrome.transparent).toBe(true);
-    expect(chrome.backgroundColor).toBe("#00000000");
+    // NOT pure #00000000: a fully transparent backing makes the macOS compositor skip
+    // clearing the surface, so moving lyrics leave stale-frame trails (残影). A 1/255
+    // alpha (format-agnostic #01010101) gives it a surface to clear each frame, while
+    // staying visually invisible. Hidden behind the opaque DOM in non-lyrics states.
+    expect(chrome.backgroundColor).toBe("#01010101");
     // Keep native traffic lights (top-left) via the inset title bar; never frameless.
     expect(chrome.titleBarStyle).toBe("hiddenInset");
     expect(chrome.frame).toBe(true);
