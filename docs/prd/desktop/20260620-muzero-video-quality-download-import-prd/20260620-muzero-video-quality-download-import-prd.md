@@ -127,7 +127,7 @@ MUZERO 现在能搜索并播放 Bilibili / YouTube 的曲目，但有两条产�
 src/
 ├── streamsrc/
 │   ├── bili/
-│   │   └── bili-resolve.ts          # 扩：parseDashVideo() + selectVideoByResolution()（镜像 audio）
+│   │   └── bili-video.ts            # 新：parseDashVideo() + selectVideoByResolution()（镜像 bili-resolve 的 audio 选择）✅
 │   ├── youtube/
 │   │   └── youtube-formats.ts       # 扩：pickAdaptiveVideo()（镜像 pickAdaptiveAudio）
 │   ├── video-quality.ts             # 新：跨源统一「清晰度档」模型 + 归一化（label/height/hdr/codec）
@@ -235,7 +235,7 @@ export interface StreamSourceProvider {
 
 | 源 | 新增纯函数（隔离点） | 机制 |
 |---|---|---|
-| **Bilibili** | `parseDashVideo(data)` · `selectVideoByResolution(streams, key)`（镜像现有 `parseDashAudio`/`selectAudioByPreference`，落 [`bili-resolve.ts`](../../../../src/streamsrc/bili/bili-resolve.ts)） | **复用已验证的 `resolve` 请求**（view→cid→playurl，§1.4）：同一 playurl 响应**已含 `dash.video[]`**（`id`(qn)/`codecs`/`width×height`/`frameRate`），现被丢弃。新增 `resolveVideo` 读视频轨；为覆盖 4K/HDR/AV1 把**视频侧** `fnval` 由现 `16` 提到 `4048`（番剧/大会员 `12240`），**不动音频路径**。`qn`→360/480/720/1080/4K，`SESSDATA` 决定可见档。CDN 排序复用 `prioritizeBiliUrls`、过期复用 `deadlineFromUrl`。 |
+| **Bilibili** | `parseDashVideo(data)` · `selectVideoByResolution(streams, opts)`（镜像现有 `parseDashAudio`/`selectAudioByPreference`，落新文件 [`bili-video.ts`](../../../../src/streamsrc/bili/bili-video.ts) ✅；选择按目标 `maxHeight` + `codecPreference` 容器兼容默认 AVC-first） | **复用已验证的 `resolve` 请求**（view→cid→playurl，§1.4）：同一 playurl 响应**已含 `dash.video[]`**（`id`(qn)/`codecs`/`width×height`/`frameRate`），现被丢弃。新增 `resolveVideo` 读视频轨；为覆盖 4K/HDR/AV1 把**视频侧** `fnval` 由现 `16` 提到 `4048`（番剧/大会员 `12240`），**不动音频路径**。`qn`→360/480/720/1080/4K，`SESSDATA` 决定可见档。CDN 排序复用 `prioritizeBiliUrls`、过期复用 `deadlineFromUrl`。 |
 | **YouTube** | `pickAdaptiveVideo(formats, key)`（镜像 [`pickAdaptiveAudio`](../../../../src/streamsrc/youtube/youtube-formats.ts)） | InnerTube `streamingData.adaptiveFormats[]` 的 `mimeType` 以 `video/` 开头者；`qualityLabel`(360p/1080p60/2160p)、`width/height/fps`；ciphered URL 复用既有 sig/n + PoToken 解密（[`youtube-ytjs.ts`](../../../../src/streamsrc/youtube/youtube-ytjs.ts)）。选档**先按 `height/fps/hdr`**，codec 仅决定容器配对（见 §4.2 + 下注）。 |
 
 > **不在 DJ/store/UI 散落 `if(source==="bili")`**（规则 5/10）：源差异全部收进各 provider 的纯映射函数；上层只调 `listVideoQualities`/`resolveVideo`。
@@ -373,7 +373,8 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 **Goal:** 能解析出视频清晰度档与可下载直链、能产出 `DownloadPlan` 并裁决 mux 策略——全纯函数，不下载、不 mux。
 
 **Tasks:**
-- [ ] **Bilibili（低风险，先行）**：`bili-resolve.ts` 加 `parseDashVideo` + `selectVideoByResolution`（镜像音频）；`bili-source.ts` 加 `resolveVideo`/`listVideoQualities`，视频侧 `fnval` 由 `16` 提至 `4048`——**复用已验证的 view→cid→playurl（§1.4），不动音频路径**。
+- [x] **Bilibili 视频轨解析/选档（低风险，先行）**：新文件 `bili-video.ts` 的 `parseDashVideo` + `selectVideoByResolution`（镜像音频；codec 容器兼容默认 AVC-first，可配置）。✅ 9 单测全绿。
+- [ ] **Bilibili 视频 resolve**：`bili-source.ts` 加 `resolveVideo`/`listVideoQualities`，视频侧 `fnval` 由 `16` 提至 `4048`——**复用已验证的 view→cid→playurl（§1.4），不动音频路径**。
 - [ ] **YouTube（脆弱，独立验收）**：`youtube-formats.ts` 加 `pickAdaptiveVideo`（按 `height/fps/hdr` 选档，codec 仅决定容器配对、**不硬编码画质排名**）；复用 [`youtube-ytjs.ts`](../../../../src/streamsrc/youtube/youtube-ytjs.ts) 的 sig/n + PoToken（§4.6）。
 - [ ] `video-quality.ts` 跨源清晰度归一（label/height/fps/hdr/codec/requiresLogin）。
 - [ ] `provider.ts` 加可选 `listVideoQualities`/`resolveVideo`；bili/youtube source 实装，netease 不实装。
