@@ -19,6 +19,11 @@ const allowedRoots = new Set();
 const windowMaximizedState = new WeakMap();
 const windowNormalBounds = new WeakMap();
 const windowStateTimers = new WeakMap();
+const continuousRepaintTimers = new WeakMap();
+// ~30fps recomposite while the unfocused transparent capture is playing. Fast enough
+// to clear the lyric scroll without leaving a visible trail; not every frame, to bound
+// the cost of the per-tick setOpacity recomposite.
+const CONTINUOUS_REPAINT_INTERVAL_MS = 33;
 let mediaStorageRoot = null;
 
 const isWin = process.platform === "win32";
@@ -398,6 +403,35 @@ function registerIpc({ trayController } = {}) {
   // doesn't reliably clear the freed region on a transparent surface.
   ipcMain.handle("muzero:window:repaint", (event) => {
     senderWindow(event).webContents.invalidate();
+  });
+
+  // Continuously force the window server to RECOMPOSITE an UNFOCUSED transparent
+  // window so moving lyrics don't smear into a "残影". macOS stops compositing an
+  // unfocused transparent window, and `webContents.invalidate()` is too weak to
+  // force it — but a tiny `setOpacity` nudge triggers the same recomposite that
+  // FOCUSING the window does (the 0.001 delta is imperceptible). Driven from the
+  // MAIN process so it's immune to renderer / focus throttling. Started/stopped by
+  // the renderer when the playing lyrics-only capture enters/leaves.
+  ipcMain.handle("muzero:window:setContinuousRepaint", (event, enabled) => {
+    const win = senderWindow(event);
+    const existing = continuousRepaintTimers.get(win);
+    if (enabled === true) {
+      if (existing) return;
+      let nudged = false;
+      const tick = () => {
+        if (win.isDestroyed()) return;
+        win.webContents.invalidate();
+        nudged = !nudged;
+        win.setOpacity(nudged ? 0.999 : 1);
+      };
+      const timer = setInterval(tick, CONTINUOUS_REPAINT_INTERVAL_MS);
+      continuousRepaintTimers.set(win, timer);
+      win.once("closed", () => clearInterval(timer));
+    } else if (existing) {
+      clearInterval(existing);
+      continuousRepaintTimers.delete(win);
+      if (!win.isDestroyed()) win.setOpacity(1);
+    }
   });
 }
 

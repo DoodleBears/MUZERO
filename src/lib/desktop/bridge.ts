@@ -107,6 +107,12 @@ export interface DesktopWindowControls {
    * background canvas) is torn down on a transparent surface. No-op off Electron.
    */
   repaint?: () => Promise<void>;
+  /**
+   * Start/stop a main-process loop that forces the macOS window server to recomposite
+   * an UNFOCUSED transparent window (a tiny `setOpacity` nudge), so moving lyrics don't
+   * leave a stale-frame "残影" while the window is unfocused. No-op off Electron.
+   */
+  setContinuousRepaint?: (enabled: boolean) => Promise<void>;
   onClickThroughHover?: (callback: (hovered: boolean) => void) => () => void;
   onStateChange?: (callback: (state: DesktopWindowState) => void) => () => void;
 }

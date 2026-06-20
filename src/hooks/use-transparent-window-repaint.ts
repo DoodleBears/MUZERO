@@ -45,36 +45,25 @@ export function useTransparentWindowRepaint(visible: boolean, options?: { fadeMs
 }
 
 /**
- * Force a full window repaint EVERY animation frame while `active`.
+ * Keep an UNFOCUSED transparent window recompositing while `active`.
  *
  * A focused macOS window composites (and clears) continuously, but an UNFOCUSED
- * transparent window stops getting cleared — so moving lyrics smear into a "残影"
- * the moment focus leaves (the usual state for an OBS/desktop overlay). Driving
- * `webContents.invalidate()` from the renderer's rAF (which keeps running for a
- * visible window regardless of focus, especially with `backgroundThrottling:false`)
- * forces the surface to clear each frame, so the unfocused capture stays trail-free.
+ * transparent window stops — so moving lyrics smear into a "残影" the moment focus
+ * leaves (the usual state for a desktop/OBS overlay). `webContents.invalidate()` is
+ * too weak to force an unfocused recomposite; a tiny `setOpacity` nudge IS (the same
+ * recomposite focusing triggers). That loop runs in the MAIN process so it's immune
+ * to renderer / focus throttling — this hook just toggles it on/off.
  *
  * Use ONLY while content is actually moving (lyrics playing in the transparent
- * capture) — it's a per-frame repaint. Pauses automatically when the window is
- * hidden/occluded (rAF stops) and on shells without `repaint` (web/Tauri no-op).
+ * capture). No-op on shells without the control (web/Tauri).
  */
 export function useContinuousTransparentRepaint(active: boolean): void {
   useEffect(() => {
-    if (!active) return;
-    const repaint = resolveDesktopBridge().windowControls?.repaint;
-    if (!repaint) return;
-
-    let raf = 0;
-    let stopped = false;
-    const loop = () => {
-      if (stopped) return;
-      void repaint();
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
+    const setContinuousRepaint = resolveDesktopBridge().windowControls?.setContinuousRepaint;
+    if (!setContinuousRepaint || !active) return;
+    void setContinuousRepaint(true);
     return () => {
-      stopped = true;
-      cancelAnimationFrame(raf);
+      void setContinuousRepaint(false);
     };
   }, [active]);
 }

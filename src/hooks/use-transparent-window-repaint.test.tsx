@@ -2,12 +2,13 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const repaint = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const setContinuousRepaint = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const shell = vi.hoisted(() => ({ hasRepaint: true }));
 
 vi.mock("@/lib/desktop/bridge", () => ({
   resolveDesktopBridge: () => ({
     kind: "electron",
-    windowControls: shell.hasRepaint ? { repaint } : {},
+    windowControls: shell.hasRepaint ? { repaint, setContinuousRepaint } : {},
   }),
 }));
 
@@ -74,55 +75,40 @@ describe("useTransparentWindowRepaint", () => {
 });
 
 describe("useContinuousTransparentRepaint", () => {
-  let frames: FrameRequestCallback[];
-
   beforeEach(() => {
-    repaint.mockClear();
+    setContinuousRepaint.mockClear();
     shell.hasRepaint = true;
-    frames = [];
-    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
-    vi.stubGlobal("cancelAnimationFrame", () => {});
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  // Drain queued rAF callbacks (each re-queues the next frame).
-  const tick = (n: number) => {
-    for (let i = 0; i < n; i += 1) {
-      const cb = frames.shift();
-      cb?.(performance.now());
-    }
-  };
-
-  it("repaints every animation frame while active (clears the unfocused window)", () => {
+  it("starts the main-process recomposite loop while active", () => {
     renderHook(() => useContinuousTransparentRepaint(true));
-    tick(3);
-    expect(repaint.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(setContinuousRepaint).toHaveBeenCalledWith(true);
   });
 
-  it("does not run while inactive", () => {
+  it("does not start while inactive", () => {
     renderHook(() => useContinuousTransparentRepaint(false));
-    tick(3);
-    expect(repaint).not.toHaveBeenCalled();
+    expect(setContinuousRepaint).not.toHaveBeenCalled();
   });
 
-  it("stops repainting after it goes inactive", () => {
+  it("stops the loop when it goes inactive", () => {
     const { rerender } = renderHook(({ active }) => useContinuousTransparentRepaint(active), {
       initialProps: { active: true },
     });
-    tick(1);
-    const callsWhileActive = repaint.mock.calls.length;
+    setContinuousRepaint.mockClear();
     rerender({ active: false });
-    tick(3);
-    expect(repaint.mock.calls.length).toBe(callsWhileActive);
+    expect(setContinuousRepaint).toHaveBeenCalledWith(false);
   });
 
-  it("no-ops on shells without a repaint capability", () => {
+  it("stops the loop on unmount", () => {
+    const { unmount } = renderHook(() => useContinuousTransparentRepaint(true));
+    setContinuousRepaint.mockClear();
+    unmount();
+    expect(setContinuousRepaint).toHaveBeenCalledWith(false);
+  });
+
+  it("no-ops on shells without the control (web / tauri)", () => {
     shell.hasRepaint = false;
-    renderHook(() => useContinuousTransparentRepaint(true));
-    expect(() => tick(3)).not.toThrow();
-    expect(repaint).not.toHaveBeenCalled();
+    expect(() => renderHook(() => useContinuousTransparentRepaint(true))).not.toThrow();
+    expect(setContinuousRepaint).not.toHaveBeenCalled();
   });
 });

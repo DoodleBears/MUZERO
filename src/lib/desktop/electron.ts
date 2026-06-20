@@ -59,6 +59,7 @@ interface MuzeroApi {
     quitApp(): Promise<void>;
     getState(): Promise<DesktopWindowState>;
     repaint(): Promise<void>;
+    setContinuousRepaint(enabled: boolean): Promise<void>;
     onClickThroughHover(callback: (hovered: boolean) => void): () => void;
     onStateChange(callback: (state: DesktopWindowState) => void): () => void;
   };
@@ -217,6 +218,8 @@ export function createElectronBridge(): DesktopBridge {
             api.windowControls?.getState() ??
             Promise.resolve({ fullscreen: false, maximized: false, pinMode: "off" }),
           repaint: () => api.windowControls?.repaint() ?? Promise.resolve(),
+          setContinuousRepaint: (enabled) =>
+            api.windowControls?.setContinuousRepaint(enabled) ?? Promise.resolve(),
           onClickThroughHover: (callback) =>
             api.windowControls?.onClickThroughHover(callback) ?? (() => {}),
           onStateChange: (callback) => api.windowControls?.onStateChange(callback) ?? (() => {}),
