@@ -16,7 +16,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 基础设施：视频轨解析 + 清晰度模型 + 下载计划 resolver（纯函数，零 mux） | 🔄 Bili 切片 ✅（YouTube `pickAdaptiveVideo` 待做） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | 🔄 orchestrator ✅（mediabunny mux / player-store / saveFile 待 Electron 手测） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
