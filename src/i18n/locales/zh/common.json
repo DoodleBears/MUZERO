@@ -126,6 +126,7 @@
     "title": "在线音源",
     "redline": "个人使用 · 自带账号 · 遵守各平台条款",
     "enterDownloads": "搜索中按 Enter 下载视频（而非播放）",
+    "defaultVideoQuality": "默认视频清晰度",
     "desktopOnly": "在线音源仅桌面端可用。",
     "login": "登录",
     "loggingIn": "登录中…",

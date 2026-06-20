@@ -602,7 +602,9 @@ export function startPerfControlBridge(): void {
           title,
           meta,
           coverUrl,
-          quality: payload.quality as string | undefined,
+          quality:
+            (payload.quality as string | undefined) ??
+            (settings as { defaultVideoQuality?: string }).defaultVideoQuality,
           audioOnly: Boolean(payload.audioOnly),
         },
         {

@@ -117,20 +117,23 @@ export function DownloadQualityDialog({
   if (!hit) return null;
 
   async function startVideo(quality: VideoQualityOption) {
-    if (!hit || phase.kind !== "pick") return;
+    if (!hit || phase.kind !== "pick" || phase.target.kind !== "single") return;
     const target = phase.target;
-    if (target.kind === "single") {
-      setPhase({ kind: "downloading", label: stageLabel("fetch") });
-      const result = await downloadStreamedHit(
-        { ...hit, externalId: target.externalId, title: target.title },
-        {
-          quality: quality.key,
-          onProgress: (stage) => setPhase({ kind: "downloading", label: stageLabel(stage) }),
-        },
-      );
-      applyResult(result, t("download.done"));
-      return;
-    }
+    setPhase({ kind: "downloading", label: stageLabel("fetch") });
+    const result = await downloadStreamedHit(
+      { ...hit, externalId: target.externalId, title: target.title },
+      {
+        quality: quality.key,
+        onProgress: (stage) => setPhase({ kind: "downloading", label: stageLabel(stage) }),
+      },
+    );
+    applyResult(result, t("download.done"));
+  }
+
+  // "Download all parts" uses the configured default quality (no per-part picker); the
+  // source's selector degrades to the closest available tier.
+  async function startAll() {
+    if (!hit) return;
     let ok = 0;
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
@@ -138,15 +141,12 @@ export function DownloadQualityDialog({
         kind: "downloading",
         label: t("download.downloadingPart", { done: i + 1, total: parts.length }),
       });
-      const result = await downloadStreamedHit(
-        {
-          ...hit,
-          externalId: part.externalId,
-          title: part.title,
-          durationSec: part.durationSec ?? hit.durationSec,
-        },
-        { quality: quality.key },
-      );
+      const result = await downloadStreamedHit({
+        ...hit,
+        externalId: part.externalId,
+        title: part.title,
+        durationSec: part.durationSec ?? hit.durationSec,
+      });
       if (result.kind === "downloaded") ok += 1;
       else if (result.kind === "requires-login") {
         setPhase({ kind: "error", message: t("download.loginRequired") });
@@ -216,7 +216,7 @@ export function DownloadQualityDialog({
             <>
               <button
                 type="button"
-                onClick={() => setPhase({ kind: "pick", target: { kind: "all" } })}
+                onClick={() => void startAll()}
                 className="mb-1 flex w-full items-center gap-3 rounded-xl border border-primary/40 px-3 py-2.5 text-left transition-colors hover:bg-accent/60"
               >
                 <Layers className="size-4 shrink-0 text-primary" />

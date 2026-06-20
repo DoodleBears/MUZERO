@@ -133,6 +133,7 @@
     "title": "Online sources",
     "redline": "Personal use · your own account · respect each platform's terms",
     "enterDownloads": "Enter downloads video (instead of streaming) in search",
+    "defaultVideoQuality": "Default video quality",
     "desktopOnly": "Online sources are desktop-only.",
     "login": "Log in",
     "loggingIn": "Logging in…",

@@ -37,6 +37,17 @@ const SOURCES: { id: StreamSourceId; label: string; qualities: string[] }[] = [
   { id: "qq", label: "QQ 音乐", qualities: ["flac", "320", "m4a", "128"] },
 ];
 
+/** Default video-download resolution (prefer-match-else-downgrade per source). */
+const VIDEO_QUALITY_OPTIONS: { value: string; label: string }[] = [
+  { value: "max", label: "Auto" },
+  { value: "2160", label: "2160P" },
+  { value: "1440", label: "1440P" },
+  { value: "1080", label: "1080P" },
+  { value: "720", label: "720P" },
+  { value: "480", label: "480P" },
+  { value: "360", label: "360P" },
+];
+
 /**
  * Per-source login (cookie capture) + quality for the external streaming sources.
  * Desktop-only (needs the privileged auth window); off by default. Logging in unlocks
@@ -184,6 +195,30 @@ export function StreamSourcesSettings() {
               </div>
             );
           })}
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span>{t("streamSources.defaultVideoQuality")}</span>
+            <Select
+              value={settings.defaultVideoQuality ?? "max"}
+              onValueChange={(value) => {
+                if (value) void saveSettings({ defaultVideoQuality: value });
+              }}
+            >
+              <SelectTrigger className="h-8 w-auto min-w-24 px-2 text-foreground text-xs">
+                <SelectValue>
+                  {(value) =>
+                    VIDEO_QUALITY_OPTIONS.find((o) => o.value === value)?.label ?? (value as string)
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {VIDEO_QUALITY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <label
             htmlFor="stream-enter-downloads"
             className="flex cursor-pointer items-center gap-2 text-sm"

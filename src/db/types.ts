@@ -658,6 +658,10 @@ export interface AppSettings {
   /** ⌘F: pressing Enter on an online result downloads (video) instead of streaming.
    *  Undefined = on (the default). Set false to keep Enter = play. */
   enterDownloadsVideo?: boolean;
+  /** Default video-download resolution ("max" | "2160" | "1080" …). Used for batch
+   *  downloads + as the implicit quality; the picker degrades to the closest available.
+   *  Undefined = "max" (highest). */
+  defaultVideoQuality?: string;
   /**
    * Auto-download streamed songs to a local blob after they play (offline cache,
    * Phase 5). On by default so online songs become available offline after play.

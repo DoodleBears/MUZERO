@@ -87,6 +87,9 @@ export async function downloadStreamedHit(
   if (!source) return { kind: "error", message: `${hit.source} unavailable` };
   const sessionId = await ensureDownloadsSet();
   const bridge = resolveDesktopBridge();
+  // No explicit pick (batch / quick download) → fall back to the configured default quality;
+  // the source's selector degrades to the closest available tier (prefer-match-else-downgrade).
+  const quality = opts?.quality ?? settings.defaultVideoQuality;
 
   return downloadStreamedVideoToLibrary(
     {
@@ -101,7 +104,7 @@ export async function downloadStreamedHit(
         coverUrl: hit.coverUrl,
         durationSec: hit.durationSec,
       },
-      quality: opts?.quality,
+      quality,
       audioOnly: opts?.audioOnly,
     },
     {
