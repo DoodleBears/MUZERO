@@ -25,8 +25,15 @@ import { sanitizeUrlForTrace } from "@/lib/diagnostics";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import { aliasRestrictedHeaders } from "../stream-http";
-import type { AudioCodec } from "./youtube-formats";
-import type { YoutubeRuntime } from "./youtube-source";
+import { videoQualityLabel } from "../video-quality";
+import {
+  type AudioCodec,
+  pickAdaptiveVideo,
+  videoCodecOf,
+  videoMimeFor,
+  type YoutubeVideoFormat,
+} from "./youtube-formats";
+import type { YoutubeRuntime, YoutubeVideoPlayback, YoutubeVideoQuality } from "./youtube-source";
 
 // youtubei.js v17 ships NO JS evaluator (its default throws) — the caller must
 // provide one so it can run player.js's extracted sig/n functions. `data.output`
@@ -239,6 +246,105 @@ export function appendYoutubeCpn(url: string, cpn: string | undefined): string {
   const parsed = new URL(url);
   if (!parsed.searchParams.has("cpn")) parsed.searchParams.set("cpn", cpn);
   return parsed.toString();
+}
+
+/** Minimal youtubei getInfo shape this module reads (decoupled from youtubei's types). */
+interface YtMusicInfo {
+  playability_status?: { status?: string; reason?: string };
+  streaming_data?: { adaptive_formats?: unknown[]; expires?: unknown };
+  cpn?: string;
+  download: (opts?: {
+    type?: string;
+    quality?: string;
+    itag?: number;
+  }) => Promise<ReadableStream<Uint8Array>>;
+}
+
+interface YtjsAdaptiveFormat {
+  itag: number;
+  mime_type: string;
+  bitrate?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  quality_label?: string | null;
+  has_video?: boolean;
+  has_audio?: boolean;
+}
+
+const VIDEO_CODEC_RANK: Record<string, number> = { avc: 0, vp9: 1, av1: 2, other: 3 };
+
+interface PreparedYtjsInfo {
+  player: YtjsPlayerWithPoToken;
+  info: YtMusicInfo;
+  cpn: string | undefined;
+  contentPoToken: string | null;
+}
+
+/** Shared bootstrap for the VIDEO methods: innertube + content PoToken + getInfo + status.
+ *  Deliberately separate from resolveAudio so the proven audio path is untouched. */
+async function prepareYtjsInfo(
+  videoId: string,
+): Promise<
+  { ok: true; prepared: PreparedYtjsInfo } | { ok: false; verdict: YoutubeVideoPlayback }
+> {
+  let yt: Innertube;
+  try {
+    yt = await getInnertube();
+  } catch (err) {
+    return {
+      ok: false,
+      verdict: { kind: "unavailable", reason: `youtubei init failed: ${String(err)}` },
+    };
+  }
+  const visitorData = yt.session.context.client.visitorData;
+  const contentPoToken = visitorData
+    ? await mintPoToken(videoId, yt.session.http.fetch_function, visitorData)
+    : null;
+  const info = (await yt.music.getInfo(
+    videoId,
+    contentPoToken ? { po_token: contentPoToken } : undefined,
+  )) as unknown as YtMusicInfo;
+  const status = info.playability_status?.status;
+  if (status !== "OK") {
+    if (status === "LOGIN_REQUIRED" || status === "AGE_VERIFICATION_REQUIRED") {
+      return { ok: false, verdict: { kind: "login-required" } };
+    }
+    return {
+      ok: false,
+      verdict: {
+        kind: "unavailable",
+        reason: info.playability_status?.reason ?? status ?? "unplayable",
+      },
+    };
+  }
+  if (!yt.session.player) {
+    return { ok: false, verdict: { kind: "unavailable", reason: "player not loaded" } };
+  }
+  return { ok: true, prepared: { player: yt.session.player, info, cpn: info.cpn, contentPoToken } };
+}
+
+/** Map video-only adaptive formats to the pure picker's shape. */
+function extractVideoFormats(info: YtMusicInfo): YoutubeVideoFormat[] {
+  const adaptive = (info.streaming_data?.adaptive_formats ?? []) as YtjsAdaptiveFormat[];
+  return adaptive
+    .filter((f) => f.has_video && !f.has_audio)
+    .map((f) => ({
+      itag: Number(f.itag),
+      mimeType: f.mime_type,
+      bitrate: f.bitrate,
+      width: f.width,
+      height: f.height,
+      fps: f.fps,
+      qualityLabel: f.quality_label ?? undefined,
+    }));
+}
+
+function ytjsExpiresInSeconds(info: YtMusicInfo): number | undefined {
+  const expires = info.streaming_data?.expires;
+  return expires instanceof Date
+    ? Math.max(0, Math.round((expires.getTime() - Date.now()) / 1000))
+    : undefined;
 }
 
 export function createYtjsRuntime(): YoutubeRuntime {
@@ -472,6 +578,73 @@ export function createYtjsRuntime(): YoutubeRuntime {
         });
         return { kind: "unavailable", reason: String(err) };
       }
+    },
+    async resolveVideo(videoId, opts): Promise<YoutubeVideoPlayback> {
+      const prep = await prepareYtjsInfo(videoId);
+      if (!prep.ok) return prep.verdict;
+      const { player, info, contentPoToken } = prep.prepared;
+      const picked = pickAdaptiveVideo(extractVideoFormats(info), { maxHeight: opts?.maxHeight });
+      if (!picked) return { kind: "unavailable", reason: "no video format" };
+      const mime = videoMimeFor(picked.format);
+      // Download via youtubei's own range fetcher (a plain GET of the deciphered URL 400s);
+      // mirrors the proven audio path. PoToken applies for the duration of the stream.
+      let blob: Blob;
+      try {
+        blob = await withYtjsPlayerPoToken(player, contentPoToken, async () => {
+          const stream = await info.download({
+            type: "video",
+            quality: "best",
+            itag: picked.format.itag,
+          });
+          return readableStreamToBlob(stream, mime);
+        });
+      } catch (err) {
+        return { kind: "unavailable", reason: `youtube video download failed: ${String(err)}` };
+      }
+      if (blob.size === 0) return { kind: "unavailable", reason: "empty youtube video download" };
+      log.info("youtube", "resolved video", {
+        videoId,
+        itag: picked.format.itag,
+        height: picked.format.height,
+        codec: picked.codec,
+        bytes: blob.size,
+      });
+      return {
+        kind: "ok",
+        blob,
+        mime,
+        codec: picked.codec,
+        width: picked.format.width,
+        height: picked.format.height,
+        fps: picked.format.fps,
+        expiresInSeconds: ytjsExpiresInSeconds(info),
+      };
+    },
+    async listVideoQualities(videoId): Promise<YoutubeVideoQuality[]> {
+      const prep = await prepareYtjsInfo(videoId);
+      if (!prep.ok) return [];
+      const byHeight = new Map<number, YoutubeVideoFormat>();
+      for (const shape of extractVideoFormats(prep.prepared.info)) {
+        const h = shape.height ?? 0;
+        const cur = byHeight.get(h);
+        if (
+          !cur ||
+          VIDEO_CODEC_RANK[videoCodecOf(shape.mimeType)] <
+            VIDEO_CODEC_RANK[videoCodecOf(cur.mimeType)]
+        ) {
+          byHeight.set(h, shape);
+        }
+      }
+      return [...byHeight.values()]
+        .sort((a, b) => (b.height ?? 0) - (a.height ?? 0))
+        .map((s) => ({
+          key: String(s.height ?? 0),
+          label: videoQualityLabel(s.height ?? 0, s.fps),
+          height: s.height ?? 0,
+          fps: s.fps,
+          codec: videoCodecOf(s.mimeType),
+          bandwidth: s.bitrate,
+        }));
     },
   };
 }

@@ -437,31 +437,13 @@ export function startPerfControlBridge(): void {
           ? { kind: "ok", mime: audioRes.stream.mime, quality: audioRes.stream.quality }
           : audioRes;
 
+      // listVideoQualities is light (metadata only) for both sources. resolveVideo is NOT
+      // probed here — for YouTube it downloads the whole stream; use /stream/download for
+      // the full resolve→fetch→mux E2E.
       const qualities = source.listVideoQualities
         ? await source.listVideoQualities(externalId)
         : [];
-      let video: unknown = { kind: "no-resolveVideo" };
-      if (source.resolveVideo) {
-        const r = await source.resolveVideo(externalId, {
-          quality: payload.quality as string | undefined,
-        });
-        video =
-          r.kind === "ok"
-            ? {
-                kind: "ok",
-                height: r.video.height,
-                width: r.video.width,
-                fps: r.video.fps,
-                codec: r.video.codec,
-                mime: r.video.mime,
-                bandwidth: r.video.bandwidth,
-                hasUrl: Boolean(r.video.url),
-                headerKeys: Object.keys(r.video.headers ?? {}),
-                expiresAt: r.video.expiresAt,
-              }
-            : r;
-      }
-      return { sourceId, externalId, searchHits, audio, qualities, video };
+      return { sourceId, externalId, searchHits, audio, qualities };
     },
     // Full download E2E: resolve video+audio → fetch bytes via the media proxy → copy-remux
     // with mediabunny → report sizes (no DB write; this proves the runtime mux path). To keep
@@ -508,9 +490,10 @@ export function startPerfControlBridge(): void {
         if (!resp.ok) throw new Error(`fetch ${resp.status}`);
         return resp.blob();
       };
+      // YouTube returns bytes (blob transport); Bilibili returns a URL to fetch.
       const [videoBlob, audioBlob] = await Promise.all([
-        fetchBytes(videoRes.video.url, videoRes.video.headers),
-        fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers),
+        videoRes.video.blob ?? fetchBytes(videoRes.video.url ?? "", videoRes.video.headers),
+        audioRes.stream.blob ?? fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers),
       ]);
       const muxed = await muxCopyTracks(videoBlob, audioBlob, plan.strategy.container);
       return {

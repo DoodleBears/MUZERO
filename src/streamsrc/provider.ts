@@ -53,8 +53,12 @@ export type VideoCodec = "avc" | "hevc" | "vp9" | "av1" | "other";
 /** A resolved DASH video-only track — paired with a {@link PlayableStream} audio track
  *  and muxed at download time (video sources serve audio + video separately). */
 export interface PlayableVideoTrack {
-  /** Bare CDN URL (un-proxied); the desktop media proxy wraps it + injects `headers`. */
-  url: string;
+  /** Bare CDN URL (un-proxied); the desktop media proxy wraps it + injects `headers`.
+   *  Absent for blob transport (YouTube downloads via youtubei's own range fetcher —
+   *  a plain GET of the deciphered URL 400s). One of `url`/`blob` is always set. */
+  url?: string;
+  /** Already-downloaded bytes (YouTube). When set, the downloader uses these directly. */
+  blob?: Blob;
   /** Headers the media GET must carry (e.g. bili `Referer`/`User-Agent`). */
   headers?: Record<string, string>;
   /** Container mime, e.g. `video/mp4`. */

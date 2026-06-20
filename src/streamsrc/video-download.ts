@@ -89,9 +89,10 @@ export async function runVideoDownload(
 
   try {
     deps.onProgress?.("fetch", 0);
+    // YouTube already has the bytes (blob transport); Bilibili carries a URL to fetch.
     const [videoBytes, audioBytes] = await Promise.all([
-      deps.fetchBytes(plan.video.url, plan.video.headers),
-      deps.fetchBytes(plan.audio.mediaUrl ?? "", plan.audio.headers),
+      plan.video.blob ?? deps.fetchBytes(plan.video.url ?? "", plan.video.headers),
+      plan.audio.blob ?? deps.fetchBytes(plan.audio.mediaUrl ?? "", plan.audio.headers),
     ]);
     deps.onProgress?.("fetch", 1);
 

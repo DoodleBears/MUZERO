@@ -10,11 +10,13 @@ const conn = JSON.parse(readFileSync(".logs/perf-control.json", "utf8"));
 const args = process.argv.slice(2);
 let body;
 if (args[0] === "--search") {
-  body = { sourceId: "bili", search: args[1], quality: args[2] };
+  body = { sourceId: args[3] || "bili", search: args[1], quality: args[2] };
 } else if (args[0]) {
-  body = { sourceId: "bili", externalId: args[0], quality: args[1] };
+  body = { sourceId: args[2] || "bili", externalId: args[0], quality: args[1] };
 } else {
-  console.error("usage: stream-download.mjs <bvid[#cid]> [quality] | --search <query> [quality]");
+  console.error(
+    "usage: stream-download.mjs <id[#cid]> [quality] [sourceId] | --search <query> [quality] [sourceId]",
+  );
   process.exit(1);
 }
 

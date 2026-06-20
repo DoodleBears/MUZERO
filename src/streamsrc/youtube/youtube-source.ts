@@ -11,12 +11,17 @@ import { sanitizeUrlForTrace } from "@/lib/diagnostics";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type {
+  PlayableVideoTrack,
   StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
   StreamSearchOptions,
   StreamSourceProvider,
+  StreamVideoResolveOptions,
+  StreamVideoResolveResult,
+  VideoQualityOption,
 } from "../provider";
+import type { VideoCodecKind } from "./youtube-formats";
 import { YT_CLIENTS } from "./youtube-innertube";
 import type { YoutubePlayback } from "./youtube-resolve";
 import { buildSearchRequestBody, parseSearchResults } from "./youtube-search";
@@ -37,9 +42,45 @@ const youtubeLog = createDiagnosticLogger("stream.youtube");
 
 type YoutubeTrace = Pick<DiagnosticContext, "traceId" | "trackId" | "sessionId" | "sourceId">;
 
+/** A resolved YouTube video-only track (paired with audio + muxed at download time). */
+export type YoutubeVideoPlayback =
+  | {
+      kind: "ok";
+      /** Downloaded bytes (youtubei's range fetcher; a plain GET of the URL 400s). */
+      blob: Blob;
+      mime: string;
+      codec: VideoCodecKind;
+      width?: number;
+      height?: number;
+      fps?: number;
+      expiresInSeconds?: number;
+    }
+  | { kind: "login-required" }
+  | { kind: "unavailable"; reason: string };
+
+/** A selectable YouTube video quality (source-local shape; mapped to VideoQualityOption). */
+export interface YoutubeVideoQuality {
+  key: string;
+  label: string;
+  height: number;
+  fps?: number;
+  codec: VideoCodecKind;
+  bandwidth?: number;
+}
+
 /** The Electron-only runtime (youtubei.js) that resolves a videoId to a playable URL. */
 export interface YoutubeRuntime {
   resolveAudio: (videoId: string, opts?: { trace?: YoutubeTrace }) => Promise<YoutubePlayback>;
+  /** Resolve a video-only track at a target height (download). Absent → no video support. */
+  resolveVideo?: (
+    videoId: string,
+    opts?: { maxHeight?: number; trace?: YoutubeTrace },
+  ) => Promise<YoutubeVideoPlayback>;
+  /** List selectable video qualities for the download picker. */
+  listVideoQualities?: (
+    videoId: string,
+    opts?: { trace?: YoutubeTrace },
+  ) => Promise<YoutubeVideoQuality[]>;
 }
 
 export interface YoutubeSourceDeps {
@@ -165,6 +206,52 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     }
   }
 
+  async function resolveVideo(
+    externalId: string,
+    opts?: StreamVideoResolveOptions,
+  ): Promise<StreamVideoResolveResult> {
+    if (!deps.runtime?.resolveVideo) {
+      return { kind: "error", message: "YouTube video download needs the desktop runtime" };
+    }
+    const trace = opts?.trace ? { ...opts.trace, sourceId: "youtube" as const } : undefined;
+    const playback = await deps.runtime.resolveVideo(externalId, {
+      maxHeight: parseMaxHeight(opts?.quality),
+      trace,
+    });
+    if (playback.kind === "login-required") return { kind: "requires-login" };
+    if (playback.kind !== "ok") return { kind: "error", message: playback.reason };
+    const video: PlayableVideoTrack = {
+      // Blob transport: youtubei already downloaded the bytes (range fetcher + PoToken).
+      blob: playback.blob,
+      mime: playback.mime,
+      codec: playback.codec,
+      width: playback.width,
+      height: playback.height,
+      fps: playback.fps,
+      expiresAt: playback.expiresInSeconds
+        ? deps.now() + playback.expiresInSeconds * 1000
+        : undefined,
+    };
+    return { kind: "ok", video };
+  }
+
+  async function listVideoQualities(
+    externalId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<VideoQualityOption[]> {
+    if (!deps.runtime?.listVideoQualities) return [];
+    void opts;
+    const qualities = await deps.runtime.listVideoQualities(externalId);
+    return qualities.map((q) => ({
+      key: q.key,
+      label: q.label,
+      height: q.height,
+      fps: q.fps,
+      codec: q.codec,
+      bandwidth: q.bandwidth,
+    }));
+  }
+
   return {
     id: "youtube",
     label: "YouTube",
@@ -172,7 +259,16 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     isAuthed: () => Boolean(deps.getCookie?.()),
     search,
     resolve,
+    resolveVideo,
+    listVideoQualities,
   };
+}
+
+/** Parse a quality key ("1080" / "max" / undefined) into a max-height cap. */
+function parseMaxHeight(quality?: string): number | undefined {
+  if (!quality || quality === "max") return undefined;
+  const n = Number(quality);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
 function traceYoutube(

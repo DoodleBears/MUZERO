@@ -15,8 +15,8 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 基础设施：视频轨解析 + 清晰度模型 + 下载计划 resolver（纯函数，零 mux） | 🔄 Bili 切片 ✅（YouTube `pickAdaptiveVideo` 待做） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | 🔄 orchestrator + mediabunny mux ✅ 实时 E2E（player-store 入库 / saveFile / Worker 待接） | [Phase 2 Checklist](#phase-2-checklist) |
+| 1 | 基础设施：视频轨解析 + 清晰度模型 + 下载计划 resolver（纯函数，零 mux） | ✅ Bili + YouTube 切片（实时 E2E 验证） | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | 🔄 orchestrator + mux + Bili/YT 下载 ✅ 实时 E2E（player-store 入库 / saveFile / Worker 待接） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -129,7 +129,9 @@ src/
 │   ├── bili/
 │   │   └── bili-video.ts            # 新：parseDashVideo() + selectVideoByResolution()（镜像 bili-resolve 的 audio 选择）✅
 │   ├── youtube/
-│   │   └── youtube-formats.ts       # 扩：pickAdaptiveVideo()（镜像 pickAdaptiveAudio）
+│   │   ├── youtube-formats.ts       # 扩：pickAdaptiveVideo/videoCodecOf/videoMimeFor ✅
+│   │   ├── youtube-source.ts        # 扩：resolveVideo/listVideoQualities（映射运行时）✅
+│   │   └── youtube-ytjs.ts          # 扩：运行时 resolveVideo（info.download blob）/listVideoQualities ✅
 │   ├── video-quality.ts             # 新：跨源 label/排序（videoQualityLabel + sortVideoQualitiesDesc，bili 已消费）✅
 │   ├── download-plan.ts             # 新：buildDownloadPlan()（纯，pair video+audio → DownloadPlan）✅
 │   ├── mux/
@@ -236,7 +238,7 @@ export interface StreamSourceProvider {
 | 源 | 新增纯函数（隔离点） | 机制 |
 |---|---|---|
 | **Bilibili** | `parseDashVideo(data)` · `selectVideoByResolution(streams, opts)`（镜像现有 `parseDashAudio`/`selectAudioByPreference`，落新文件 [`bili-video.ts`](../../../../src/streamsrc/bili/bili-video.ts) ✅；选择按目标 `maxHeight` + `codecPreference` 容器兼容默认 AVC-first） | **复用已验证的 `resolve` 请求**（view→cid→playurl，§1.4）：同一 playurl 响应**已含 `dash.video[]`**（`id`(qn)/`codecs`/`width×height`/`frameRate`），现被丢弃。新增 `resolveVideo` 读视频轨；为覆盖 4K/HDR/AV1 把**视频侧** `fnval` 由现 `16` 提到 `4048`（番剧/大会员 `12240`），**不动音频路径**。`qn`→360/480/720/1080/4K，`SESSDATA` 决定可见档。CDN 排序复用 `prioritizeBiliUrls`、过期复用 `deadlineFromUrl`。 |
-| **YouTube** | `pickAdaptiveVideo(formats, key)`（镜像 [`pickAdaptiveAudio`](../../../../src/streamsrc/youtube/youtube-formats.ts)） | InnerTube `streamingData.adaptiveFormats[]` 的 `mimeType` 以 `video/` 开头者；`qualityLabel`(360p/1080p60/2160p)、`width/height/fps`；ciphered URL 复用既有 sig/n + PoToken 解密（[`youtube-ytjs.ts`](../../../../src/streamsrc/youtube/youtube-ytjs.ts)）。选档**先按 `height/fps/hdr`**，codec 仅决定容器配对（见 §4.2 + 下注）。 |
+| **YouTube** | `pickAdaptiveVideo(formats, opts)`（[`youtube-formats.ts`](../../../../src/streamsrc/youtube/youtube-formats.ts) ✅）+ 运行时 `resolveVideo`/`listVideoQualities`（[`youtube-ytjs.ts`](../../../../src/streamsrc/youtube/youtube-ytjs.ts) ✅） | 复用既有 youtubei.js + **PoToken** 链：`getInfo` → `adaptive_formats` 选 video-only（按 `height`，AVC-first 容器兼容）→ **用 youtubei 自带 range 下载器 `info.download` 取 blob**（deciphered 直链单 GET 会 400，故走 blob 传输，与音频同源）。`PlayableVideoTrack` 因此 `blob?`（YouTube）/`url?`（B站）二选一。 |
 
 > **不在 DJ/store/UI 散落 `if(source==="bili")`**（规则 5/10）：源差异全部收进各 provider 的纯映射函数；上层只调 `listVideoQualities`/`resolveVideo`。
 
@@ -375,7 +377,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 **Tasks:**
 - [x] **Bilibili 视频轨解析/选档（低风险，先行）**：新文件 `bili-video.ts` 的 `parseDashVideo` + `selectVideoByResolution`（镜像音频；codec 容器兼容默认 AVC-first，可配置）。✅ 9 单测全绿。
 - [x] **Bilibili 视频 resolve**：`bili-source.ts` 加 `resolveVideo`/`listVideoQualities`，视频侧 `fnval` 由 `16` 提至 `4048`——复用已验证的 view→cid→playurl（§1.4），音频路径未动（34 bili 测全绿，含既有音频）；provider.ts 加 `PlayableVideoTrack`/`VideoQualityOption`/`resolveVideo?`/`listVideoQualities?`。✅
-- [ ] **YouTube（脆弱，独立验收）**：`youtube-formats.ts` 加 `pickAdaptiveVideo`（按 `height/fps/hdr` 选档，codec 仅决定容器配对、**不硬编码画质排名**）；复用 [`youtube-ytjs.ts`](../../../../src/streamsrc/youtube/youtube-ytjs.ts) 的 sig/n + PoToken（§4.6）。
+- [x] **YouTube（脆弱，独立验收）**：`youtube-formats.ts` `pickAdaptiveVideo`（按 `height` 选、AVC-first 容器兼容，不硬编码画质排名）+ `youtube-ytjs.ts` 运行时 `resolveVideo`（`info.download` blob 传输）/`listVideoQualities`；复用既有 PoToken 链（§4.6）。✅ 实时 E2E。
 - [x] `video-quality.ts` 跨源 label/排序（`videoQualityLabel`/`sortVideoQualitiesDesc`，bili `listVideoQualities` 已消费）。✅ 跨源「归一」由 `provider.VideoQualityOption` 统一契约达成，无需独立 normalize 层（YT 落地时复用同 util）。
 - [ ] `provider.ts` 加可选 `listVideoQualities`/`resolveVideo`；bili/youtube source 实装，netease 不实装。
 - [x] `mux/mux-strategy.ts` `chooseMuxStrategy` + `classifyAudioCodec`（默认 copy、音轨配对视频容器族、mkv 归档兜底、force-mp4 才 transcode）+ `download-plan.ts` `buildDownloadPlan`（纯）。✅ 16 单测全绿（`resolveDownloadPlan` 的 provider-calling 包装并入 Phase 2 orchestrator）。
@@ -386,7 +388,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 #### Phase 1 Checklist
 - [x] Bilibili：canned playurl（含 `dash.video[]`）能列出清晰度档并选中目标分辨率直链。✅
 - [x] **Bilibili 实时 E2E（harness）**：经 dev 控制端点 `streamProbe` + [`scripts/stream-probe.mjs`](../../../../scripts/stream-probe.mjs) 打真实 Bilibili——search→`resolveVideo` 返回 **480P AVC `video/mp4`**（带 Referer/UA、`expiresAt`），`listVideoQualities`=[480P,360P]（匿名封顶 480P，高清需登录，符合预期），audio 基线 ok。✅
-- [ ] YouTube：`pickAdaptiveVideo` 对 canned player 响应选档（YT 切片待做，§1.4 脆弱独立验收）。
+- [x] YouTube：`pickAdaptiveVideo` 单测（12 测）+ **实时 E2E**——`EvuXIk2Bh78` 列出 144P–1080P AVC 全档（YT 匿名给全分辨率，无 480P 封顶），`resolveVideo` 取流成功。✅
 - [x] Bilibili：视频侧 `fnval=4048` 取流后**音频路径回归无变化**（既有音频 resolve/播放测试全绿）。✅
 - [x] `chooseMuxStrategy` 对 AVC+AAC→mp4 copy、VP9/AV1+Opus→webm copy、强制 mp4 跨编码→transcode 全分支命中（穷举单测）。✅
 - [x] 全项目 `tsc` 绿；全量 Vitest **3165 passed / 0 failed**，既有音频 resolve/缓存测试无回归。✅
@@ -403,7 +405,9 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 - [ ] 复用 `bridge.saveFile` 实现「另存为文件」。
 
 #### Phase 2 Checklist
-- [x] **下载+mux 实时 E2E（harness）**：真实 B站 8s clip（BV1W8j76eEFd）→ resolveVideo(480P AVC)+audio → `mediaProxyUrl` 取字节(video 155KB + audio 66KB) → mediabunny copy-remux → 单个 **`video/mp4` 220KB**（≈两轨之和 → 证明无重编码）。驱动 [`scripts/stream-download.mjs`](../../../../scripts/stream-download.mjs) + dev `streamDownload` 控制命令。✅
+- [x] **下载+mux 实时 E2E（harness，两源）**：驱动 [`scripts/stream-download.mjs`](../../../../scripts/stream-download.mjs) + dev `streamDownload` 控制命令，copy-remux 均产出单 `video/mp4`（muxedBytes ≈ 两轨之和 → 无重编码）：
+  - **Bilibili** `BV1X163BQEo8` @360p → video 22.3MB + audio 5.4MB → **27.7MB mp4**（`mediaProxyUrl` 取字节，注 Referer/UA）；先前 8s clip @480p → 220KB mp4。
+  - **YouTube** `EvuXIk2Bh78` @144p → video 1.96MB + audio 4.2MB → **6.16MB mp4**（blob 传输：youtubei `info.download` range 取流 + PoToken；deciphered 直链单 GET 会 400）。
 - [ ] Electron 手测：选档 → 下载 → 库里出现可离线播放的本地视频 track（需 player-store `downloadStreamedVideo` 落 `writeMediaStorageBlob` + 建 track）。
 - [ ] 另存为文件能在文件管理器打开、音视频同步、可 seek。
 - [ ] 大文件（>200MB）走持久存储而非 IndexedDB，下载中内存不爆（第二次循环复测，prod build）。
@@ -509,6 +513,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | 2026-06-20 | DoodleBear | Initial draft：视频清晰度选择 + 直接下载到本地导入 + mediabunny mux 方案，作为 external-streaming-sources PRD 的视频向扩展 |
 | 2026-06-20 | DoodleBear | 决策：**绝不打包 FFmpeg**。移除 `@mediabunny/server` / 主进程转码；改为 copy-remux 优先（原生容器 mp4/webm）+ 可选 WebCodecs / BYO 系统 ffmpeg。Open Q1 关闭 |
 | 2026-06-20 | DoodleBear | 纳入深度研究教训：§4.1 codec 偏好不硬编码 + Bili 参考改 yt-dlp `bilibili.py`（bilibili-API-collect/BBDown 已关停）；§4.2 Mediabunny 容器矩阵 +「音轨配对视频容器族」（几乎 100% 纯 copy）；新增 §4.6 提取层韧性（youtubei.js/bgutils 钉版本 + 丢格式不崩 + PoToken 渲染器铸）；§8 Bili 合规事件；§9 活源更新；Open Q6–8 关闭 |
+| 2026-06-20 | DoodleBear | YouTube 视频接入：`pickAdaptiveVideo` + 运行时 `resolveVideo`(info.download blob)/`listVideoQualities`，`PlayableVideoTrack` 加 blob 传输（YT）/url（B站）。两源下载+mux 实时 E2E 通过（Bili `BV1X163BQEo8`、YT `EvuXIk2Bh78`）。Phase 1 双源完成 |
 | 2026-06-20 | DoodleBear | 对齐现状基线：新增 §1.4「Bilibili 音频整条已打通」——同一已验证 playurl 响应已含 `dash.video[]`（现被丢弃），故 Bili 视频是对已验证请求的纯增量（仅加 `parseDashVideo`/`resolveVideo` + 视频侧 `fnval` 16→4048，不动音频路径）；§4.1 + §6 改为「Bili 低风险先行、YouTube 脆弱独立验收」 |
 
 ---
