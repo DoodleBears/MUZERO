@@ -58,6 +58,7 @@ interface MuzeroApi {
     showFromTray(): Promise<void>;
     quitApp(): Promise<void>;
     getState(): Promise<DesktopWindowState>;
+    repaint(): Promise<void>;
     onClickThroughHover(callback: (hovered: boolean) => void): () => void;
     onStateChange(callback: (state: DesktopWindowState) => void): () => void;
   };
@@ -215,6 +216,7 @@ export function createElectronBridge(): DesktopBridge {
           getState: () =>
             api.windowControls?.getState() ??
             Promise.resolve({ fullscreen: false, maximized: false, pinMode: "off" }),
+          repaint: () => api.windowControls?.repaint() ?? Promise.resolve(),
           onClickThroughHover: (callback) =>
             api.windowControls?.onClickThroughHover(callback) ?? (() => {}),
           onStateChange: (callback) => api.windowControls?.onStateChange(callback) ?? (() => {}),

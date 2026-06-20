@@ -392,6 +392,13 @@ function registerIpc({ trayController } = {}) {
     const win = senderWindow(event);
     return windowState(win);
   });
+
+  // Force a full repaint to flush the macOS transparent-window stale frame left
+  // when a heavy layer (the ambient background canvas) is torn down — Chromium
+  // doesn't reliably clear the freed region on a transparent surface.
+  ipcMain.handle("muzero:window:repaint", (event) => {
+    senderWindow(event).webContents.invalidate();
+  });
 }
 
 module.exports = { registerIpc };

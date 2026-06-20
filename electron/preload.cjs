@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld("muzero", {
     showFromTray: () => ipcRenderer.invoke("muzero:window:showFromTray"),
     quitApp: () => ipcRenderer.invoke("muzero:window:quitApp"),
     getState: () => ipcRenderer.invoke("muzero:window:getState"),
+    repaint: () => ipcRenderer.invoke("muzero:window:repaint"),
     onClickThroughHover: (callback) => {
       const listener = (_event, hovered) => callback(hovered === true);
       ipcRenderer.on(CLICK_THROUGH_HOVER_CHANNEL, listener);

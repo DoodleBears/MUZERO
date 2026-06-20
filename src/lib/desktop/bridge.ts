@@ -101,6 +101,12 @@ export interface DesktopWindowControls {
   showFromTray?: () => Promise<void>;
   quitApp?: () => Promise<void>;
   getState: () => Promise<DesktopWindowState>;
+  /**
+   * Force a full window repaint (`webContents.invalidate()`). Clears the macOS
+   * transparent-window stale-frame ghost left when a heavy layer (the ambient
+   * background canvas) is torn down on a transparent surface. No-op off Electron.
+   */
+  repaint?: () => Promise<void>;
   onClickThroughHover?: (callback: (hovered: boolean) => void) => () => void;
   onStateChange?: (callback: (state: DesktopWindowState) => void) => () => void;
 }

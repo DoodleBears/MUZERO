@@ -25,6 +25,7 @@ import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
+import { useTransparentWindowRepaint } from "@/hooks/use-transparent-window-repaint";
 import {
   nowPlayingCoverBacklightVars,
   resolveNowPlayingCoverBacklightAppearance,
@@ -253,6 +254,10 @@ export default function App() {
   const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
   const immersiveLyricsActive = lyricsOnlyIdle || (foregroundHidden && lyricsVisible);
   const ambientBackdropActive = ambientBackgroundActive && !lyricsOnlyIdle;
+  // When the ambient background tears down (e.g. on pin → lyrics-only), force a
+  // window repaint so the macOS transparent surface doesn't keep the last painted
+  // frame as a "stale ghost". No-op off the Electron desktop shell.
+  useTransparentWindowRepaint(ambientBackdropActive);
 
   // The non-active tabs stay MOUNTED (display:none) to keep their subscriptions warm.
   // App re-renders on transient chrome state (idle/hover during a drag), and these
