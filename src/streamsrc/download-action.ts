@@ -12,7 +12,13 @@ import {
   putDownloadJob,
   updateDownloadJob,
 } from "@/db/download-job-repo";
-import { createSession, getSession, getSettings, saveSettings } from "@/db/repositories";
+import {
+  createSession,
+  findSessionByStreamPlaylist,
+  getSession,
+  getSettings,
+  saveSettings,
+} from "@/db/repositories";
 import type { DownloadJob } from "@/db/types";
 import i18n from "@/i18n/i18n";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
@@ -26,9 +32,11 @@ import {
   type DownloadStreamedVideoResult,
   downloadStreamedVideoToLibrary,
 } from "./download-to-library";
+import { cacheStreamPlaylistCover, cacheStreamPlaylistTrackCovers } from "./playlist-cover-cache";
 import type { StreamPart, StreamSearchHit, VideoQualityOption } from "./provider";
 import { createStreamSource } from "./registry";
 import { createStreamHttp } from "./stream-http";
+import { addHitsToSet } from "./streamed-track-repo";
 
 /** Effective default download resolution when the user hasn't set one (Settings shows this). */
 export const DEFAULT_VIDEO_QUALITY = "1080";
@@ -94,13 +102,15 @@ export async function downloadStreamedHit(
   opts?: {
     quality?: string;
     audioOnly?: boolean;
+    /** Land the track in THIS set (favlist/playlist downloads); else the generic Downloads set. */
+    sessionId?: string;
     onProgress?: (stage: DownloadProgressStage, ratio: number) => void;
   },
 ): Promise<DownloadStreamedVideoResult> {
   const settings = await getSettings();
   const source = makeSource(hit.source, settings.streamSources?.[hit.source]?.cookie);
   if (!source) return { kind: "error", message: `${hit.source} unavailable` };
-  const sessionId = await ensureDownloadsSet();
+  const sessionId = opts?.sessionId ?? (await ensureDownloadsSet());
   const bridge = resolveDesktopBridge();
   // No explicit pick (batch / quick download) → fall back to the configured default quality;
   // the source's selector degrades to the closest available tier (prefer-match-else-downgrade).
@@ -260,17 +270,49 @@ export async function downloadHitsAsVideo(
   return { queued: hits.length };
 }
 
-/** Import a source playlist/favlist's videos, then enqueue each for video download. */
+/**
+ * Import a favlist/playlist's videos INTO its own bound set (create/find by `streamPlaylistRef`),
+ * add the items so the 歌单 shows them, then enqueue each for video download targeting that set —
+ * so the synced favlist's tracks become local videos IN PLACE (not dumped in a generic bucket).
+ */
 export async function downloadPlaylistVideos(
   sourceId: StreamSearchHit["source"],
   mediaId: string,
-  opts?: { quality?: string },
-): Promise<{ queued: number }> {
+  opts?: { quality?: string; name?: string; coverUrl?: string },
+): Promise<{ queued: number; setId: string | null }> {
   const settings = await getSettings();
   const source = makeSource(sourceId, settings.streamSources?.[sourceId]?.cookie);
-  if (!source?.importPlaylist) return { queued: 0 };
+  if (!source?.importPlaylist) return { queued: 0, setId: null };
   const hits = await source.importPlaylist(mediaId);
-  return downloadHitsAsVideo(hits, opts);
+  if (hits.length === 0) return { queued: 0, setId: null };
+
+  let set = await findSessionByStreamPlaylist(sourceId, mediaId);
+  if (!set) {
+    set = await createSession({
+      name: opts?.name ?? mediaId,
+      seedPrompt: "",
+      config: { autoExtend: false },
+      displayMode: "video",
+      streamPlaylistRef: { source: sourceId, id: mediaId },
+    });
+    if (opts?.coverUrl)
+      void cacheStreamPlaylistCover({ sessionId: set.id, coverUrl: opts.coverUrl });
+  }
+  await addHitsToSet(set.id, hits);
+  void cacheStreamPlaylistTrackCovers({ sessionId: set.id, hits });
+
+  const quality = opts?.quality ?? settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY;
+  for (const hit of hits) {
+    await enqueueDownload({
+      source: hit.source,
+      externalId: hit.externalId,
+      title: hit.title,
+      coverUrl: hit.coverUrl,
+      sessionId: set.id,
+      quality,
+    });
+  }
+  return { queued: hits.length, setId: set.id };
 }
 
 // ---- Persistent download queue (PRD 20260621): concurrency + retry + restart recovery ----
@@ -298,6 +340,9 @@ function getQueueRunner(): DownloadQueueRunner {
         {
           quality: job.quality,
           audioOnly: job.audioOnly,
+          // Land favlist/playlist downloads in their own set (the bound 歌单), not the generic
+          // Downloads bucket — so the synced set's items become local videos in place.
+          sessionId: job.sessionId,
           // P1: byte-fraction only (×100). Phase 2 (resume) reports real bytes.
           onProgress: (stage, ratio) => {
             if (stage === "fetch") onProgress(Math.round(ratio * 100), 100);

@@ -122,6 +122,7 @@
     "allParts": "전체 {{count}}개 다운로드",
     "downloadingPart": "다운로드 중 {{done}} / {{total}}…",
     "allVideos": "동영상으로 다운로드",
+    "queuedVideos_other": "{{count}}개 영상을 다운로드 대기열에 추가함",
     "queueTitle": "다운로드",
     "queueEmpty": "다운로드 없음",
     "queueClear": "완료 항목 지우기",

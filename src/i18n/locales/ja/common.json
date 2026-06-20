@@ -122,6 +122,7 @@
     "allParts": "すべて（{{count}}）をダウンロード",
     "downloadingPart": "ダウンロード中 {{done}} / {{total}}…",
     "allVideos": "動画としてダウンロード",
+    "queuedVideos_other": "{{count}} 本の動画をダウンロード待ち行列に追加しました",
     "queueTitle": "ダウンロード",
     "queueEmpty": "ダウンロードはまだありません",
     "queueClear": "完了分をクリア",

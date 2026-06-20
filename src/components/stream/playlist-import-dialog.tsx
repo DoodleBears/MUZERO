@@ -86,6 +86,15 @@ export function PlaylistImportDialog({
       notify.success(t("playlistImport.added", { added, skipped, name: setName }));
     });
 
+  const downloadAsVideo = () =>
+    run(async () => {
+      const { queued } = await downloadPlaylistVideos(pl.source, pl.id, {
+        name: pl.name,
+        coverUrl: pl.coverUrl,
+      });
+      notify.success(t("download.queuedVideos", { count: queued }));
+    });
+
   return (
     <Dialog
       open
@@ -228,10 +237,7 @@ export function PlaylistImportDialog({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => {
-                  void downloadPlaylistVideos(pl.source, pl.id);
-                  onClose();
-                }}
+                onClick={downloadAsVideo}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-60"
               >
                 <Download className="size-4" />

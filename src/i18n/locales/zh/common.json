@@ -122,6 +122,7 @@
     "allParts": "下载全部 {{count}} P",
     "downloadingPart": "正在下载 {{done}} / {{total}}…",
     "allVideos": "下载为视频",
+    "queuedVideos_other": "已加入下载队列：{{count}} 个视频",
     "queueTitle": "下载",
     "queueEmpty": "暂无下载",
     "queueClear": "清除已完成",

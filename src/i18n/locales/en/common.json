@@ -129,6 +129,8 @@
     "allParts": "Download all {{count}}",
     "downloadingPart": "Downloading {{done}} / {{total}}…",
     "allVideos": "Download as video",
+    "queuedVideos_one": "Queued {{count}} video for download",
+    "queuedVideos_other": "Queued {{count}} videos for download",
     "queueTitle": "Downloads",
     "queueEmpty": "No downloads yet",
     "queueClear": "Clear finished",
