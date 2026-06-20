@@ -38,11 +38,11 @@ import {
   downloadStreamedVideoToLibrary,
   recoverStreamedTrackCover,
 } from "@/streamsrc/download-to-library";
-import { muxCopyTracks } from "@/streamsrc/mux/mux-mediabunny";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { parseBareStreamId, parseStreamLink } from "@/streamsrc/stream-link";
 import { getSearchPerfSnapshot, resetSearchPerf } from "@/workers/search-client";
+import { muxCopyTracksViaWorker } from "@/workers/video-mux-client";
 import { getSearchDriver } from "./search-drive";
 
 export interface PerfControlCommand {
@@ -521,7 +521,7 @@ export function startPerfControlBridge(): void {
         videoRes.video.blob ?? fetchBytes(videoRes.video.url ?? "", videoRes.video.headers),
         audioRes.stream.blob ?? fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers),
       ]);
-      const muxed = await muxCopyTracks(videoBlob, audioBlob, plan.strategy.container);
+      const muxed = await muxCopyTracksViaWorker(videoBlob, audioBlob, plan.strategy.container);
       // Persist to the app's media storage so the file is KEPT (not just measured).
       let savedStorageKey: string | undefined;
       let savedBytes: number | undefined;
@@ -611,7 +611,7 @@ export function startPerfControlBridge(): void {
             if (!resp.ok) throw new Error(`fetch ${resp.status}`);
             return resp.blob();
           },
-          mux: (v, a, container) => muxCopyTracks(v, a, container),
+          mux: (v, a, container) => muxCopyTracksViaWorker(v, a, container),
           posterFrame: async (video, durationSec) => {
             const { extractUsefulVideoPosterFrame } = await import("@/lib/video-poster-frame");
             const file = new File([video], "download.mp4", { type: video.type || "video/mp4" });

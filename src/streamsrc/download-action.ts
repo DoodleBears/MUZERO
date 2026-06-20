@@ -9,11 +9,11 @@ import { createSession, getSession, getSettings, saveSettings } from "@/db/repos
 import i18n from "@/i18n/i18n";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { extractUsefulVideoPosterFrame } from "@/lib/video-poster-frame";
+import { muxCopyTracksViaWorker } from "@/workers/video-mux-client";
 import {
   type DownloadStreamedVideoResult,
   downloadStreamedVideoToLibrary,
 } from "./download-to-library";
-import { muxCopyTracks } from "./mux/mux-mediabunny";
 import type { StreamSearchHit, VideoQualityOption } from "./provider";
 import { createStreamSource } from "./registry";
 import { createStreamHttp } from "./stream-http";
@@ -101,7 +101,7 @@ export async function downloadStreamedHit(
         if (!resp.ok) throw new Error(`fetch ${resp.status}`);
         return resp.blob();
       },
-      mux: (video, audio, container) => muxCopyTracks(video, audio, container),
+      mux: (video, audio, container) => muxCopyTracksViaWorker(video, audio, container),
       posterFrame: async (video, durationSec) => {
         const file = new File([video], "download.mp4", { type: video.type || "video/mp4" });
         const poster = await extractUsefulVideoPosterFrame(file, { durationSec });
