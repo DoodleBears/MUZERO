@@ -124,6 +124,7 @@
     "allVideos": "動画としてダウンロード",
     "queuedVideos_other": "{{count}} 本の動画をダウンロード待ち行列に追加しました",
     "queueTitle": "ダウンロード",
+    "inProgress_other": "ダウンロード中 {{count}}",
     "queueEmpty": "ダウンロードはまだありません",
     "queueClear": "完了分をクリア",
     "statusPending": "待機中",

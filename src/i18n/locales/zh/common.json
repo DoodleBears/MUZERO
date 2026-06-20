@@ -124,6 +124,7 @@
     "allVideos": "下载为视频",
     "queuedVideos_other": "已加入下载队列：{{count}} 个视频",
     "queueTitle": "下载",
+    "inProgress_other": "下载中 {{count}}",
     "queueEmpty": "暂无下载",
     "queueClear": "清除已完成",
     "statusPending": "排队中",

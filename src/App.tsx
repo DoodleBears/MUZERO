@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
+import { DownloadProgressBadge } from "@/components/downloads/download-progress-badge";
 import { AlbumCoverAppearancePanel } from "@/components/player/album-cover-appearance-panel";
 import { ChangelogModal } from "@/components/player/changelog-modal";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
@@ -436,6 +437,9 @@ export default function App() {
 
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
         <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
+
+        {/* Floating download-queue progress chip (favlist/batch downloads); hidden when idle. */}
+        <DownloadProgressBadge />
 
         {/* Dev perf HUD, behind the same visible Settings switch as prod. */}
         {import.meta.env.DEV && settings.perfHudEnabled && <DevPerfPanel />}

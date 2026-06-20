@@ -132,6 +132,8 @@
     "queuedVideos_one": "Queued {{count}} video for download",
     "queuedVideos_other": "Queued {{count}} videos for download",
     "queueTitle": "Downloads",
+    "inProgress_one": "Downloading {{count}}",
+    "inProgress_other": "Downloading {{count}}",
     "queueEmpty": "No downloads yet",
     "queueClear": "Clear finished",
     "statusPending": "Queued",
