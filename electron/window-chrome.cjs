@@ -16,37 +16,27 @@
 // (styles.css, keyed off data-desktop-platform). Linux stays opaque + framed.
 const OPAQUE_BACKGROUND = "#09090b";
 const TRANSPARENT_BACKGROUND = "#00000000";
-// macOS only: a 1/255-alpha backing instead of pure #00000000. A FULLY transparent
-// macOS window backing makes the compositor skip clearing the surface, so moving
-// content (the scrolling / cascading lyrics in the transparent capture) leaves
-// stale-frame trails — the "残影" where two lyric lines smear over each other.
-// A minimal non-zero alpha gives Chromium a surface to clear every frame, killing the
-// trails while staying visually invisible (~0.4% black, only ever shown in the
-// lyrics-only transparent state; the opaque DOM background covers it otherwise).
-// #01010101 is format-agnostic: alpha = 1/255 whether parsed as #AARRGGBB or
-// #RRGGBBAA. Windows clears fine with pure transparent, so it keeps #00000000.
-const MAC_TRANSPARENT_BACKGROUND = "#01010101";
 
+// macOS + Windows run a FRAMELESS transparent window; Linux stays opaque + framed.
+//
+// macOS was previously framed (`titleBarStyle: "hiddenInset"`, to keep the native
+// traffic lights). That is the one structural difference from Windows — and it's why
+// the transparent lyrics overlay left scroll "残影" trails ONLY on macOS: a FRAMED
+// transparent macOS window is composited by the window server differently and does not
+// continuously clear moving content, whereas a FRAMELESS one (like Windows, which never
+// trailed) does. So macOS now matches Windows exactly: frameless, pure-transparent
+// backing, app-drawn window controls (native traffic lights are gone — the tradeoff for
+// a trail-free transparent overlay; `transparent`/`frame` can't be toggled at runtime).
 function resolveWindowChrome(platform) {
   const isMac = platform === "darwin";
   const isWindows = platform === "win32";
   const transparent = isMac || isWindows;
-  const backgroundColor = isMac
-    ? MAC_TRANSPARENT_BACKGROUND
-    : transparent
-      ? TRANSPARENT_BACKGROUND
-      : OPAQUE_BACKGROUND;
   return {
-    backgroundColor,
-    frame: !isWindows,
-    titleBarStyle: isMac ? "hiddenInset" : undefined,
+    backgroundColor: transparent ? TRANSPARENT_BACKGROUND : OPAQUE_BACKGROUND,
+    frame: !transparent,
+    titleBarStyle: undefined,
     transparent,
   };
 }
 
-module.exports = {
-  MAC_TRANSPARENT_BACKGROUND,
-  OPAQUE_BACKGROUND,
-  resolveWindowChrome,
-  TRANSPARENT_BACKGROUND,
-};
+module.exports = { OPAQUE_BACKGROUND, resolveWindowChrome, TRANSPARENT_BACKGROUND };
