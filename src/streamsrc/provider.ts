@@ -88,6 +88,17 @@ export interface VideoQualityOption {
   bandwidth?: number;
 }
 
+/** One part (分P) of a multi-part video — Bilibili splits a BV into pages. */
+export interface StreamPart {
+  /** Resolvable ref for this part (Bilibili: `bvid#cid`). */
+  externalId: string;
+  /** 1-based part number. */
+  index: number;
+  /** Part title (Bilibili `part`), or a `P{n}` fallback. */
+  title: string;
+  durationSec?: number;
+}
+
 export interface StreamVideoResolveOptions {
   /** Preferred quality key from {@link VideoQualityOption.key} (e.g. `"1080"` / `"max"`). */
   quality?: string;
@@ -141,6 +152,8 @@ export interface StreamSourceProvider {
     externalId: string,
     opts?: StreamVideoResolveOptions,
   ): Promise<StreamVideoResolveResult>;
+  /** List the parts (分P) of a multi-part video; returns [] for single-part (no chooser needed). */
+  listParts?(externalId: string, opts?: { signal?: AbortSignal }): Promise<StreamPart[]>;
   /** The logged-in user's playlists (optional; requires login). */
   getUserPlaylists?(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]>;
   /** Resolve specific track ids (from a pasted song link) to hits (optional). */

@@ -1,18 +1,23 @@
-import { Check, Download, Loader2, X } from "lucide-react";
+import { Check, Download, Layers, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type DownloadProgressStage,
   downloadStreamedHit,
   listDownloadQualities,
+  listVideoParts,
 } from "@/streamsrc/download-action";
-import type { StreamSearchHit, VideoQualityOption } from "@/streamsrc/provider";
+import type { StreamPart, StreamSearchHit, VideoQualityOption } from "@/streamsrc/provider";
+
+/** Which part(s) the chosen quality applies to. */
+type Target = { kind: "single"; externalId: string; title: string } | { kind: "all" };
 
 type Phase =
   | { kind: "loading" }
-  | { kind: "pick"; qualities: VideoQualityOption[] }
-  | { kind: "downloading"; stage: DownloadProgressStage }
-  | { kind: "done" }
+  | { kind: "parts" } // multi-P chooser (qualities + parts already in state)
+  | { kind: "pick"; target: Target }
+  | { kind: "downloading"; label: string }
+  | { kind: "done"; message: string }
   | { kind: "error"; message: string };
 
 /** Rough download size from bitrate × duration (video-only bandwidth + a little audio). */
@@ -33,14 +38,26 @@ export function DownloadQualityDialog({
 }) {
   const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const [qualities, setQualities] = useState<VideoQualityOption[]>([]);
+  const [parts, setParts] = useState<StreamPart[]>([]);
 
   useEffect(() => {
     if (!hit) return;
     let cancelled = false;
     setPhase({ kind: "loading" });
-    listDownloadQualities(hit)
-      .then((qualities) => {
-        if (!cancelled) setPhase({ kind: "pick", qualities });
+    Promise.all([listDownloadQualities(hit), listVideoParts(hit)])
+      .then(([q, p]) => {
+        if (cancelled) return;
+        setQualities(q);
+        setParts(p);
+        setPhase(
+          p.length > 1
+            ? { kind: "parts" }
+            : {
+                kind: "pick",
+                target: { kind: "single", externalId: hit.externalId, title: hit.title },
+              },
+        );
       })
       .catch((err) => {
         if (!cancelled) setPhase({ kind: "error", message: String(err) });
@@ -52,27 +69,65 @@ export function DownloadQualityDialog({
 
   if (!hit) return null;
 
-  async function start(quality: VideoQualityOption) {
-    if (!hit) return;
-    setPhase({ kind: "downloading", stage: "fetch" });
-    const result = await downloadStreamedHit(hit, {
-      quality: quality.key,
-      onProgress: (stage) =>
-        setPhase((p) => (p.kind === "downloading" ? { kind: "downloading", stage } : p)),
-    });
-    if (result.kind === "downloaded") setPhase({ kind: "done" });
-    else if (result.kind === "requires-login")
-      setPhase({ kind: "error", message: t("download.loginRequired") });
-    else if (result.kind === "no-permission") setPhase({ kind: "error", message: result.reason });
-    else setPhase({ kind: "error", message: result.message });
-  }
-
   const stageLabel = (stage: DownloadProgressStage) =>
     stage === "fetch"
       ? t("download.stageFetch")
       : stage === "mux"
         ? t("download.stageMux")
         : t("download.stageStore");
+
+  function failPhase(result: { kind: string; reason?: string; message?: string }) {
+    if (result.kind === "requires-login")
+      setPhase({ kind: "error", message: t("download.loginRequired") });
+    else if (result.kind === "no-permission")
+      setPhase({ kind: "error", message: result.reason ?? "" });
+    else setPhase({ kind: "error", message: result.message ?? "" });
+  }
+
+  async function start(quality: VideoQualityOption) {
+    if (!hit || phase.kind !== "pick") return;
+    const target = phase.target;
+
+    if (target.kind === "single") {
+      setPhase({ kind: "downloading", label: stageLabel("fetch") });
+      const result = await downloadStreamedHit(
+        { ...hit, externalId: target.externalId, title: target.title },
+        {
+          quality: quality.key,
+          onProgress: (stage) => setPhase({ kind: "downloading", label: stageLabel(stage) }),
+        },
+      );
+      if (result.kind === "downloaded") setPhase({ kind: "done", message: t("download.done") });
+      else failPhase(result);
+      return;
+    }
+
+    // Download every part sequentially at the chosen quality.
+    let ok = 0;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      setPhase({
+        kind: "downloading",
+        label: t("download.downloadingPart", { done: i + 1, total: parts.length }),
+      });
+      const result = await downloadStreamedHit(
+        {
+          ...hit,
+          externalId: part.externalId,
+          title: part.title,
+          durationSec: part.durationSec ?? hit.durationSec,
+        },
+        { quality: quality.key },
+      );
+      if (result.kind === "downloaded") ok += 1;
+      else if (result.kind === "requires-login") {
+        failPhase(result);
+        return;
+      }
+      // other per-part errors: skip that part, keep going.
+    }
+    setPhase({ kind: "done", message: t("download.doneCount", { count: ok }) });
+  }
 
   return (
     <div
@@ -87,7 +142,7 @@ export function DownloadQualityDialog({
         className="absolute inset-0 size-full cursor-default"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-white/12 bg-popover/95 text-popover-foreground shadow-2xl ring-1 ring-black/10">
+      <div className="relative z-10 flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/12 bg-popover/95 text-popover-foreground shadow-2xl ring-1 ring-black/10">
         <div className="flex items-start gap-3 border-white/10 border-b px-4 py-3">
           <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary album-cover-radius">
             {hit.coverUrl ? (
@@ -103,7 +158,9 @@ export function DownloadQualityDialog({
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium text-sm">{hit.title}</div>
-            <div className="truncate text-muted-foreground text-xs">{t("download.subtitle")}</div>
+            <div className="truncate text-muted-foreground text-xs">
+              {phase.kind === "parts" ? t("download.parts") : t("download.subtitle")}
+            </div>
           </div>
           <button
             type="button"
@@ -115,21 +172,57 @@ export function DownloadQualityDialog({
           </button>
         </div>
 
-        <div className="p-2">
+        <div className="overflow-y-auto p-2">
           {phase.kind === "loading" && (
             <div className="flex items-center justify-center gap-2 px-3 py-8 text-muted-foreground text-sm">
               <Loader2 className="size-4 animate-spin" /> {t("download.loadingQualities")}
             </div>
           )}
 
+          {phase.kind === "parts" && (
+            <>
+              <button
+                type="button"
+                onClick={() => setPhase({ kind: "pick", target: { kind: "all" } })}
+                className="mb-1 flex w-full items-center gap-3 rounded-xl border border-primary/40 px-3 py-2.5 text-left transition-colors hover:bg-accent/60"
+              >
+                <Layers className="size-4 shrink-0 text-primary" />
+                <span className="font-medium text-sm">
+                  {t("download.allParts", { count: parts.length })}
+                </span>
+              </button>
+              {parts.map((part) => (
+                <button
+                  key={part.externalId}
+                  type="button"
+                  onClick={() =>
+                    setPhase({
+                      kind: "pick",
+                      target: { kind: "single", externalId: part.externalId, title: part.title },
+                    })
+                  }
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-accent/60"
+                >
+                  <span className="w-6 shrink-0 text-center text-muted-foreground text-xs tabular-nums">
+                    {part.index}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm">{part.title}</span>
+                </button>
+              ))}
+            </>
+          )}
+
           {phase.kind === "pick" &&
-            (phase.qualities.length === 0 ? (
+            (qualities.length === 0 ? (
               <p className="px-3 py-8 text-center text-muted-foreground text-sm">
                 {t("download.noQualities")}
               </p>
             ) : (
-              phase.qualities.map((q) => {
-                const size = estimateSize(q, hit.durationSec);
+              qualities.map((q) => {
+                const size = estimateSize(
+                  q,
+                  phase.target.kind === "all" ? undefined : hit.durationSec,
+                );
                 return (
                   <button
                     key={q.key}
@@ -160,7 +253,7 @@ export function DownloadQualityDialog({
 
           {phase.kind === "downloading" && (
             <div className="flex items-center justify-center gap-2 px-3 py-8 text-foreground text-sm">
-              <Loader2 className="size-4 animate-spin" /> {stageLabel(phase.stage)}
+              <Loader2 className="size-4 animate-spin" /> {phase.label}
             </div>
           )}
 
@@ -169,7 +262,7 @@ export function DownloadQualityDialog({
               <div className="grid size-10 place-items-center rounded-full bg-primary/15 text-primary">
                 <Check className="size-5" />
               </div>
-              <p className="text-sm">{t("download.done")}</p>
+              <p className="text-sm">{phase.message}</p>
               <button
                 type="button"
                 onClick={onClose}

@@ -118,9 +118,14 @@
     "stageMux": "Merging audio + video…",
     "stageStore": "Saving…",
     "done": "Saved to your library",
+    "doneCount_one": "Saved {{count}} part to your library",
+    "doneCount_other": "Saved {{count}} parts to your library",
     "failed": "Download failed",
     "loginRequired": "Log in to this source to unlock higher quality",
-    "close": "Close"
+    "close": "Close",
+    "parts": "Parts",
+    "allParts": "Download all {{count}}",
+    "downloadingPart": "Downloading {{done}} / {{total}}…"
   },
   "streamSources": {
     "title": "Online sources",

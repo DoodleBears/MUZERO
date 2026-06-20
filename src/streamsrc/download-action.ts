@@ -14,7 +14,7 @@ import {
   type DownloadStreamedVideoResult,
   downloadStreamedVideoToLibrary,
 } from "./download-to-library";
-import type { StreamSearchHit, VideoQualityOption } from "./provider";
+import type { StreamPart, StreamSearchHit, VideoQualityOption } from "./provider";
 import { createStreamSource } from "./registry";
 import { createStreamHttp } from "./stream-http";
 
@@ -49,6 +49,14 @@ export async function listDownloadQualities(hit: StreamSearchHit): Promise<Video
   const source = makeSource(hit.source, settings.streamSources?.[hit.source]?.cookie);
   if (!source?.listVideoQualities) return [];
   return source.listVideoQualities(hit.externalId);
+}
+
+/** List a video's parts (分P); [] for single-part or sources without multi-part support. */
+export async function listVideoParts(hit: StreamSearchHit): Promise<StreamPart[]> {
+  const settings = await getSettings();
+  const source = makeSource(hit.source, settings.streamSources?.[hit.source]?.cookie);
+  if (!source?.listParts) return [];
+  return source.listParts(hit.externalId);
 }
 
 const videoCapable = new Map<string, boolean>();

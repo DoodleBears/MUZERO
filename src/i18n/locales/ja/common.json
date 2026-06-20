@@ -112,9 +112,13 @@
     "stageMux": "音声と映像を結合中…",
     "stageStore": "保存中…",
     "done": "ライブラリに保存しました",
+    "doneCount_other": "{{count}} 個のパートをライブラリに保存しました",
     "failed": "ダウンロードに失敗しました",
     "loginRequired": "このソースにログインすると高画質が利用できます",
-    "close": "閉じる"
+    "close": "閉じる",
+    "parts": "パート（分割）",
+    "allParts": "すべて（{{count}}）をダウンロード",
+    "downloadingPart": "ダウンロード中 {{done}} / {{total}}…"
   },
   "streamSources": {
     "title": "オンラインソース",

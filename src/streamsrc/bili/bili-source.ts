@@ -14,6 +14,7 @@ import { withQuery } from "../http";
 import type {
   PlayableStream,
   PlayableVideoTrack,
+  StreamPart,
   StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
@@ -181,6 +182,32 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
     return out;
   }
 
+  /** List a video's parts (分P) via the `view` API `pages[]`; [] for single-part videos. */
+  async function listParts(
+    externalId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamPart[]> {
+    const bvid = externalId.split("#")[0];
+    if (!bvid) return [];
+    const url = await signedUrl(VIEW_URL, { bvid }, opts?.signal);
+    const json = await getJson(url, opts?.signal);
+    const pages =
+      (
+        json.data as
+          | { pages?: Array<{ cid?: number; page?: number; part?: string; duration?: number }> }
+          | undefined
+      )?.pages ?? [];
+    if (pages.length <= 1) return [];
+    return pages
+      .filter((p) => typeof p.cid === "number")
+      .map((p, i) => ({
+        externalId: `${bvid}#${p.cid}`,
+        index: p.page ?? i + 1,
+        title: p.part?.trim() || `P${p.page ?? i + 1}`,
+        durationSec: typeof p.duration === "number" ? p.duration : undefined,
+      }));
+  }
+
   /** Fetch the DASH video tracks via the same signed playurl (richer fnval). */
   async function fetchVideoStreams(
     externalId: string,
@@ -258,6 +285,7 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
     resolve,
     resolveVideo,
     listVideoQualities,
+    listParts,
     getTracksByIds,
   };
 }

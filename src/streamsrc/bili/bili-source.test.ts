@@ -232,6 +232,42 @@ describe("createBiliSource.resolveVideo / listVideoQualities", () => {
     expect(res?.kind).toBe("error");
   });
 
+  it("listParts maps multi-P pages to parts (bvid#cid), and [] for single-part", async () => {
+    const VIEW_MULTI = {
+      code: 0,
+      data: {
+        bvid: "BVmulti",
+        title: "合集",
+        pages: [
+          { cid: 111, page: 1, part: "第一回", duration: 100 },
+          { cid: 222, page: 2, part: "第二回", duration: 200 },
+        ],
+      },
+    };
+    const { source } = deps([
+      ["/x/web-interface/nav", NAV],
+      ["/wbi/view", VIEW_MULTI],
+    ]);
+    const parts = (await source.listParts?.("BVmulti")) ?? [];
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toEqual({
+      externalId: "BVmulti#111",
+      index: 1,
+      title: "第一回",
+      durationSec: 100,
+    });
+    expect(parts[1].externalId).toBe("BVmulti#222");
+
+    const single = deps([
+      ["/x/web-interface/nav", NAV],
+      [
+        "/wbi/view",
+        { code: 0, data: { bvid: "BVsingle", pages: [{ cid: 9, page: 1, part: "" }] } },
+      ],
+    ]);
+    expect((await single.source.listParts?.("BVsingle")) ?? []).toEqual([]);
+  });
+
   it("getTracksByIds resolves official cover (pic) + title + author via the view API", async () => {
     const VIEW_FULL = {
       code: 0,
