@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 持久下载队列（落 DB + 并发上限 + 重试 + 重启恢复 + UI 面板） | ✅ 完成（表/状态机/运行器/入队改造/App 启动恢复/下载面板；真字节进度待 P2） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 断点续传（Range 分片拉取 + 分片落盘 + 直链过期重解析） | 🔄 续传判定纯核心完成（`resumable-range`）；runJob 分片集成待做 | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 歌单/收藏夹自动定时同步（调度器 + 可选「同步即下载」） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 歌单/收藏夹自动定时同步（调度器 + 可选「同步即下载」） | ✅ 完成（纯 `shouldSyncPlaylist` + 注入式调度器 + 13 单测；运行时 wiring + App 启动 + per-set Settings UI；增量去重 + 只入队新条目） | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -255,17 +255,18 @@ export function createPlaylistAutoSyncScheduler(deps): { tick; start; stop };
 - [ ] 直链过期后恢复：重解析 + Range 续成功。
 - [ ] 大文件（>200MB）内存平稳（分片落盘，非整块）。
 
-### Phase 3: 歌单/收藏夹自动同步
+### Phase 3: 歌单/收藏夹自动同步 ✅
 **Goal:** 绑定集按频率自动增量同步；可选自动下载新视频（入队）。
 **Tasks:**
-- [ ] `playlist-auto-sync.ts` `shouldSyncPlaylist`（纯）+ scheduler（注入式）+ 单测。
-- [ ] `DjSession.autoSyncFrequency/autoDownloadNew/lastAutoSyncAt` + Settings UI。
-- [ ] app 生命周期 start/stop 调度器；到期 → `addStreamedPlaylistToSet` → 新 hits →（可选）enqueue。
+- [x] [`src/sync/playlist-auto-sync.ts`](../../../../src/sync/playlist-auto-sync.ts) `shouldSyncPlaylist`（纯，镜像 `shouldRunAutoSync`：in-memory per-launch baseline → app-start 每次启动一次、interval 启动后重新计时；可见性/在线/退避/jitter gate）+ `createPlaylistAutoSyncScheduler`（注入式，in-flight 重入守卫）+ 13 单测。
+- [x] `DjSession.autoSyncFrequency/autoDownloadNew/lastAutoSyncAt`（已在 P1 加）+ [`PlaylistSyncPanel`](../../../../src/components/downloads/playlist-sync-panel.tsx) Settings UI（per-set 频率下拉 + 自动下载开关 + 立即同步；接入 Online-sources 面板）。
+- [x] [`src/stores/playlist-auto-sync.ts`](../../../../src/stores/playlist-auto-sync.ts) 运行时 wiring（镜像 `cloud-auto-sync`）；`App.tsx` 启动调度器；`syncBoundPlaylistSet`：一次 fetch → `addHitsToSet`（增量去重）→ 记 `lastAutoSyncAt` →（`autoDownloadNew` 时）**只入队新条目**（首轮全下、之后只下新增）。
 
 #### Phase 3 Checklist
-- [ ] 绑定收藏夹设 15min → 新增视频自动进集；开「自动下载」→ 自动入队下载。
-- [ ] 不可见/离线/退避时不跑；jitter 生效；手动频率不自动跑。
-- [ ] `shouldSyncPlaylist` 穷举单测（各频率/gate/退避）。
+- [x] 绑定收藏夹设频率（如 15min）→ 新增视频自动进集；开「自动下载」→ 自动入队下载（只新增）。
+- [x] 不可见/离线/退避时不跑；jitter 生效；手动频率不自动跑（`shouldSyncPlaylist` gate）。
+- [x] `shouldSyncPlaylist` 穷举单测（各频率/gate/退避/jitter）+ scheduler tick 单测（去重一次跑、不跑未绑定/手动、失败计退避）。
+- [ ] **Live E2E**（待 Electron 手测）：绑定的 B 站收藏夹设 15min/启动时 → 新片自动入队下载（dev harness `syncPlaylists` 已就绪）。
 
 ---
 
@@ -301,6 +302,7 @@ export function createPlaylistAutoSyncScheduler(deps): { tick; start; stop };
 |------|--------|---------|
 | 2026-06-21 | DoodleBear | Initial draft：下载队列（持久/并发/重试/恢复）+ 断点续传（Range 分片 + 直链重解析）+ 歌单/收藏夹自动同步（镜像 cloud auto-sync-scheduler）。承接视频下载 PRD（PR #1）的两个确认后续增强 |
 | 2026-06-21 | DoodleBear | Phase 1 实现 + **实时 E2E 验证**：P1a 表/repo、P1b 状态机(7测)、P1c 运行器(5测)+入队改造+App 启动恢复+下载面板。harness `download-queue.mjs` 真机验证 enqueue→done + recover 复活 stuck-active。P2 续传纯核心(`resumable-range`,8测)完成 |
+| 2026-06-21 | DoodleBear | Phase 3 实现：`shouldSyncPlaylist`(纯) + `createPlaylistAutoSyncScheduler`(注入式) 镜像 cloud scheduler（13 单测）；运行时 `stores/playlist-auto-sync`（一次 fetch → 增量去重 → 只入队新条目）+ App 启动调度器 + `PlaylistSyncPanel` per-set Settings（频率/自动下载/立即同步）+ i18n。Live E2E 待 Electron 手测。P2 runJob 分片集成仍待做 |
 
 ---
 
