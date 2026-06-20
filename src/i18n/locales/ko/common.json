@@ -142,6 +142,7 @@
     "autoDownload": "새 영상 자동 다운로드",
     "syncNow": "지금 동기화",
     "synced": "플레이리스트 동기화됨",
+    "subscribed": "{{name}} 구독됨",
     "syncFailed": "동기화 실패"
   },
   "streamSources": {

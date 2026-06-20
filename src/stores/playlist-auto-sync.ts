@@ -7,20 +7,25 @@
  * favlist downloads everything on first sync, then only newly-added videos thereafter).
  */
 import {
+  createSession,
+  findSessionByStreamPlaylist,
   getSession,
   getSettings,
   getTracksByIds,
   listSessions,
   updateSession,
 } from "@/db/repositories";
-import type { DjSession, StreamSourceId } from "@/db/types";
+import type { DjSession, PlaylistAutoSyncFrequency, StreamSourceId } from "@/db/types";
 import { log } from "@/lib/logger";
 import {
   canDownloadVideo,
   DEFAULT_VIDEO_QUALITY,
   enqueueDownload,
 } from "@/streamsrc/download-action";
-import { cacheStreamPlaylistTrackCovers } from "@/streamsrc/playlist-cover-cache";
+import {
+  cacheStreamPlaylistCover,
+  cacheStreamPlaylistTrackCovers,
+} from "@/streamsrc/playlist-cover-cache";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
@@ -91,6 +96,64 @@ export async function syncBoundPlaylistSet(setId: string): Promise<void> {
   } finally {
     inFlight.delete(setId);
   }
+}
+
+/** Enqueue every not-yet-downloaded streamed video item in a set (download the favlist itself). */
+async function enqueueSetVideos(setId: string): Promise<void> {
+  const session = await getSession(setId);
+  if (!session) return;
+  const settings = await getSettings();
+  const quality = settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY;
+  const tracks = await getTracksByIds(session.trackIds);
+  for (const t of tracks) {
+    if (t.origin !== "streamed" || t.blobId) continue; // already downloaded → skip
+    if (!t.streamSourceId || !t.streamExternalId || !canDownloadVideo(t.streamSourceId)) continue;
+    await enqueueDownload({
+      source: t.streamSourceId,
+      externalId: t.streamExternalId,
+      title: t.title,
+      coverUrl: t.remoteCoverUrl,
+      sessionId: setId,
+      quality,
+    });
+  }
+}
+
+/**
+ * Subscribe a favlist/playlist (Bilibili 收藏夹 / 网易云·QQ 歌单) to auto-sync — the per-playlist
+ * entry point behind the source-playlists UI. Finds-or-creates the bound set, sets the cadence +
+ * auto-download flag, pulls current items in immediately (so it isn't empty), and — when
+ * auto-download is on — enqueues every current item for video download (not just future-new ones).
+ * Returns the bound set id.
+ */
+export async function subscribeToPlaylist(
+  source: StreamSourceId,
+  playlistId: string,
+  name: string,
+  opts: { frequency: PlaylistAutoSyncFrequency; autoDownloadNew: boolean; coverUrl?: string },
+): Promise<string> {
+  let set = await findSessionByStreamPlaylist(source, playlistId);
+  if (!set) {
+    set = await createSession({
+      name,
+      seedPrompt: "",
+      config: { autoExtend: false },
+      displayMode: canDownloadVideo(source) ? "video" : "cover",
+      streamPlaylistRef: { source, id: playlistId },
+    });
+    if (opts.coverUrl)
+      void cacheStreamPlaylistCover({ sessionId: set.id, coverUrl: opts.coverUrl });
+  }
+  await updateSession(set.id, {
+    autoSyncFrequency: opts.frequency,
+    autoDownloadNew: opts.autoDownloadNew,
+  });
+  // Pull current items in now (so the set isn't empty) — adds + (if opted-in) enqueues new ones.
+  await syncBoundPlaylistSet(set.id);
+  // First enabling auto-download on an already-populated set: also download its EXISTING items
+  // (syncBoundPlaylistSet only enqueues items new to that sync). Queue dedup makes this idempotent.
+  if (opts.autoDownloadNew) await enqueueSetVideos(set.id);
+  return set.id;
 }
 
 /** Sets eligible for auto-sync: bound to a playlist with a non-manual cadence. */

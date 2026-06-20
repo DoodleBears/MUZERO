@@ -9,6 +9,9 @@ const body = {
   sourceId: process.argv[2] || "bili",
   importId: process.argv[3],
   downloadAll: process.argv.includes("--download"),
+  subscribe: process.argv.includes("--subscribe"),
+  frequency: arg("--freq"),
+  autoDownload: !process.argv.includes("--no-autodl"),
   limit: arg("--limit"),
   quality: arg("--q"),
 };

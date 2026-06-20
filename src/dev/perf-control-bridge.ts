@@ -740,7 +740,42 @@ export function startPerfControlBridge(): void {
         const hits = limit ? all.slice(0, limit) : all;
         downloaded = await downloadHitsAsVideo(hits, { quality: payload.quality as string });
       }
-      return { playlists, imported, downloaded };
+      // Auto-sync subscribe E2E: bind the favlist to a set + cadence + (optional) auto-download.
+      let subscribed: unknown = null;
+      if (payload.subscribe && payload.importId) {
+        const { subscribeToPlaylist } = await import("@/stores/playlist-auto-sync");
+        const { getSession } = await import("@/db/repositories");
+        const pl = playlists.find((p) => p.id === String(payload.importId));
+        const setId = await subscribeToPlaylist(
+          sourceId,
+          String(payload.importId),
+          pl?.name ?? String(payload.importId),
+          {
+            frequency: (payload.frequency as never) ?? "app-start",
+            autoDownloadNew: payload.autoDownload !== false,
+            coverUrl: pl?.coverUrl,
+          },
+        );
+        const set = await getSession(setId);
+        const { getTracksByIds } = await import("@/db/repositories");
+        const setTracks = set ? await getTracksByIds(set.trackIds) : [];
+        subscribed = {
+          setId,
+          name: set?.name,
+          trackCount: set?.trackIds.length ?? 0,
+          autoSyncFrequency: set?.autoSyncFrequency,
+          autoDownloadNew: set?.autoDownloadNew,
+          displayMode: set?.displayMode,
+          tracks: setTracks.map((t) => ({
+            externalId: t.streamExternalId,
+            kind: t.kind,
+            hasBlob: Boolean(t.blobId),
+            hasCover: Boolean(t.coverBlobId),
+            remoteCoverUrl: t.remoteCoverUrl,
+          })),
+        };
+      }
+      return { playlists, imported, downloaded, subscribed };
     },
     // Drive/inspect the persistent download queue for E2E (list/enqueue/seedActive/recover/clearAll).
     downloadQueue: async (payload) => {

@@ -149,6 +149,7 @@
     "autoDownload": "Auto-download new videos",
     "syncNow": "Sync now",
     "synced": "Playlist synced",
+    "subscribed": "Subscribed to {{name}}",
     "syncFailed": "Sync failed"
   },
   "streamSources": {

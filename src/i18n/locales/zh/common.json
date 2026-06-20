@@ -142,6 +142,7 @@
     "autoDownload": "自动下载新视频",
     "syncNow": "立即同步",
     "synced": "歌单已同步",
+    "subscribed": "已订阅 {{name}}",
     "syncFailed": "同步失败"
   },
   "streamSources": {

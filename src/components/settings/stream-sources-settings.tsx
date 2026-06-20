@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DownloadsPanel } from "@/components/downloads/downloads-panel";
+import { PlaylistSyncControls } from "@/components/downloads/playlist-sync-controls";
 import { PlaylistSyncPanel } from "@/components/downloads/playlist-sync-panel";
 import { StreamCacheControls } from "@/components/settings/stream-cache-controls";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { saveSettings } from "@/db/repositories";
 import type { StreamSourceId } from "@/db/types";
-import { useSettings } from "@/hooks/use-app-data";
+import { useSessions, useSettings } from "@/hooks/use-app-data";
 import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
@@ -262,6 +263,7 @@ export function StreamSourcesSettings() {
 function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
   const { t } = useTranslation();
   const settings = useSettings();
+  const sessions = useSessions();
   const openOnlinePlaylist = useNavStore((s) => s.openOnlinePlaylist);
   const [playlists, setPlaylists] = useState<StreamPlaylist[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -310,26 +312,40 @@ function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
   return (
     <>
       <div className="space-y-1 border-border border-t pt-2">
-        {playlists.map((pl) => (
-          <div
-            key={pl.id}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
-          >
-            <button
-              type="button"
-              onClick={() => openOnlinePlaylist(pl)}
-              className="min-w-0 flex-1 text-left"
+        {playlists.map((pl) => {
+          const matched = sessions.find(
+            (s) => s.streamPlaylistRef?.source === pl.source && s.streamPlaylistRef?.id === pl.id,
+          );
+          return (
+            <div
+              key={pl.id}
+              className="space-y-1.5 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
             >
-              <span className="block truncate font-medium">{pl.name}</span>
-              <span className="block truncate text-muted-foreground text-xs">
-                {t("streamSources.trackCount", { count: pl.trackCount })}
-              </span>
-            </button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setImportTarget(pl)}>
-              {t("streamSources.import")}
-            </Button>
-          </div>
-        ))}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openOnlinePlaylist(pl)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <span className="block truncate font-medium">{pl.name}</span>
+                  <span className="block truncate text-muted-foreground text-xs">
+                    {t("streamSources.trackCount", { count: pl.trackCount })}
+                  </span>
+                </button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setImportTarget(pl)}>
+                  {t("streamSources.import")}
+                </Button>
+              </div>
+              <PlaylistSyncControls
+                source={pl.source}
+                playlistId={pl.id}
+                name={pl.name}
+                coverUrl={pl.coverUrl}
+                matched={matched}
+              />
+            </div>
+          );
+        })}
       </div>
       {dialog}
     </>
