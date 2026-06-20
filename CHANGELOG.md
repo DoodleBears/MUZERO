@@ -2,6 +2,25 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.4.0 — 2026-06-21 · Download Bilibili & YouTube videos to your library
+
+MUZERO is now a real video downloader. Pick a quality and save Bilibili or YouTube videos as local, playable tracks — no FFmpeg, no extra tools. Paste a link (or just a BV ID / video ID) in ⌘F to grab one, or import a whole 收藏夹 / playlist and download every item as video. A persistent download queue resumes after a restart, retries failures, limits concurrency, and shows progress in a panel and a floating badge. You can also subscribe a favlist or playlist so new items sync in automatically.
+
+### Highlights
+- **streaming** Download Bilibili & YouTube videos to your library — Resolve a video, pick a resolution, and save it as a local, playable track — video and audio merged into a standard file (copy-remux, no FFmpeg bundled). Defaults to 1080p and degrades to the closest available quality when your pick isn't offered. Log in to a source to unlock higher / VIP qualities. _(desktop)_
+
+### Added
+- **search** Paste a link or ID in ⌘F to download — Paste a Bilibili or YouTube URL — or just a BV ID / video ID / shorts / playlist link — into ⌘F search and MUZERO resolves it directly instead of running a keyword search. Press Enter to download the video at your default quality (a Settings toggle keeps Enter = play), or use the audio / video buttons. _(desktop)_
+- **streaming** Import whole 收藏夹 / playlists as video — Import a Bilibili 收藏夹 or a YouTube / YouTube Music playlist as its own set and download every item as video by default (a Settings toggle turns this off). YouTube Music entries with no real video fall back to audio. Each item shows its own progress, and Bilibili multi-part (分P) videos let you pick parts or grab them all. _(desktop)_
+- **sync** Subscribe a favlist or playlist for auto-sync — Bind a 收藏夹 / playlist to a set and let MUZERO pull in new items automatically — choose a cadence (manual, on app start, or every 15 / 30 / 60 minutes) and optionally auto-download new videos. It runs only while the app is visible and online, with jitter and failure backoff to stay gentle on the source. _(desktop)_
+- **streaming** Persistent download queue — Downloads run through a queue that survives a restart: interrupted jobs resume on next launch, failures retry with backoff, and a concurrency limit keeps things from overwhelming your machine or the source. Track everything in the Downloads panel (Settings) and a floating progress badge. _(desktop)_
+
+### Changed
+- **streaming** Smoother, more informative downloads — Official covers are preferred for downloaded videos, real byte-level progress shows for both single and batch downloads, and the audio + video merge runs off the main thread so the UI stays responsive. _(desktop)_
+
+### Fixed
+- **streaming** YouTube download reliability + quieter console — Fixed YouTube items that failed to merge with a 'timestamps must be non-negative' error, and audio-only YouTube Music entries now download as audio instead of failing. Also quieted occasional non-fatal console errors (transient network-proxy failures and YouTube parser warnings). _(desktop)_
+
 ## v1.3.1 — 2026-06-20 · Background update checks now show up on their own
 
 The desktop app already checked for updates on its own shortly after launch, but the About screen only reflected an update after you pressed Check for updates — so the automatic check looked like it wasn't working. About now reads the latest known status when it opens, so a background check or download shows up without a manual nudge.
