@@ -17,24 +17,24 @@
 const OPAQUE_BACKGROUND = "#09090b";
 const TRANSPARENT_BACKGROUND = "#00000000";
 
-// macOS + Windows run a FRAMELESS transparent window; Linux stays opaque + framed.
+// macOS + Windows run a transparent window so the lyrics-only DOM can be see-through
+// (`transparent` can't be toggled at runtime). Windows is frameless (app-drawn min/
+// max/close); macOS keeps its native frame + inset traffic lights (top-left) and only
+// adds a top-right pin button. Linux stays opaque + framed.
 //
-// macOS was previously framed (`titleBarStyle: "hiddenInset"`, to keep the native
-// traffic lights). That is the one structural difference from Windows — and it's why
-// the transparent lyrics overlay left scroll "残影" trails ONLY on macOS: a FRAMED
-// transparent macOS window is composited by the window server differently and does not
-// continuously clear moving content, whereas a FRAMELESS one (like Windows, which never
-// trailed) does. So macOS now matches Windows exactly: frameless, pure-transparent
-// backing, app-drawn window controls (native traffic lights are gone — the tradeoff for
-// a trail-free transparent overlay; `transparent`/`frame` can't be toggled at runtime).
+// NOTE: making macOS frameless was tried as a fix for the transparent-window scroll
+// "残影" trails (Windows, which is frameless, never trailed) — it did NOT help, so the
+// frame is not the cause and macOS keeps its native traffic lights. The trails are a
+// deeper macOS limitation (animated DOM content on a transparent window isn't cleared);
+// see PRD §3.3 — the durable fix is a self-clearing canvas lyrics layer.
 function resolveWindowChrome(platform) {
   const isMac = platform === "darwin";
   const isWindows = platform === "win32";
   const transparent = isMac || isWindows;
   return {
     backgroundColor: transparent ? TRANSPARENT_BACKGROUND : OPAQUE_BACKGROUND,
-    frame: !transparent,
-    titleBarStyle: undefined,
+    frame: !isWindows,
+    titleBarStyle: isMac ? "hiddenInset" : undefined,
     transparent,
   };
 }
