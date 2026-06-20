@@ -117,9 +117,13 @@ async function handleMuzfetch(request) {
     // protocol.handle streams can surface as net::ERR_UNEXPECTED when Chromium
     // validates an upstream Content-Length/encoding against the transformed stream.
     // Media demuxers do not need Content-Length as long as Content-Range/Type survive.
+    // BUT a programmatic download reader wants the total for a progress bar — so echo
+    // the upstream length in a custom (exposed) header before deleting the real one.
+    const upstreamLength = outHeaders.get("content-length");
     outHeaders.delete("content-encoding");
     outHeaders.delete("content-length");
     outHeaders.delete("transfer-encoding");
+    if (upstreamLength) outHeaders.set("x-muzero-content-length", upstreamLength);
     emitMainDiagnostic(
       res.status >= 400 ? "error" : "debug",
       "stream.proxy",
@@ -143,10 +147,13 @@ async function handleMuzfetch(request) {
   // Echo the post-redirect URL so the renderer can expand share/short links
   // (net.fetch followed the redirect; res.url is the final target). Custom response
   // headers must be explicitly exposed or the renderer's CORS layer strips them.
+  const exposed = [];
   if (res.url) {
     outHeaders.set("x-muzero-final-url", res.url);
-    outHeaders.set("access-control-expose-headers", "x-muzero-final-url");
+    exposed.push("x-muzero-final-url");
   }
+  if (outHeaders.has("x-muzero-content-length")) exposed.push("x-muzero-content-length");
+  if (exposed.length) outHeaders.set("access-control-expose-headers", exposed.join(", "));
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,

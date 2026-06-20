@@ -601,6 +601,7 @@ export function startPerfControlBridge(): void {
         }));
 
       const bridge = resolveDesktopBridge();
+      const progressSamples: Array<{ stage: string; ratio: number }> = [];
       const result = await downloadStreamedVideoToLibrary(
         {
           source,
@@ -616,11 +617,28 @@ export function startPerfControlBridge(): void {
           audioOnly: Boolean(payload.audioOnly),
         },
         {
-          fetchBytes: async (url, headers) => {
+          fetchBytes: async (url, headers, onBytes) => {
             const proxied = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
             const resp = await fetch(proxied);
             if (!resp.ok) throw new Error(`fetch ${resp.status}`);
-            return resp.blob();
+            const total =
+              Number(
+                resp.headers.get("content-length") || resp.headers.get("x-muzero-content-length"),
+              ) || 0;
+            if (!onBytes || !total || !resp.body) return resp.blob();
+            const reader = resp.body.getReader();
+            const chunks: BlobPart[] = [];
+            let loaded = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) {
+                chunks.push(value);
+                loaded += value.length;
+                onBytes(loaded, total);
+              }
+            }
+            return new Blob(chunks, { type: resp.headers.get("content-type") ?? "" });
           },
           mux: (v, a, container) => muxCopyTracksViaWorker(v, a, container),
           posterFrame: async (video, durationSec) => {
@@ -629,6 +647,9 @@ export function startPerfControlBridge(): void {
             const poster = await extractUsefulVideoPosterFrame(file, { durationSec });
             return poster ? { blob: poster.blob, mime: poster.mime } : null;
           },
+          onProgress: (stage, ratio) => {
+            progressSamples.push({ stage, ratio: Math.round(ratio * 100) / 100 });
+          },
         },
       );
 
@@ -636,6 +657,8 @@ export function startPerfControlBridge(): void {
       return {
         sessionId: session.id,
         result,
+        fetchProgressSamples: progressSamples.filter((s) => s.stage === "fetch").length,
+        lastFetchRatio: progressSamples.filter((s) => s.stage === "fetch").at(-1)?.ratio ?? null,
         track: track
           ? {
               id: track.id,
@@ -702,7 +725,12 @@ export function startPerfControlBridge(): void {
           sample: hits.slice(0, 3).map((h) => ({ externalId: h.externalId, title: h.title })),
         };
       }
-      return { playlists, imported };
+      let downloaded: unknown = null;
+      if (payload.importId && payload.downloadAll) {
+        const { downloadPlaylistVideos } = await import("@/streamsrc/download-action");
+        downloaded = await downloadPlaylistVideos(sourceId, String(payload.importId));
+      }
+      return { playlists, imported, downloaded };
     },
     // Backfill an existing streamed track's official cover (no video re-download).
     recoverCover: async (payload) => {

@@ -109,7 +109,7 @@ function NotificationItemView({
     >
       <div
         className={cn(
-          "flex items-center gap-2 rounded-xl border bg-card/95 px-3 py-2 text-sm shadow-lg backdrop-blur",
+          "relative flex items-center gap-2 overflow-hidden rounded-xl border bg-card/95 px-3 py-2 text-sm shadow-lg backdrop-blur",
           isError && "border-destructive bg-destructive text-white",
         )}
       >
@@ -167,6 +167,15 @@ function NotificationItemView({
           >
             <X className="size-4" />
           </button>
+        )}
+
+        {typeof item.progress === "number" && (
+          <div className="absolute inset-x-0 bottom-0 h-0.5 bg-foreground/10">
+            <div
+              className="h-full bg-primary transition-[width] duration-200"
+              style={{ width: `${Math.max(0, Math.min(100, item.progress * 100))}%` }}
+            />
+          </div>
         )}
       </div>
     </motion.div>

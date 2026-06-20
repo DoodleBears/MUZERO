@@ -25,8 +25,13 @@ const CONTAINER_MIME: Record<MuxContainer, string> = {
 };
 
 export interface DownloadStreamedVideoDeps {
-  /** Fetch a track's bytes (Bilibili URL via the media proxy); unused for blob transport. */
-  fetchBytes: (url: string, headers?: Record<string, string>) => Promise<Blob>;
+  /** Fetch a track's bytes (Bilibili URL via the media proxy); unused for blob transport.
+   *  `onBytes(loaded, total)` reports streaming progress when Content-Length is known. */
+  fetchBytes: (
+    url: string,
+    headers?: Record<string, string>,
+    onBytes?: (loaded: number, total: number) => void,
+  ) => Promise<Blob>;
   /** Copy-remux video + audio into one container blob. */
   mux: (video: Blob, audio: Blob, container: MuxContainer) => Promise<Blob>;
   /** Extract a poster frame from the muxed video (fallback cover; needs DOM, so injected). */
@@ -89,14 +94,33 @@ export async function downloadStreamedVideoToLibrary(
 
   try {
     deps.onProgress?.("fetch", 0);
+    // Combine the parallel video + audio byte streams into one fetch ratio (video dominates).
+    let vLoaded = 0;
+    let vTotal = 0;
+    let aLoaded = 0;
+    let aTotal = 0;
+    const reportFetch = () => {
+      const total = vTotal + aTotal;
+      if (total > 0) deps.onProgress?.("fetch", (vLoaded + aLoaded) / total);
+    };
     const [videoBlob, audioBlob] = await Promise.all([
-      plan.video.blob ?? deps.fetchBytes(plan.video.url ?? "", plan.video.headers),
-      plan.audio.blob ?? deps.fetchBytes(plan.audio.mediaUrl ?? "", plan.audio.headers),
+      plan.video.blob ??
+        deps.fetchBytes(plan.video.url ?? "", plan.video.headers, (l, t) => {
+          vLoaded = l;
+          vTotal = t;
+          reportFetch();
+        }),
+      plan.audio.blob ??
+        deps.fetchBytes(plan.audio.mediaUrl ?? "", plan.audio.headers, (l, t) => {
+          aLoaded = l;
+          aTotal = t;
+          reportFetch();
+        }),
     ]);
-    deps.onProgress?.("fetch", 1);
 
+    deps.onProgress?.("mux", 0);
     const muxed = await deps.mux(videoBlob, audioBlob, container);
-    deps.onProgress?.("mux", 1);
+    deps.onProgress?.("store", 0);
 
     // Enrich title / meta / OFFICIAL cover from the source for explicit-id downloads that
     // came without search-hit metadata (Bilibili `view.pic`, YouTube thumbnail).
@@ -208,8 +232,10 @@ async function downloadAudioOnly(
     deps.onProgress?.("fetch", 0);
     const audioBlob =
       audioRes.stream.blob ??
-      (await deps.fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers));
-    deps.onProgress?.("fetch", 1);
+      (await deps.fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers, (l, t) => {
+        if (t > 0) deps.onProgress?.("fetch", l / t);
+      }));
+    deps.onProgress?.("store", 0);
     const mime = audioRes.stream.mime || audioBlob.type || "audio/mp4";
 
     const { title, meta, coverUrl } = await enrichFromSource(input);

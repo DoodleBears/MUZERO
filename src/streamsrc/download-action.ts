@@ -112,11 +112,31 @@ export async function downloadStreamedHit(
       audioOnly: opts?.audioOnly,
     },
     {
-      fetchBytes: async (url, headers) => {
+      fetchBytes: async (url, headers, onBytes) => {
         const proxied = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
         const resp = await fetch(proxied);
         if (!resp.ok) throw new Error(`fetch ${resp.status}`);
-        return resp.blob();
+        // The media proxy strips content-length (Chromium stream validation) but echoes
+        // it as x-muzero-content-length for download readers.
+        const total =
+          Number(
+            resp.headers.get("content-length") || resp.headers.get("x-muzero-content-length"),
+          ) || 0;
+        if (!onBytes || !total || !resp.body) return resp.blob();
+        // Stream the body so we can report byte progress (single video → real %).
+        const reader = resp.body.getReader();
+        const chunks: BlobPart[] = [];
+        let loaded = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            loaded += value.length;
+            onBytes(loaded, total);
+          }
+        }
+        return new Blob(chunks, { type: resp.headers.get("content-type") ?? "" });
       },
       mux: (video, audio, container) => muxCopyTracksViaWorker(video, audio, container),
       posterFrame: async (video, durationSec) => {
@@ -166,6 +186,36 @@ function notifyResult(notifId: string, result: DownloadStreamedVideoResult, titl
   }
 }
 
+/** Download one hit with its OWN progress notification; resolves when it finishes. */
+async function downloadWithNotification(
+  hit: StreamSearchHit,
+  opts?: { quality?: string; audioOnly?: boolean },
+): Promise<DownloadStreamedVideoResult> {
+  const notifId = notify.loading(hit.title, { detail: stageDetail("fetch"), progress: 0 });
+  let lastPct = -1;
+  let result: DownloadStreamedVideoResult;
+  try {
+    result = await downloadStreamedHit(hit, {
+      quality: opts?.quality,
+      audioOnly: opts?.audioOnly,
+      onProgress: (stage, ratio) => {
+        if (stage === "fetch") {
+          const pct = Math.round(ratio * 100);
+          if (pct === lastPct) return; // throttle: ~100 updates max, not one per chunk
+          lastPct = pct;
+          notify.update(notifId, { progress: ratio, detail: `${pct}%` });
+        } else {
+          notify.update(notifId, { progress: 1, detail: stageDetail(stage) });
+        }
+      },
+    });
+  } catch (err) {
+    result = { kind: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+  notifyResult(notifId, result, hit.title);
+  return result;
+}
+
 /**
  * Fire-and-forget download with a progress NOTIFICATION (no blocking modal). Returns
  * immediately; the user keeps using the app while it downloads in the background.
@@ -174,20 +224,39 @@ export function startBackgroundDownload(
   hit: StreamSearchHit,
   opts?: { quality?: string; audioOnly?: boolean },
 ): void {
-  const notifId = notify.loading(hit.title, { detail: stageDetail("fetch") });
-  void downloadStreamedHit(hit, {
-    quality: opts?.quality,
-    audioOnly: opts?.audioOnly,
-    onProgress: (stage) => notify.update(notifId, { detail: stageDetail(stage) }),
-  })
-    .then((result) => notifyResult(notifId, result, hit.title))
-    .catch((err) => {
-      notify.update(notifId, {
-        type: "error",
-        message: i18n.t("download.failed"),
-        detail: String(err),
-      });
-    });
+  void downloadWithNotification(hit, opts);
+}
+
+/**
+ * Download many hits as video SEQUENTIALLY — each gets its own progress notification
+ * (exactly like a single search download), at the default quality (prefer-match-else-
+ * degrade). Sequential so a big favlist doesn't fire N parallel downloads / hit a rate
+ * limit. Stops the batch on an auth wall.
+ */
+export async function downloadHitsAsVideo(
+  hits: StreamSearchHit[],
+  opts?: { quality?: string },
+): Promise<{ ok: number; total: number }> {
+  let ok = 0;
+  for (const hit of hits) {
+    const result = await downloadWithNotification(hit, { quality: opts?.quality });
+    if (result.kind === "downloaded") ok += 1;
+    else if (result.kind === "requires-login") break;
+  }
+  return { ok, total: hits.length };
+}
+
+/** Import a source playlist/favlist's videos, then download each as video (per-video progress). */
+export async function downloadPlaylistVideos(
+  sourceId: StreamSearchHit["source"],
+  mediaId: string,
+  opts?: { quality?: string },
+): Promise<{ ok: number; total: number }> {
+  const settings = await getSettings();
+  const source = makeSource(sourceId, settings.streamSources?.[sourceId]?.cookie);
+  if (!source?.importPlaylist) return { ok: 0, total: 0 };
+  const hits = await source.importPlaylist(mediaId);
+  return downloadHitsAsVideo(hits, opts);
 }
 
 /** Fire-and-forget batch (分P) download at the default quality, with N/total progress. */
