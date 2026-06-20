@@ -9,6 +9,7 @@ import { createSession, getSession, getSettings, saveSettings } from "@/db/repos
 import i18n from "@/i18n/i18n";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { extractUsefulVideoPosterFrame } from "@/lib/video-poster-frame";
+import { notify } from "@/stores/notification-store";
 import { muxCopyTracksViaWorker } from "@/workers/video-mux-client";
 import {
   type DownloadStreamedVideoResult,
@@ -126,4 +127,103 @@ export async function downloadStreamedHit(
       onProgress: opts?.onProgress,
     },
   );
+}
+
+function stageDetail(stage: DownloadProgressStage): string {
+  return stage === "fetch"
+    ? i18n.t("download.stageFetch")
+    : stage === "mux"
+      ? i18n.t("download.stageMux")
+      : i18n.t("download.stageStore");
+}
+
+function notifyResult(notifId: string, result: DownloadStreamedVideoResult, title: string): void {
+  if (result.kind === "downloaded") {
+    notify.update(notifId, {
+      type: "success",
+      message: i18n.t("download.done"),
+      detail: title,
+      duration: 3000,
+    });
+  } else if (result.kind === "requires-login") {
+    notify.update(notifId, {
+      type: "error",
+      message: i18n.t("download.loginRequired"),
+      detail: title,
+    });
+  } else if (result.kind === "no-permission") {
+    notify.update(notifId, {
+      type: "error",
+      message: i18n.t("download.failed"),
+      detail: result.reason,
+    });
+  } else {
+    notify.update(notifId, {
+      type: "error",
+      message: i18n.t("download.failed"),
+      detail: result.message,
+    });
+  }
+}
+
+/**
+ * Fire-and-forget download with a progress NOTIFICATION (no blocking modal). Returns
+ * immediately; the user keeps using the app while it downloads in the background.
+ */
+export function startBackgroundDownload(
+  hit: StreamSearchHit,
+  opts?: { quality?: string; audioOnly?: boolean },
+): void {
+  const notifId = notify.loading(hit.title, { detail: stageDetail("fetch") });
+  void downloadStreamedHit(hit, {
+    quality: opts?.quality,
+    audioOnly: opts?.audioOnly,
+    onProgress: (stage) => notify.update(notifId, { detail: stageDetail(stage) }),
+  })
+    .then((result) => notifyResult(notifId, result, hit.title))
+    .catch((err) => {
+      notify.update(notifId, {
+        type: "error",
+        message: i18n.t("download.failed"),
+        detail: String(err),
+      });
+    });
+}
+
+/** Fire-and-forget batch (分P) download at the default quality, with N/total progress. */
+export function startBackgroundBatchDownload(hit: StreamSearchHit, parts: StreamPart[]): void {
+  if (parts.length === 0) return;
+  const notifId = notify.loading(hit.title, {
+    detail: i18n.t("download.downloadingPart", { done: 1, total: parts.length }),
+  });
+  void (async () => {
+    let ok = 0;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      notify.update(notifId, {
+        detail: i18n.t("download.downloadingPart", { done: i + 1, total: parts.length }),
+      });
+      const result = await downloadStreamedHit({
+        ...hit,
+        externalId: part.externalId,
+        title: part.title,
+        durationSec: part.durationSec ?? hit.durationSec,
+      });
+      if (result.kind === "downloaded") ok += 1;
+      else if (result.kind === "requires-login") {
+        notify.update(notifId, {
+          type: "error",
+          message: i18n.t("download.loginRequired"),
+          detail: hit.title,
+        });
+        return;
+      }
+    }
+    notify.update(notifId, {
+      type: "success",
+      message: i18n.t("download.doneCount", { count: ok }),
+      detail: hit.title,
+      duration: 3000,
+    });
+  })();
 }

@@ -15,10 +15,7 @@ import type { KeyboardEvent } from "react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
-import {
-  DownloadQualityDialog,
-  type DownloadRequest,
-} from "@/components/stream/download-quality-dialog";
+import { DownloadQualityDialog } from "@/components/stream/download-quality-dialog";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -64,7 +61,7 @@ import {
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
-import { canDownloadVideo } from "@/streamsrc/download-action";
+import { canDownloadVideo, startBackgroundDownload } from "@/streamsrc/download-action";
 import type { StreamPlaylist, StreamSearchHit } from "@/streamsrc/provider";
 import { searchGlobalLocalLibrary } from "@/workers/global-search-local-client";
 import type { GlobalSearchLocalResults } from "@/workers/global-search-local-core";
@@ -127,7 +124,7 @@ export function GlobalTrackSearch({
   // Escape dismisses the `@` menu without closing the overlay; cleared on next keystroke.
   const [menuDismissed, setMenuDismissed] = useState(false);
   // The pending download request (hit + audio/video mode); null = dialog closed.
-  const [downloadRequest, setDownloadRequest] = useState<DownloadRequest | null>(null);
+  const [downloadHit, setDownloadHit] = useState<StreamSearchHit | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   // The trailing `@mention` the caret is inside, and the text we actually search
@@ -541,7 +538,7 @@ export function GlobalTrackSearch({
         !event.shiftKey &&
         canDownloadVideo(item.hit.source)
       ) {
-        setDownloadRequest({ hit: item.hit, mode: "video" });
+        setDownloadHit(item.hit);
         return;
       }
       void activate(item, event.shiftKey);
@@ -770,11 +767,12 @@ export function GlobalTrackSearch({
                     selected={selectedIndex === onlineStart + i}
                     onMouseEnter={() => setSelectedIndex(onlineStart + i)}
                     onPlay={() => void activate({ type: "online", hit }, false)}
-                    onDownloadAudio={() => setDownloadRequest({ hit, mode: "audio" })}
+                    onDownloadAudio={() => {
+                      startBackgroundDownload(hit, { audioOnly: true });
+                      onOpenChange(false);
+                    }}
                     onDownloadVideo={
-                      canDownloadVideo(hit.source)
-                        ? () => setDownloadRequest({ hit, mode: "video" })
-                        : undefined
+                      canDownloadVideo(hit.source) ? () => setDownloadHit(hit) : undefined
                     }
                   />
                 ))}
@@ -813,7 +811,14 @@ export function GlobalTrackSearch({
           </div>
         </div>
       </div>
-      <DownloadQualityDialog request={downloadRequest} onClose={() => setDownloadRequest(null)} />
+      <DownloadQualityDialog
+        hit={downloadHit}
+        onClose={() => setDownloadHit(null)}
+        onStarted={() => {
+          setDownloadHit(null);
+          onOpenChange(false);
+        }}
+      />
     </div>
   );
 }
