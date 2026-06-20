@@ -139,6 +139,18 @@
     "retry": "Retry",
     "remove": "Remove"
   },
+  "playlistSync": {
+    "title": "Subscribed playlists",
+    "freqManual": "Manual",
+    "freqAppStart": "On app start",
+    "freq15": "Every 15 min",
+    "freq30": "Every 30 min",
+    "freq60": "Every 60 min",
+    "autoDownload": "Auto-download new videos",
+    "syncNow": "Sync now",
+    "synced": "Playlist synced",
+    "syncFailed": "Sync failed"
+  },
   "streamSources": {
     "title": "Online sources",
     "redline": "Personal use · your own account · respect each platform's terms",

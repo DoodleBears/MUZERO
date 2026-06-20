@@ -53,6 +53,7 @@ import { startCloudAutoSyncScheduler } from "@/stores/cloud-auto-sync";
 import { useDesktopWindowStore } from "@/stores/desktop-window-store";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { startPlaylistAutoSyncScheduler } from "@/stores/playlist-auto-sync";
 import { startSyncIndicator } from "@/stores/sync-indicator";
 import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
@@ -143,6 +144,9 @@ export default function App() {
   useEffect(() => {
     void recoverDownloadQueue();
   }, []);
+
+  // Auto-sync sets bound to an external playlist/favlist (per-set cadence + auto-download new).
+  useEffect(() => startPlaylistAutoSyncScheduler(), []);
 
   // Dev / profiling-build automation control endpoint bridge. In a normal prod build
   // both flags fold to false → the import is dead code → tree-shaken. The dedicated

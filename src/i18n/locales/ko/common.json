@@ -132,6 +132,18 @@
     "retry": "재시도",
     "remove": "제거"
   },
+  "playlistSync": {
+    "title": "구독한 플레이리스트",
+    "freqManual": "수동",
+    "freqAppStart": "앱 시작 시",
+    "freq15": "15분마다",
+    "freq30": "30분마다",
+    "freq60": "60분마다",
+    "autoDownload": "새 영상 자동 다운로드",
+    "syncNow": "지금 동기화",
+    "synced": "플레이리스트 동기화됨",
+    "syncFailed": "동기화 실패"
+  },
   "streamSources": {
     "title": "온라인 소스",
     "redline": "개인 사용 · 본인 계정 · 각 플랫폼 약관 준수",

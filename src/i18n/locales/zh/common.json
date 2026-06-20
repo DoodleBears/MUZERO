@@ -132,6 +132,18 @@
     "retry": "重试",
     "remove": "移除"
   },
+  "playlistSync": {
+    "title": "订阅的歌单",
+    "freqManual": "手动",
+    "freqAppStart": "启动时",
+    "freq15": "每 15 分钟",
+    "freq30": "每 30 分钟",
+    "freq60": "每 60 分钟",
+    "autoDownload": "自动下载新视频",
+    "syncNow": "立即同步",
+    "synced": "歌单已同步",
+    "syncFailed": "同步失败"
+  },
   "streamSources": {
     "title": "在线音源",
     "redline": "个人使用 · 自带账号 · 遵守各平台条款",

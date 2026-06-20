@@ -132,6 +132,18 @@
     "retry": "再試行",
     "remove": "削除"
   },
+  "playlistSync": {
+    "title": "登録したプレイリスト",
+    "freqManual": "手動",
+    "freqAppStart": "起動時",
+    "freq15": "15分ごと",
+    "freq30": "30分ごと",
+    "freq60": "60分ごと",
+    "autoDownload": "新着動画を自動ダウンロード",
+    "syncNow": "今すぐ同期",
+    "synced": "プレイリストを同期しました",
+    "syncFailed": "同期に失敗しました"
+  },
   "streamSources": {
     "title": "オンラインソース",
     "redline": "個人利用 · 自分のアカウント · 各プラットフォームの規約を遵守",
