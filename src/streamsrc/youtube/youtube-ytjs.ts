@@ -19,7 +19,7 @@
  */
 
 import { BG, type BgConfig } from "bgutils-js";
-import { Innertube, Platform } from "youtubei.js";
+import { Innertube, Log, Platform } from "youtubei.js";
 import type { DiagnosticContext } from "@/lib/diagnostics";
 import { sanitizeUrlForTrace } from "@/lib/diagnostics";
 import { createDiagnosticLogger, log } from "@/lib/logger";
@@ -143,6 +143,10 @@ async function attachPoToken(yt: Innertube, fetchImpl: typeof fetch): Promise<vo
 async function getInnertube(): Promise<Innertube> {
   if (!innertubePromise) {
     innertubePromise = (async () => {
+      // youtubei.js logs a noisy WARN for every parser node it doesn't recognize yet
+      // (e.g. ContinuationItemView when paging playlists) — non-fatal (it JIT-fakes the
+      // node and continues). Keep only real ERRORs so the console isn't spammed.
+      Log.setLevel(Log.Level.ERROR);
       const fetch = createYoutubeFetch(await getAppFetch());
       const yt = await Innertube.create({ fetch, retrieve_player: true });
       await attachPoToken(yt, fetch);

@@ -96,7 +96,16 @@ async function handleMuzfetch(request) {
         errorMessage: error?.message ?? String(error),
       });
     }
-    throw error;
+    // Don't re-throw: a thrown protocol.handle handler makes Electron surface a raw
+    // `net::ERR_FAILED` on the console. These are transient (expired CDN URL, dropped
+    // connection) or expected (the renderer aborted a superseded download/playback).
+    // Hand back a readable error Response so the renderer's fetch sees `!ok` and the
+    // download queue retries / playback fails cleanly — no console spew.
+    const aborted = error?.name === "AbortError";
+    return new Response(error?.message ?? "muzfetch upstream error", {
+      status: aborted ? 499 : 502,
+      headers: corsHeaders({ "content-type": "text/plain", "x-muzero-proxy-error": "1" }),
+    });
   }
 
   // Resolve mode (share/short-link expansion): the renderer can't reliably read a
