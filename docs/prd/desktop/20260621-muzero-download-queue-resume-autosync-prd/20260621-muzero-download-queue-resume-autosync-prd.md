@@ -233,7 +233,7 @@ export function createPlaylistAutoSyncScheduler(deps): { tick; start; stop };
 **Goal:** 入队即落 DB；运行器按并发驱动；失败重试；app 重启恢复未完成任务；下载面板。**先不做续传**（每任务仍整块下，但已持久 + 并发 + 恢复 = 替换 fire-and-forget）。
 **Tasks:**
 - [x] `downloadJobs` 表（v31）+ repo（[`download-job-repo.ts`](../../../../src/db/download-job-repo.ts)）+ 类型（`DownloadJob`/`DownloadJobStatus`/`PlaylistAutoSyncFrequency` + `DjSession.autoSync*` + `AppSettings.downloadConcurrency`）。tsc 绿。
-- [ ] `download-queue.ts` 纯状态机 + 单测。
+- [x] `download-queue.ts` 纯状态机 + 单测（createDownloadJob/sameTarget 去重/selectNextJobs 并发/jobsToRecover 恢复/canRetry+retryBackoffMs 退避；7 测绿）。
 - [ ] `download-queue-runner.ts` 运行器（注入式）+ 单测（并发/重试/恢复）。
 - [ ] `download-action`/player-store 入队改造（`downloadHitsAsVideo`/收藏夹「下载为视频」→ enqueue）。
 - [ ] `downloads-panel.tsx` + i18n。
