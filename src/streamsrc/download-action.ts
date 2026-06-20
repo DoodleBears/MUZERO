@@ -78,6 +78,7 @@ export async function downloadStreamedHit(
   hit: StreamSearchHit,
   opts?: {
     quality?: string;
+    audioOnly?: boolean;
     onProgress?: (stage: DownloadProgressStage, ratio: number) => void;
   },
 ): Promise<DownloadStreamedVideoResult> {
@@ -101,6 +102,7 @@ export async function downloadStreamedHit(
         durationSec: hit.durationSec,
       },
       quality: opts?.quality,
+      audioOnly: opts?.audioOnly,
     },
     {
       fetchBytes: async (url, headers) => {

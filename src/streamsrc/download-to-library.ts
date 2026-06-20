@@ -48,6 +48,8 @@ export interface DownloadStreamedVideoInput {
   coverUrl?: string;
   /** Video quality key (e.g. "1080" / "max"); passed to the source's resolveVideo. */
   quality?: string;
+  /** Download the audio track only (no video, no mux) → a local audio track. */
+  audioOnly?: boolean;
 }
 
 export type DownloadStreamedVideoResult =
@@ -63,6 +65,7 @@ export async function downloadStreamedVideoToLibrary(
 ): Promise<DownloadStreamedVideoResult> {
   const db = deps.db ?? defaultDb;
   const { source, externalId } = input;
+  if (input.audioOnly) return downloadAudioOnly(input, deps);
   if (!source.resolveVideo) return { kind: "error", message: `${source.id} has no video download` };
 
   const videoRes = await source.resolveVideo(externalId, { quality: input.quality });
@@ -158,6 +161,92 @@ export async function downloadStreamedVideoToLibrary(
       bytes: muxed.size,
       height: videoRes.video.height ?? 0,
       container,
+    };
+  } catch (err) {
+    return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Enrich a download's title/meta/cover from the source (official cover) when missing. */
+async function enrichFromSource(
+  input: DownloadStreamedVideoInput,
+): Promise<{ title: string; meta?: StreamSourceMeta; coverUrl?: string }> {
+  let { title, meta, coverUrl } = input;
+  if ((!coverUrl || !title || title === input.externalId) && input.source.getTracksByIds) {
+    try {
+      const [hit] = await input.source.getTracksByIds([input.externalId]);
+      if (hit) {
+        coverUrl ??= hit.coverUrl;
+        if (!title || title === input.externalId) title = hit.title;
+        meta ??= {
+          artist: hit.artist,
+          album: hit.album,
+          coverUrl: hit.coverUrl,
+          durationSec: hit.durationSec,
+        };
+      }
+    } catch {
+      // best-effort
+    }
+  }
+  return { title, meta, coverUrl };
+}
+
+/** Audio-only download: resolve the audio stream, store it as a local audio track. */
+async function downloadAudioOnly(
+  input: DownloadStreamedVideoInput,
+  deps: DownloadStreamedVideoDeps,
+): Promise<DownloadStreamedVideoResult> {
+  const db = deps.db ?? defaultDb;
+  const { source, externalId } = input;
+  const audioRes = await source.resolve(externalId, {});
+  if (audioRes.kind === "requires-login") return { kind: "requires-login" };
+  if (audioRes.kind === "no-permission") return { kind: "no-permission", reason: audioRes.reason };
+  if (audioRes.kind !== "ok") return { kind: "error", message: audioRes.message };
+
+  try {
+    deps.onProgress?.("fetch", 0);
+    const audioBlob =
+      audioRes.stream.blob ??
+      (await deps.fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers));
+    deps.onProgress?.("fetch", 1);
+    const mime = audioRes.stream.mime || audioBlob.type || "audio/mp4";
+
+    const { title, meta, coverUrl } = await enrichFromSource(input);
+    const track = await createStreamedTrack(
+      {
+        sessionId: input.sessionId,
+        sourceId: source.id,
+        externalId,
+        title,
+        kind: "audio",
+        coverUrl,
+        meta,
+      },
+      db,
+    );
+    await prependTrackIds(input.sessionId, [track.id], db);
+    await cacheStreamedTrackBlob(track.id, audioBlob, mime, db, deps.storage);
+    await db.tracks.update(track.id, {
+      kind: "audio",
+      durationSec: meta?.durationSec ?? track.durationSec,
+      updatedAt: Date.now(),
+    });
+    deps.onProgress?.("store", 1);
+    // Official cover only (no video to poster from).
+    await applyDownloadedCover(track.id, {
+      coverUrl,
+      video: audioBlob,
+      fetchBytes: deps.fetchBytes,
+      db,
+      storage: deps.storage,
+    });
+    return {
+      kind: "downloaded",
+      trackId: track.id,
+      bytes: audioBlob.size,
+      height: 0,
+      container: "mp4",
     };
   } catch (err) {
     return { kind: "error", message: err instanceof Error ? err.message : String(err) };

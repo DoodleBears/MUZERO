@@ -103,6 +103,8 @@
   "download": {
     "setName": "ダウンロード",
     "button": "ダウンロード",
+    "audio": "音声をダウンロード",
+    "video": "動画をダウンロード",
     "title": "動画をダウンロード",
     "subtitle": "画質を選んでライブラリに保存します",
     "loadingQualities": "画質を取得中…",
@@ -123,6 +125,7 @@
   "streamSources": {
     "title": "オンラインソース",
     "redline": "個人利用 · 自分のアカウント · 各プラットフォームの規約を遵守",
+    "enterDownloads": "検索で Enter キーで動画をダウンロード（再生ではなく）",
     "desktopOnly": "オンラインソースはデスクトップ専用です。",
     "login": "ログイン",
     "loggingIn": "ログイン中…",

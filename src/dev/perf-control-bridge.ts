@@ -603,6 +603,7 @@ export function startPerfControlBridge(): void {
           meta,
           coverUrl,
           quality: payload.quality as string | undefined,
+          audioOnly: Boolean(payload.audioOnly),
         },
         {
           fetchBytes: async (url, headers) => {

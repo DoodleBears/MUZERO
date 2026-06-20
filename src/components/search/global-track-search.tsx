@@ -6,6 +6,7 @@ import {
   Globe,
   ListMusic,
   ListPlus,
+  Music,
   Search,
   User,
   X,
@@ -14,7 +15,10 @@ import type { KeyboardEvent } from "react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
-import { DownloadQualityDialog } from "@/components/stream/download-quality-dialog";
+import {
+  DownloadQualityDialog,
+  type DownloadRequest,
+} from "@/components/stream/download-quality-dialog";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -122,8 +126,8 @@ export function GlobalTrackSearch({
   const [menuIndex, setMenuIndex] = useState(0);
   // Escape dismisses the `@` menu without closing the overlay; cleared on next keystroke.
   const [menuDismissed, setMenuDismissed] = useState(false);
-  // The online hit whose download quality-picker is open (null = closed).
-  const [downloadHit, setDownloadHit] = useState<StreamSearchHit | null>(null);
+  // The pending download request (hit + audio/video mode); null = dialog closed.
+  const [downloadRequest, setDownloadRequest] = useState<DownloadRequest | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   // The trailing `@mention` the caret is inside, and the text we actually search
@@ -170,6 +174,8 @@ export function GlobalTrackSearch({
   const settings = useSettings();
   // Online sources need the desktop media proxy (Referer/CORS). Hidden on web/tauri.
   const streamingSupported = hasStreamingSources();
+  // ⌘F Enter on a video-capable online result downloads (video) by default; Settings off → play.
+  const enterDownloadsVideo = settings.enterDownloadsVideo !== false;
   const transliterationReady = useTransliterationReady();
 
   // Which sections the active filter shows. No filter → fast library facets +
@@ -526,7 +532,19 @@ export function GlobalTrackSearch({
     if (event.key === "Enter") {
       event.preventDefault();
       const item = navItems[selectedIndex];
-      if (item) void activate(item, event.shiftKey);
+      if (!item) return;
+      // Enter on a downloadable online result → open the quality picker (Settings can disable);
+      // Shift+Enter and audio-only sources fall through to the normal play path.
+      if (
+        item.type === "online" &&
+        enterDownloadsVideo &&
+        !event.shiftKey &&
+        canDownloadVideo(item.hit.source)
+      ) {
+        setDownloadRequest({ hit: item.hit, mode: "video" });
+        return;
+      }
+      void activate(item, event.shiftKey);
     }
   }
 
@@ -752,8 +770,11 @@ export function GlobalTrackSearch({
                     selected={selectedIndex === onlineStart + i}
                     onMouseEnter={() => setSelectedIndex(onlineStart + i)}
                     onPlay={() => void activate({ type: "online", hit }, false)}
-                    onDownload={
-                      canDownloadVideo(hit.source) ? () => setDownloadHit(hit) : undefined
+                    onDownloadAudio={() => setDownloadRequest({ hit, mode: "audio" })}
+                    onDownloadVideo={
+                      canDownloadVideo(hit.source)
+                        ? () => setDownloadRequest({ hit, mode: "video" })
+                        : undefined
                     }
                   />
                 ))}
@@ -792,7 +813,7 @@ export function GlobalTrackSearch({
           </div>
         </div>
       </div>
-      <DownloadQualityDialog hit={downloadHit} onClose={() => setDownloadHit(null)} />
+      <DownloadQualityDialog request={downloadRequest} onClose={() => setDownloadRequest(null)} />
     </div>
   );
 }
@@ -1244,15 +1265,18 @@ function OnlineResultRow({
   selected,
   onMouseEnter,
   onPlay,
-  onDownload,
+  onDownloadAudio,
+  onDownloadVideo,
 }: {
   hit: StreamSearchHit;
   index: number;
   selected: boolean;
   onMouseEnter: () => void;
   onPlay: () => void;
-  /** Present only for sources that can download video (Bilibili / YouTube). */
-  onDownload?: () => void;
+  /** Audio-only download (available for every online source). */
+  onDownloadAudio: () => void;
+  /** Video download — present only for sources that can download video (Bilibili / YouTube). */
+  onDownloadVideo?: () => void;
 }) {
   const { t } = useTranslation();
   const subtitle = [hit.artist, hit.album].filter(Boolean).join(" · ");
@@ -1292,17 +1316,28 @@ function OnlineResultRow({
           <div className="truncate text-muted-foreground text-xs">{subtitle || hit.source}</div>
         </div>
       </button>
-      {onDownload ? (
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         <button
           type="button"
-          onClick={onDownload}
-          aria-label={t("download.button")}
-          title={t("download.button")}
-          className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background/60 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+          onClick={onDownloadAudio}
+          aria-label={t("download.audio")}
+          title={t("download.audio")}
+          className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
         >
-          <Download className="size-4" />
+          <Music className="size-4" />
         </button>
-      ) : null}
+        {onDownloadVideo ? (
+          <button
+            type="button"
+            onClick={onDownloadVideo}
+            aria-label={t("download.video")}
+            title={t("download.video")}
+            className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
+          >
+            <Download className="size-4" />
+          </button>
+        ) : null}
+      </div>
       <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground uppercase">
         {hit.source}
       </span>

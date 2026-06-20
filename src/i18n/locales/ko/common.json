@@ -103,6 +103,8 @@
   "download": {
     "setName": "다운로드",
     "button": "다운로드",
+    "audio": "오디오 다운로드",
+    "video": "동영상 다운로드",
     "title": "동영상 다운로드",
     "subtitle": "화질을 선택해 라이브러리에 저장합니다",
     "loadingQualities": "화질을 가져오는 중…",
@@ -123,6 +125,7 @@
   "streamSources": {
     "title": "온라인 소스",
     "redline": "개인 사용 · 본인 계정 · 각 플랫폼 약관 준수",
+    "enterDownloads": "검색에서 Enter로 동영상 다운로드(재생 대신)",
     "desktopOnly": "온라인 소스는 데스크톱 전용입니다.",
     "login": "로그인",
     "loggingIn": "로그인 중…",

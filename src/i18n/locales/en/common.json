@@ -109,6 +109,8 @@
   "download": {
     "setName": "Downloads",
     "button": "Download",
+    "audio": "Download audio",
+    "video": "Download video",
     "title": "Download video",
     "subtitle": "Pick a quality to save into your library",
     "loadingQualities": "Loading qualities…",
@@ -130,6 +132,7 @@
   "streamSources": {
     "title": "Online sources",
     "redline": "Personal use · your own account · respect each platform's terms",
+    "enterDownloads": "Enter downloads video (instead of streaming) in search",
     "desktopOnly": "Online sources are desktop-only.",
     "login": "Log in",
     "loggingIn": "Logging in…",

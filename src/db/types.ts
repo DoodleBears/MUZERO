@@ -655,6 +655,9 @@ export interface AppSettings {
   streamOnlineSetId?: string;
   /** The set that collects videos downloaded into the library (origin streamed + blobId). */
   streamDownloadsSetId?: string;
+  /** ⌘F: pressing Enter on an online result downloads (video) instead of streaming.
+   *  Undefined = on (the default). Set false to keep Enter = play. */
+  enterDownloadsVideo?: boolean;
   /**
    * Auto-download streamed songs to a local blob after they play (offline cache,
    * Phase 5). On by default so online songs become available offline after play.

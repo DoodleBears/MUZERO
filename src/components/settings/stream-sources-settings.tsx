@@ -5,6 +5,7 @@ import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog
 import { QrLoginDialog } from "@/components/stream/qr-login-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -183,6 +184,19 @@ export function StreamSourcesSettings() {
               </div>
             );
           })}
+          <label
+            htmlFor="stream-enter-downloads"
+            className="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              id="stream-enter-downloads"
+              checked={settings.enterDownloadsVideo !== false}
+              onCheckedChange={(checked) =>
+                void saveSettings({ enterDownloadsVideo: checked === true })
+              }
+            />
+            <span>{t("streamSources.enterDownloads")}</span>
+          </label>
           <StreamCacheControls />
         </CardContent>
       </Card>
