@@ -34,6 +34,7 @@ import {
 import { normalizeTab, useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { buildDownloadPlan } from "@/streamsrc/download-plan";
+import { downloadStreamedVideoToLibrary } from "@/streamsrc/download-to-library";
 import { muxCopyTracks } from "@/streamsrc/mux/mux-mediabunny";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
@@ -59,7 +60,8 @@ export interface PerfControlCommand {
     | "sessions"
     | "seedExample"
     | "streamProbe"
-    | "streamDownload";
+    | "streamDownload"
+    | "downloadToLibrary";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -99,6 +101,8 @@ interface PerfCommandHandlerDeps {
   streamProbe?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** Full download E2E: resolve video+audio, fetch bytes, copy-remux, return sizes. */
   streamDownload?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Download a streamed video INTO the library (task #9): creates a playable track. */
+  downloadToLibrary?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -262,6 +266,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "streamDownload": {
         if (!deps.streamDownload) throw new Error("streamDownload not wired");
         return deps.streamDownload(command.payload ?? {});
+      }
+      case "downloadToLibrary": {
+        if (!deps.downloadToLibrary) throw new Error("downloadToLibrary not wired");
+        return deps.downloadToLibrary(command.payload ?? {});
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
@@ -518,6 +526,94 @@ export function startPerfControlBridge(): void {
         muxedType: muxed.type,
         savedStorageKey,
         savedBytes,
+      };
+    },
+    // Download a streamed video INTO the library (task #9): ensure a "Downloads" set,
+    // run the real persist-to-track path, and read the track back for verification.
+    downloadToLibrary: async (payload) => {
+      const sourceId = String(payload.sourceId ?? "bili") as StreamSourceId;
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error(`source ${sourceId} unavailable`);
+
+      let externalId = String(payload.externalId ?? "");
+      let title = String(payload.title ?? "");
+      let meta: import("@/db/types").StreamSourceMeta | undefined;
+      let coverUrl: string | undefined;
+      if (!externalId && payload.search) {
+        const [hit] = await source.search(String(payload.search), { limit: 1 });
+        externalId = hit?.externalId ?? "";
+        title = hit?.title ?? externalId;
+        meta = hit
+          ? {
+              artist: hit.artist,
+              album: hit.album,
+              coverUrl: hit.coverUrl,
+              durationSec: hit.durationSec,
+            }
+          : undefined;
+        coverUrl = hit?.coverUrl;
+      }
+      if (!externalId) throw new Error("externalId or search required");
+      if (!title) title = externalId;
+
+      const { createSession: createSess, listSessions } = await import("@/db/repositories");
+      const sessions = await listSessions();
+      const existing = sessions.find((s) => s.name === "Downloads");
+      const session =
+        existing ??
+        (await createSess({
+          name: "Downloads",
+          seedPrompt: "",
+          config: { autoExtend: false },
+          displayMode: "video",
+        }));
+
+      const bridge = resolveDesktopBridge();
+      const result = await downloadStreamedVideoToLibrary(
+        {
+          source,
+          sessionId: session.id,
+          externalId,
+          title,
+          meta,
+          coverUrl,
+          quality: payload.quality as string | undefined,
+        },
+        {
+          fetchBytes: async (url, headers) => {
+            const proxied = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
+            const resp = await fetch(proxied);
+            if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+            return resp.blob();
+          },
+          mux: (v, a, container) => muxCopyTracks(v, a, container),
+        },
+      );
+
+      const track = result.kind === "downloaded" ? await getTrack(result.trackId) : null;
+      return {
+        sessionId: session.id,
+        result,
+        track: track
+          ? {
+              id: track.id,
+              title: track.title,
+              kind: track.kind,
+              origin: track.origin,
+              hasBlob: Boolean(track.blobId),
+              durationSec: track.durationSec,
+              downloadedVideoHeight: track.downloadedVideoHeight,
+              downloadedContainer: track.downloadedContainer,
+              downloadedCodecs: track.downloadedCodecs,
+            }
+          : null,
       };
     },
     seedExample: async () => {

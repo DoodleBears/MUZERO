@@ -174,6 +174,14 @@ function routeToCommand(method, segments, body) {
   ) {
     return { kind: "streamDownload", payload: body };
   }
+  if (
+    method === "POST" &&
+    segments.length === 2 &&
+    segments[0] === "stream" &&
+    segments[1] === "library"
+  ) {
+    return { kind: "downloadToLibrary", payload: body };
+  }
   return null;
 }
 

@@ -16,7 +16,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 基础设施：视频轨解析 + 清晰度模型 + 下载计划 resolver（纯函数，零 mux） | ✅ Bili + YouTube 切片（实时 E2E 验证） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | 🔄 orchestrator + mux + Bili/YT 下载 ✅ 实时 E2E（player-store 入库 / saveFile / Worker 待接） | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | ✅ 核心完成：Bili/YT 下载 + mux + **入库为可离线播放 track**（实时 E2E）；saveFile / Worker / UI 待接 | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -137,7 +137,8 @@ src/
 │   ├── mux/
 │   │   ├── mux-mediabunny.ts        # 新：渲染层 copy-remux（mediabunny 包级 packet-copy，无重编码；mp4 fastStart）✅ E2E 验证
 │   │   └── mux-strategy.ts          # 新：chooseMuxStrategy + classifyAudioCodec（codec→容器裁决，纯）✅
-│   └── video-download.ts            # 新：runVideoDownload() orchestrator（纯+注入，仿 cache-stream.ts）✅
+│   ├── video-download.ts            # 新：runVideoDownload() orchestrator（纯+注入，仿 cache-stream.ts）✅
+│   └── download-to-library.ts       # 新：downloadStreamedVideoToLibrary（建本地视频 track，task #9）✅
 ├── workers/
 │   └── video-mux-worker.ts          # 新：渲染层 copy-remux 放 Worker（规则 7：重活不卡主线程）
 ├── lib/desktop/                     # 扩 bridge（仅 Phase 3 可选）：detectSystemFfmpeg?/transcodeWithSystemFfmpeg?（BYO，Electron-only）
@@ -409,7 +410,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
   - **Bilibili** `BV1X163BQEo8` @360p → video 22.3MB + audio 5.4MB → **27.7MB mp4**（`mediaProxyUrl` 取字节，注 Referer/UA）；先前 8s clip @480p → 220KB mp4。
   - **YouTube** `EvuXIk2Bh78` @144p → video 1.96MB + audio 4.2MB → **6.16MB mp4**（blob 传输：youtubei `info.download` range 取流 + PoToken；deciphered 直链单 GET 会 400）。
 - [x] **登录解锁高清 + 落盘保存（harness）**：登录 B 站（`SESSDATA` 存 IndexedDB，跨重启留存、source 自动读取）后 `BV1X163BQEo8` 清晰度从 480P 封顶 → 解锁 **1080P/720P**；下载 1080p → mux → 经 `writeMediaStorageBlob` 落盘 **115.6MB `video/mp4`**（`ftypisom` 头校验、`savedBytes==muxedBytes`），文件留存于 `…/MUZERO/persistent-media/downloads/`，未删除。✅ 证明持久化（task #9 的 store 环节）+ 登录态高清门均成立。
-- [ ] Electron 手测：选档 → 下载 → 库里出现可离线播放的本地视频 track（需 player-store `downloadStreamedVideo` 落 `writeMediaStorageBlob` + 建 track）。
+- [x] **下载入库 + 离线播放 实时 E2E（harness，task #9）**：`downloadStreamedVideoToLibrary`（[`download-to-library.ts`](../../../../src/streamsrc/download-to-library.ts)）resolve→fetch/blob→mux→`cacheStreamedTrackBlob` 落库。登录后 `BV1X163BQEo8` @1080p → 建 **kind:video / origin:streamed / blobId 已填 / downloaded* = 1080·mp4·avc+aac** 的 track 进「Downloads」集；经控制端点 `setActiveSession`+`playIndex` 驱动，`/state` 回 **isPlaying=true、displayMode=video**，媒体 blob 落 `persistent-media/media/…blb_….mp4`（110MB）→ **app 内离线播放成立**。3 单测 + E2E。✅
 - [ ] 另存为文件能在文件管理器打开、音视频同步、可 seek。
 - [ ] 大文件（>200MB）走持久存储而非 IndexedDB，下载中内存不爆（第二次循环复测，prod build）。
 - [ ] 下载可取消、半成品被清理。
@@ -515,6 +516,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | 2026-06-20 | DoodleBear | 决策：**绝不打包 FFmpeg**。移除 `@mediabunny/server` / 主进程转码；改为 copy-remux 优先（原生容器 mp4/webm）+ 可选 WebCodecs / BYO 系统 ffmpeg。Open Q1 关闭 |
 | 2026-06-20 | DoodleBear | 纳入深度研究教训：§4.1 codec 偏好不硬编码 + Bili 参考改 yt-dlp `bilibili.py`（bilibili-API-collect/BBDown 已关停）；§4.2 Mediabunny 容器矩阵 +「音轨配对视频容器族」（几乎 100% 纯 copy）；新增 §4.6 提取层韧性（youtubei.js/bgutils 钉版本 + 丢格式不崩 + PoToken 渲染器铸）；§8 Bili 合规事件；§9 活源更新；Open Q6–8 关闭 |
 | 2026-06-20 | DoodleBear | YouTube 视频接入：`pickAdaptiveVideo` + 运行时 `resolveVideo`(info.download blob)/`listVideoQualities`，`PlayableVideoTrack` 加 blob 传输（YT）/url（B站）。两源下载+mux 实时 E2E 通过（Bili `BV1X163BQEo8`、YT `EvuXIk2Bh78`）。Phase 1 双源完成 |
+| 2026-06-20 | DoodleBear | task #9 下载入库：`download-to-library.ts` `downloadStreamedVideoToLibrary`（resolve→fetch/blob→mux→`cacheStreamedTrackBlob` 建本地视频 track，保留 origin:streamed + 来源引用）。登录后 Bili 1080p 入库 + 控制端点驱动 **app 内离线播放成立**（isPlaying/displayMode:video）。Phase 2 核心完成 |
 | 2026-06-20 | DoodleBear | 对齐现状基线：新增 §1.4「Bilibili 音频整条已打通」——同一已验证 playurl 响应已含 `dash.video[]`（现被丢弃），故 Bili 视频是对已验证请求的纯增量（仅加 `parseDashVideo`/`resolveVideo` + 视频侧 `fnval` 16→4048，不动音频路径）；§4.1 + §6 改为「Bili 低风险先行、YouTube 脆弱独立验收」 |
 
 ---
