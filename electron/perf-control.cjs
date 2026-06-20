@@ -19,7 +19,9 @@ const RESULT_CHANNEL = "muzero:perfControl:result";
 const DEFAULT_PORT = 7345;
 const TOKEN_HEADER = "x-muzero-perf-token";
 const MAX_BODY_BYTES = 1024 * 1024;
-const DISPATCH_TIMEOUT_MS = 30_000;
+// 30s suits the snappy control actions; stream download+mux fetches real media bytes, so
+// allow a longer ceiling for those dev-only scenarios.
+const DISPATCH_TIMEOUT_MS = 180_000;
 
 /**
  * The single source of truth for whether the control endpoint may exist. Kept pure (no
@@ -163,6 +165,14 @@ function routeToCommand(method, segments, body) {
   }
   if (method === "POST" && segments.length === 2 && segments[0] === "stream" && segments[1] === "probe") {
     return { kind: "streamProbe", payload: body };
+  }
+  if (
+    method === "POST" &&
+    segments.length === 2 &&
+    segments[0] === "stream" &&
+    segments[1] === "download"
+  ) {
+    return { kind: "streamDownload", payload: body };
   }
   return null;
 }

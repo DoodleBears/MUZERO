@@ -16,7 +16,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 基础设施：视频轨解析 + 清晰度模型 + 下载计划 resolver（纯函数，零 mux） | 🔄 Bili 切片 ✅（YouTube `pickAdaptiveVideo` 待做） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | 🔄 orchestrator ✅（mediabunny mux / player-store / saveFile 待 Electron 手测） | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | 🔄 orchestrator + mediabunny mux ✅ 实时 E2E（player-store 入库 / saveFile / Worker 待接） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -133,7 +133,7 @@ src/
 │   ├── video-quality.ts             # 新：跨源 label/排序（videoQualityLabel + sortVideoQualitiesDesc，bili 已消费）✅
 │   ├── download-plan.ts             # 新：buildDownloadPlan()（纯，pair video+audio → DownloadPlan）✅
 │   ├── mux/
-│   │   ├── mux-mediabunny.ts        # 新：渲染层 copy-remux（transmux 无重编码；WebCodecs transcode 为可选分支）
+│   │   ├── mux-mediabunny.ts        # 新：渲染层 copy-remux（mediabunny 包级 packet-copy，无重编码；mp4 fastStart）✅ E2E 验证
 │   │   └── mux-strategy.ts          # 新：chooseMuxStrategy + classifyAudioCodec（codec→容器裁决，纯）✅
 │   └── video-download.ts            # 新：runVideoDownload() orchestrator（纯+注入，仿 cache-stream.ts）✅
 ├── workers/
@@ -396,14 +396,15 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 **Goal:** 对 copy 友好的档（AVC+AAC→mp4、VP9+Opus→webm）实现端到端下载：fetch 两轨 → mediabunny 封装 → 持久存储 → 建本地 track，并提供「另存为文件」。
 
 **Tasks:**
-- [ ] `mux/mux-mediabunny.ts`：mediabunny `Output` + `Mp4OutputFormat`/`WebMOutputFormat` copy-remux（必要时 WebCodecs transcode）。
+- [x] `mux/mux-mediabunny.ts`：mediabunny 包级 packet-copy（`EncodedPacketSink`→`Encoded*PacketSource`→`Output`）copy-remux 进 mp4(fastStart)/webm/mkv，无重编码。✅ E2E 验证（见下）。
 - [ ] `workers/video-mux-worker.ts`：mux 放 Worker（规则 7，不卡主线程）。
 - [x] `video-download.ts` `runVideoDownload` orchestrator（纯+注入，fake-mux 单测）。✅ 6 单测全绿（resolve→fetch×2→mux→store；登录/VIP/unsupported/异常 全走结构化 verdict、never throws）。
 - [ ] player-store `downloadStreamedVideo` action：注入 `mediaProxyUrl` fetch + worker mux + `writeMediaStorageBlob` store + 建/更新 track。（运行时，待 Electron 手测）
 - [ ] 复用 `bridge.saveFile` 实现「另存为文件」。
 
 #### Phase 2 Checklist
-- [ ] Electron 手测：一个公开 B站 MV 选 720p（AVC+AAC）→ 下载 → 库里出现可离线播放的本地视频 track。
+- [x] **下载+mux 实时 E2E（harness）**：真实 B站 8s clip（BV1W8j76eEFd）→ resolveVideo(480P AVC)+audio → `mediaProxyUrl` 取字节(video 155KB + audio 66KB) → mediabunny copy-remux → 单个 **`video/mp4` 220KB**（≈两轨之和 → 证明无重编码）。驱动 [`scripts/stream-download.mjs`](../../../../scripts/stream-download.mjs) + dev `streamDownload` 控制命令。✅
+- [ ] Electron 手测：选档 → 下载 → 库里出现可离线播放的本地视频 track（需 player-store `downloadStreamedVideo` 落 `writeMediaStorageBlob` + 建 track）。
 - [ ] 另存为文件能在文件管理器打开、音视频同步、可 seek。
 - [ ] 大文件（>200MB）走持久存储而非 IndexedDB，下载中内存不爆（第二次循环复测，prod build）。
 - [ ] 下载可取消、半成品被清理。

@@ -14,6 +14,7 @@ import {
   setTrackTags,
 } from "@/db/repositories";
 import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, type StreamSourceId } from "@/db/types";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { EXAMPLE_TRACK_TITLE, loadExampleTrackAssets } from "@/lib/example-track";
 import { log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata } from "@/lib/media-metadata";
@@ -32,6 +33,8 @@ import {
 } from "@/shortcuts/actions";
 import { normalizeTab, useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { buildDownloadPlan } from "@/streamsrc/download-plan";
+import { muxCopyTracks } from "@/streamsrc/mux/mux-mediabunny";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { getSearchPerfSnapshot, resetSearchPerf } from "@/workers/search-client";
@@ -55,7 +58,8 @@ export interface PerfControlCommand {
     | "liveRequest"
     | "sessions"
     | "seedExample"
-    | "streamProbe";
+    | "streamProbe"
+    | "streamDownload";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -93,6 +97,8 @@ interface PerfCommandHandlerDeps {
   seedExample?: () => Promise<unknown>;
   /** Probe a stream source's video resolve/quality-list against the live API (dev E2E). */
   streamProbe?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Full download E2E: resolve video+audio, fetch bytes, copy-remux, return sizes. */
+  streamDownload?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -252,6 +258,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "streamProbe": {
         if (!deps.streamProbe) throw new Error("streamProbe not wired");
         return deps.streamProbe(command.payload ?? {});
+      }
+      case "streamDownload": {
+        if (!deps.streamDownload) throw new Error("streamDownload not wired");
+        return deps.streamDownload(command.payload ?? {});
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
@@ -452,6 +462,69 @@ export function startPerfControlBridge(): void {
             : r;
       }
       return { sourceId, externalId, searchHits, audio, qualities, video };
+    },
+    // Full download E2E: resolve video+audio → fetch bytes via the media proxy → copy-remux
+    // with mediabunny → report sizes (no DB write; this proves the runtime mux path). To keep
+    // the byte download small, `search` picks the SHORTEST hit.
+    streamDownload: async (payload) => {
+      const sourceId = String(payload.sourceId ?? "bili") as StreamSourceId;
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source?.resolveVideo) throw new Error(`source ${sourceId} has no resolveVideo`);
+
+      let externalId = String(payload.externalId ?? "");
+      let picked: { title?: string; durationSec?: number } | undefined;
+      if (!externalId && payload.search) {
+        const hits = await source.search(String(payload.search), { limit: 10 });
+        const byDur = hits
+          .filter((h) => (h.durationSec ?? 0) > 0)
+          .sort((a, b) => (a.durationSec ?? 0) - (b.durationSec ?? 0));
+        const hit = byDur[0] ?? hits[0];
+        picked = hit ? { title: hit.title, durationSec: hit.durationSec } : undefined;
+        externalId = hit?.externalId ?? "";
+      }
+      if (!externalId) throw new Error("externalId or search required");
+
+      const videoRes = await source.resolveVideo(externalId, {
+        quality: payload.quality as string | undefined,
+      });
+      if (videoRes.kind !== "ok") return { stage: "resolveVideo", result: videoRes };
+      const audioRes = await source.resolve(externalId, {});
+      if (audioRes.kind !== "ok") return { stage: "resolveAudio", result: audioRes };
+
+      const plan = buildDownloadPlan(videoRes.video, audioRes.stream);
+      if (plan.strategy.kind !== "copy") return { stage: "strategy", strategy: plan.strategy };
+
+      const bridge = resolveDesktopBridge();
+      const fetchBytes = async (url: string, headers?: Record<string, string>): Promise<Blob> => {
+        const proxied = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
+        const resp = await fetch(proxied);
+        if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+        return resp.blob();
+      };
+      const [videoBlob, audioBlob] = await Promise.all([
+        fetchBytes(videoRes.video.url, videoRes.video.headers),
+        fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers),
+      ]);
+      const muxed = await muxCopyTracks(videoBlob, audioBlob, plan.strategy.container);
+      return {
+        externalId,
+        title: picked?.title,
+        durationSec: picked?.durationSec,
+        container: plan.strategy.container,
+        height: videoRes.video.height,
+        codec: videoRes.video.codec,
+        videoBytes: videoBlob.size,
+        audioBytes: audioBlob.size,
+        muxedBytes: muxed.size,
+        muxedType: muxed.type,
+      };
     },
     seedExample: async () => {
       const session = await createSession({
