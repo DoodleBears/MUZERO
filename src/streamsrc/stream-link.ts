@@ -58,8 +58,17 @@ export function parseBareStreamId(text: string): StreamLinkRef | null {
 
 function parseBili(url: URL): StreamLinkRef | null {
   // /video/BV…  (also matches with a trailing slash or query string; av… is legacy).
-  const m = url.pathname.match(/\/video\/(BV[0-9A-Za-z]+|av\d+)/i);
-  return m ? { source: "bili", kind: "song", id: m[1] } : null;
+  const video = url.pathname.match(/\/video\/(BV[0-9A-Za-z]+|av\d+)/i);
+  if (video) return { source: "bili", kind: "song", id: video[1] };
+  // 收藏夹: space.bilibili.com/<uid>/favlist?fid=<media_id> — fid IS the media_id.
+  const fid = url.searchParams.get("fid");
+  if (/\/favlist/i.test(url.pathname) && fid && /^\d+$/.test(fid)) {
+    return { source: "bili", kind: "playlist", id: fid };
+  }
+  // 收藏夹分享: bilibili.com/medialist/detail/ml<media_id>.
+  const ml = url.pathname.match(/\/medialist\/detail\/ml(\d+)/i);
+  if (ml) return { source: "bili", kind: "playlist", id: ml[1] };
+  return null;
 }
 
 function parseYoutube(url: URL): StreamLinkRef | null {

@@ -198,6 +198,14 @@ function routeToCommand(method, segments, body) {
   ) {
     return { kind: "resolveLink", payload: body };
   }
+  if (
+    method === "POST" &&
+    segments.length === 2 &&
+    segments[0] === "stream" &&
+    segments[1] === "playlists"
+  ) {
+    return { kind: "syncPlaylists", payload: body };
+  }
   return null;
 }
 

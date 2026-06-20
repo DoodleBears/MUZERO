@@ -67,7 +67,8 @@ export interface PerfControlCommand {
     | "streamDownload"
     | "downloadToLibrary"
     | "recoverCover"
-    | "resolveLink";
+    | "resolveLink"
+    | "syncPlaylists";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -113,6 +114,8 @@ interface PerfCommandHandlerDeps {
   recoverCover?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** Detect a link / bare id and resolve it targeted (getTracksByIds) — paste-to-resolve. */
   resolveLink?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** List a source's user playlists (Bilibili 收藏夹 sync); optional `importId` to import one. */
+  syncPlaylists?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -288,6 +291,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "resolveLink": {
         if (!deps.resolveLink) throw new Error("resolveLink not wired");
         return deps.resolveLink(command.payload ?? {});
+      }
+      case "syncPlaylists": {
+        if (!deps.syncPlaylists) throw new Error("syncPlaylists not wired");
+        return deps.syncPlaylists(command.payload ?? {});
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
@@ -673,6 +680,29 @@ export function startPerfControlBridge(): void {
       if (!source?.getTracksByIds) return { ref, hit: null };
       const [hit] = await source.getTracksByIds([ref.id]);
       return { ref, hit: hit ?? null };
+    },
+    // List a source's user playlists (Bilibili 收藏夹 sync); `importId` imports one to hits.
+    syncPlaylists: async (payload) => {
+      const sourceId = String(payload.sourceId ?? "bili") as StreamSourceId;
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error(`source ${sourceId} unavailable`);
+      const playlists = (await source.getUserPlaylists?.()) ?? [];
+      let imported: unknown = null;
+      if (payload.importId) {
+        const hits = (await source.importPlaylist?.(String(payload.importId))) ?? [];
+        imported = {
+          count: hits.length,
+          sample: hits.slice(0, 3).map((h) => ({ externalId: h.externalId, title: h.title })),
+        };
+      }
+      return { playlists, imported };
     },
     // Backfill an existing streamed track's official cover (no video re-download).
     recoverCover: async (payload) => {

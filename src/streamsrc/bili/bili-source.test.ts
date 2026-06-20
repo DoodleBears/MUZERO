@@ -295,4 +295,64 @@ describe("createBiliSource.resolveVideo / listVideoQualities", () => {
       coverUrl: "https://i2.hdslb.com/bfs/archive/cover.jpg",
     });
   });
+
+  it("getUserPlaylists lists the logged-in user's fav folders (needs login)", async () => {
+    const NAV_MID = { code: 0, data: { mid: 12345, wbi_img: NAV.data.wbi_img } };
+    const FOLDERS = {
+      code: 0,
+      data: { list: [{ id: 100, title: "收藏A", media_count: 3, cover: "//i0.hdslb.com/f.jpg" }] },
+    };
+    const { source } = deps(
+      [
+        ["/x/web-interface/nav", NAV_MID],
+        ["/fav/folder/created", FOLDERS],
+      ],
+      "SESSDATA=abc",
+    );
+    const pls = (await source.getUserPlaylists?.()) ?? [];
+    expect(pls).toHaveLength(1);
+    expect(pls[0]).toMatchObject({ source: "bili", id: "100", name: "收藏A", trackCount: 3 });
+
+    // Anonymous → no fav folders.
+    const { source: anon } = deps([["/x/web-interface/nav", NAV_MID]], undefined);
+    expect((await anon.getUserPlaylists?.()) ?? []).toEqual([]);
+  });
+
+  it("getPlaylistMeta reads folder info from a resource-list page", async () => {
+    const RES = {
+      code: 0,
+      data: { info: { id: 100, title: "收藏A", media_count: 9 }, medias: [], has_more: false },
+    };
+    const { source } = deps([
+      ["/x/web-interface/nav", NAV],
+      ["/fav/resource", RES],
+    ]);
+    expect(await source.getPlaylistMeta?.("100")).toMatchObject({
+      source: "bili",
+      id: "100",
+      name: "收藏A",
+      trackCount: 9,
+    });
+  });
+
+  it("importPlaylist paginates the resource list until has_more is false", async () => {
+    let pages = 0;
+    const http: StreamHttp = async (req) => {
+      let body: unknown = { code: -404 };
+      if (req.url.includes("/x/web-interface/nav")) body = NAV;
+      else if (req.url.includes("/fav/resource")) {
+        pages += 1;
+        const pn = new URL(req.url).searchParams.get("pn");
+        body =
+          pn === "1"
+            ? { code: 0, data: { medias: [{ bvid: "BV1", title: "a" }], has_more: true } }
+            : { code: 0, data: { medias: [{ bvid: "BV2", title: "b" }], has_more: false } };
+      }
+      return { status: 200, text: async () => JSON.stringify(body), json: async () => body };
+    };
+    const source = createBiliSource({ http, now: () => 1_700_000_000_000 });
+    const hits = (await source.importPlaylist?.("100")) ?? [];
+    expect(hits.map((h) => h.externalId)).toEqual(["BV1", "BV2"]);
+    expect(pages).toBe(2);
+  });
 });

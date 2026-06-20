@@ -19,7 +19,7 @@
 | 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | ✅ 核心完成：Bili/YT 下载 + mux + **入库为可离线播放 track**（实时 E2E）；saveFile / Worker / UI 待接 | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | ⛔ Won't do（2026-06-20 用户决策：能下载+导入+播放即够，不做「强制格式」，copy→原生容器已覆盖） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔄 核心完成：⌘F 在线行下载按钮 + 清晰度对话框 + 进度 + i18n×4（转码强制 mp4 UI 待 Phase 3） | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Bilibili 收藏夹/合集同步 → 视频导入 | 🔲 调研+设计完成（bili 当前**无**歌单同步；fav API 可行；镜像 netease/qq + 复用下载链路） | [Phase 5](#phase-5调研--设计-bilibili-收藏夹--合集同步--视频导入) |
+| 5 | Bilibili 收藏夹/合集同步 → 视频导入 | 🔄 **P5a 同步完成**（`bili-playlists` + `getUserPlaylists`/`getPlaylistMeta`/`importPlaylist` + favlist 链接识别；实时 E2E：真账号列出 35 收藏夹 + 导入「MUZERO-TEST」3 条）；P5b 整单批量下载为视频待做 | [Phase 5](#phase-5调研--设计-bilibili-收藏夹--合集同步--视频导入) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -468,8 +468,8 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 **导入即下载视频（用户的核心诉求）**：收藏夹同步出来的每条都是 `bvid` 的 hit → 走既有 [`importStreamedPlaylist`/`addHitsToSet`](../../../../src/streamsrc/streamed-track-repo.ts) 建成一个集（streamed track）；随后**逐条或整单调既有视频下载流程**（`downloadStreamedHit` → resolveVideo + mux + 1080p 默认 + prefer-match-else-degrade）。即「按收藏夹里的视频导入并下载视频」= 同步收藏夹 hits + 复用 §4/§Phase2 的下载链路（含 `下载全部` 批量）。无需新解码/网络栈。
 
 **Phase 5 切分**：
-- **P5a 同步**：`bili-playlists.ts` + bili `getUserPlaylists`/`getPlaylistMeta`/`importPlaylist` + favlist 链接识别。落地后 Settings「同步歌单」对 B站即生效、粘贴收藏夹链接可导入。
-- **P5b 整单视频下载**：收藏夹导入后「下载全部为视频」（批量 = 循环 `downloadStreamedHit`，用默认清晰度 + 后台队列/进度——后台队列见 §7 仍为后续增强）。
+- **P5a 同步**（✅ 完成 + 实时 E2E）：[`bili-playlists.ts`](../../../../src/streamsrc/bili/bili-playlists.ts)（`parseFavFolders`/`parseFavInfo`/`parseFavResourceList`，纯函数 7 单测）+ bili source `getUserPlaylists`(nav→mid → `fav/folder/created/list-all`)/`getPlaylistMeta`/`importPlaylist`(`fav/resource/list` WBI+翻页，cap 50 页/1000 条) + [`parseStreamLink`](../../../../src/streamsrc/stream-link.ts) 认 favlist(`favlist?fid=` / `medialist/detail/ml<id>`)。**真账号 E2E**：列出 35 收藏夹（默认 529、设计相关 427…）+ 导入「MUZERO-TEST」3 条（bvid+标题）。Settings「同步歌单」对 B站即生效、粘贴收藏夹链接可导入。
+- **P5b 整单视频下载**（待做）：收藏夹导入后「下载全部为视频」（批量 = 循环 `downloadStreamedHit`，用默认 1080p + 后台通知进度，复用 `startBackgroundBatchDownload` 模式；后台队列/断点续传见 §7 仍为后续增强）。
 
 **合规**：沿用 §8——参考 yt-dlp/yutto 活源、不依赖已关停的 bilibili-API-collect；个人本地 + BYO `SESSDATA`；翻页加轻度限速/抖动降低风控（社区脚本经验）；不解密 DRM。
 
@@ -558,6 +558,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | 2026-06-20 | DoodleBear | Phase 4 UI：⌘F 在线结果行加**下载按钮**（仅 bili/youtube，`canDownloadVideo` gate）→ **清晰度选择对话框**（[`download-quality-dialog.tsx`](../../../../src/components/stream/download-quality-dialog.tsx)：列档+体积估算+VIP 标+三段进度+完成/错误态）→ [`download-action.ts`](../../../../src/streamsrc/download-action.ts) `downloadStreamedHit`（真实 deps：mediaProxyUrl fetch + mediabunny mux + 抽帧封面，落「Downloads」集）。i18n×4（`download.*`）+ `AppSettings.streamDownloadsSetId`（附加字段）。tsc/biome 绿；overlay 挂载验证（dev driver 接受 open/type） |
 | 2026-06-20 | DoodleBear | 对齐现状基线：新增 §1.4「Bilibili 音频整条已打通」——同一已验证 playurl 响应已含 `dash.video[]`（现被丢弃），故 Bili 视频是对已验证请求的纯增量（仅加 `parseDashVideo`/`resolveVideo` + 视频侧 `fnval` 16→4048，不动音频路径）；§4.1 + §6 改为「Bili 低风险先行、YouTube 脆弱独立验收」 |
 | 2026-06-21 | DoodleBear | 调研 Bilibili 收藏夹同步（新增 Phase 5 §）：结论=**bili 当前无歌单/收藏夹同步**（只有 `getTracksByIds`，`getUserPlaylists`/`importPlaylist`/`getPlaylistMeta` 仅 netease/qq 实现，Settings「同步歌单」按钮对 bili 返回空）。设计：新建 `bili-playlists.ts` 镜像 netease/qq，走 `/x/v3/fav/folder/created/list-all`(mid 取自 nav) + `/x/v3/fav/resource/list`(WBI+SESSDATA+翻页)，favlist 链接识别;收藏夹 hits 复用既有导入 + 视频下载链路（按收藏夹视频导入并下载）。活源参考 yt-dlp（bilibili-API-collect 已关停）|
+| 2026-06-21 | DoodleBear | **P5a 实现**：`bili-playlists.ts`（`parseFavFolders`/`parseFavInfo`/`parseFavResourceList`，7 单测）+ bili source `getUserPlaylists`/`getPlaylistMeta`/`importPlaylist`（nav→mid、fav folder/resource API、WBI+翻页 cap 50 页，15 单测）+ `parseStreamLink` 认 favlist(`favlist?fid=`/`medialist/detail/ml`)。TDD 全绿 + tsc。**真账号 E2E**：`syncPlaylists` 列出 35 收藏夹、导入「MUZERO-TEST」3 条(bvid+标题)|
 
 ---
 

@@ -25,6 +25,20 @@ describe("parseStreamLink — Bilibili / YouTube", () => {
     ).toEqual({ source: "bili", kind: "song", id: "BV1HLz9BJEgi" });
   });
 
+  it("parses a bilibili favlist link (space …/favlist?fid=) to a playlist", () => {
+    expect(
+      parseStreamLink("https://space.bilibili.com/123/favlist?fid=456789&ftype=create"),
+    ).toEqual({ source: "bili", kind: "playlist", id: "456789" });
+  });
+
+  it("parses a bilibili medialist (ml…) share link to a playlist", () => {
+    expect(parseStreamLink("https://www.bilibili.com/medialist/detail/ml456789")).toEqual({
+      source: "bili",
+      kind: "playlist",
+      id: "456789",
+    });
+  });
+
   it("parses a youtube shorts link", () => {
     expect(parseStreamLink("https://www.youtube.com/shorts/0EbmNplrNqE")).toEqual({
       source: "youtube",

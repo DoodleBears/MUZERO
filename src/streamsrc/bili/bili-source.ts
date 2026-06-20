@@ -15,6 +15,7 @@ import type {
   PlayableStream,
   PlayableVideoTrack,
   StreamPart,
+  StreamPlaylist,
   StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
@@ -25,6 +26,7 @@ import type {
   VideoQualityOption,
 } from "../provider";
 import { videoQualityLabel } from "../video-quality";
+import { parseFavFolders, parseFavInfo, parseFavResourceList } from "./bili-playlists";
 import { type BiliQualityKey, parseDashAudio, selectAudioByPreference } from "./bili-resolve";
 import {
   type BiliVideoCodec,
@@ -38,6 +40,10 @@ const NAV_URL = "https://api.bilibili.com/x/web-interface/nav";
 const SEARCH_URL = "https://api.bilibili.com/x/web-interface/wbi/search/type";
 const VIEW_URL = "https://api.bilibili.com/x/web-interface/wbi/view";
 const PLAYURL_URL = "https://api.bilibili.com/x/player/wbi/playurl";
+const FAV_FOLDERS_URL = "https://api.bilibili.com/x/v3/fav/folder/created/list-all";
+const FAV_RESOURCE_URL = "https://api.bilibili.com/x/v3/fav/resource/list";
+// ps=20 → cap at 1000 favlist items (50 pages); huge favlists truncate with a log, not hang.
+const MAX_FAV_PAGES = 50;
 const REFERER = "https://www.bilibili.com";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -208,6 +214,54 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
       }));
   }
 
+  /** The logged-in user's mid, from the nav response (needed to list their fav folders). */
+  async function fetchMid(signal?: AbortSignal): Promise<number | null> {
+    const nav = await getJson(NAV_URL, signal);
+    const mid = (nav.data as { mid?: number } | undefined)?.mid;
+    return typeof mid === "number" && mid > 0 ? mid : null;
+  }
+
+  /** The logged-in user's created fav folders (收藏夹). Needs login (the mid is theirs). */
+  async function getUserPlaylists(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]> {
+    if (!deps.getCookie?.()) return [];
+    const mid = await fetchMid(opts?.signal);
+    if (!mid) return [];
+    const url = await signedUrl(FAV_FOLDERS_URL, { up_mid: String(mid) }, opts?.signal);
+    return parseFavFolders(await getJson(url, opts?.signal));
+  }
+
+  /** Folder meta for a pasted/synced favlist `media_id` (carried in the resource-list page). */
+  async function getPlaylistMeta(
+    mediaId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamPlaylist | null> {
+    const url = await signedUrl(
+      FAV_RESOURCE_URL,
+      { media_id: mediaId, pn: "1", ps: "20", platform: "web" },
+      opts?.signal,
+    );
+    return parseFavInfo(await getJson(url, opts?.signal));
+  }
+
+  /** All videos in a favlist as hits (paginated resource-list; capped at MAX_FAV_PAGES). */
+  async function importPlaylist(
+    mediaId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamSearchHit[]> {
+    const hits: StreamSearchHit[] = [];
+    for (let pn = 1; pn <= MAX_FAV_PAGES; pn += 1) {
+      const url = await signedUrl(
+        FAV_RESOURCE_URL,
+        { media_id: mediaId, pn: String(pn), ps: "20", platform: "web" },
+        opts?.signal,
+      );
+      const { hits: pageHits, hasMore } = parseFavResourceList(await getJson(url, opts?.signal));
+      hits.push(...pageHits);
+      if (!hasMore || pageHits.length === 0) break;
+    }
+    return hits;
+  }
+
   /** Fetch the DASH video tracks via the same signed playurl (richer fnval). */
   async function fetchVideoStreams(
     externalId: string,
@@ -287,6 +341,9 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
     listVideoQualities,
     listParts,
     getTracksByIds,
+    getUserPlaylists,
+    getPlaylistMeta,
+    importPlaylist,
   };
 }
 
