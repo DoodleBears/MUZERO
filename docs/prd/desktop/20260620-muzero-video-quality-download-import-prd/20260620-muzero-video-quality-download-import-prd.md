@@ -408,6 +408,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 - [x] **下载+mux 实时 E2E（harness，两源）**：驱动 [`scripts/stream-download.mjs`](../../../../scripts/stream-download.mjs) + dev `streamDownload` 控制命令，copy-remux 均产出单 `video/mp4`（muxedBytes ≈ 两轨之和 → 无重编码）：
   - **Bilibili** `BV1X163BQEo8` @360p → video 22.3MB + audio 5.4MB → **27.7MB mp4**（`mediaProxyUrl` 取字节，注 Referer/UA）；先前 8s clip @480p → 220KB mp4。
   - **YouTube** `EvuXIk2Bh78` @144p → video 1.96MB + audio 4.2MB → **6.16MB mp4**（blob 传输：youtubei `info.download` range 取流 + PoToken；deciphered 直链单 GET 会 400）。
+- [x] **登录解锁高清 + 落盘保存（harness）**：登录 B 站（`SESSDATA` 存 IndexedDB，跨重启留存、source 自动读取）后 `BV1X163BQEo8` 清晰度从 480P 封顶 → 解锁 **1080P/720P**；下载 1080p → mux → 经 `writeMediaStorageBlob` 落盘 **115.6MB `video/mp4`**（`ftypisom` 头校验、`savedBytes==muxedBytes`），文件留存于 `…/MUZERO/persistent-media/downloads/`，未删除。✅ 证明持久化（task #9 的 store 环节）+ 登录态高清门均成立。
 - [ ] Electron 手测：选档 → 下载 → 库里出现可离线播放的本地视频 track（需 player-store `downloadStreamedVideo` 落 `writeMediaStorageBlob` + 建 track）。
 - [ ] 另存为文件能在文件管理器打开、音视频同步、可 seek。
 - [ ] 大文件（>200MB）走持久存储而非 IndexedDB，下载中内存不爆（第二次循环复测，prod build）。

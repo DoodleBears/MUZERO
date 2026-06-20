@@ -496,6 +496,15 @@ export function startPerfControlBridge(): void {
         audioRes.stream.blob ?? fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers),
       ]);
       const muxed = await muxCopyTracks(videoBlob, audioBlob, plan.strategy.container);
+      // Persist to the app's media storage so the file is KEPT (not just measured).
+      let savedStorageKey: string | undefined;
+      let savedBytes: number | undefined;
+      if (payload.save !== false && bridge.writeMediaStorageBlob) {
+        const safeId = externalId.replace(/[^\w.-]/g, "_");
+        savedStorageKey = `downloads/${safeId}-${videoRes.video.height ?? 0}p.${plan.strategy.container}`;
+        await bridge.writeMediaStorageBlob({ storageKey: savedStorageKey, blob: muxed });
+        savedBytes = (await bridge.statMediaStorageFile?.({ storageKey: savedStorageKey }))?.bytes;
+      }
       return {
         externalId,
         title: picked?.title,
@@ -507,6 +516,8 @@ export function startPerfControlBridge(): void {
         audioBytes: audioBlob.size,
         muxedBytes: muxed.size,
         muxedType: muxed.type,
+        savedStorageKey,
+        savedBytes,
       };
     },
     seedExample: async () => {
