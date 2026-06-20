@@ -13,4 +13,5 @@
 
 | PRD | 状态 | 摘要 |
 |---|---|---|
-| [20260620-muzero-video-quality-download-import](20260620-muzero-video-quality-download-import-prd/20260620-muzero-video-quality-download-import-prd.md) | Draft | Bilibili/YouTube 视频清晰度选择 + 直接下载到本地导入；DASH 分轨用 mediabunny **copy-remux**（无重编码、原生容器 mp4/webm，**不打包 FFmpeg**）。external-streaming-sources 的视频向扩展 |
+| [20260620-muzero-video-quality-download-import](20260620-muzero-video-quality-download-import-prd/20260620-muzero-video-quality-download-import-prd.md) | ✅ Merged (PR #1) | Bilibili/YouTube 视频清晰度选择 + 直接下载到本地导入；DASH 分轨用 mediabunny **copy-remux**（无重编码、原生容器 mp4/webm，**不打包 FFmpeg**）。含收藏夹/playlist 同步 + 整单下载。external-streaming-sources 的视频向扩展 |
+| [20260621-muzero-download-queue-resume-autosync](20260621-muzero-download-queue-resume-autosync-prd/20260621-muzero-download-queue-resume-autosync-prd.md) | Draft | 持久**下载队列**（并发/重试/重启恢复）+ **断点续传**（Range 分片 + 直链过期重解析 + 分片落盘）+ 歌单/收藏夹**自动定时同步**（镜像 cloud auto-sync-scheduler，可选「同步即下载」）。承接视频下载 PRD 的后续增强 |
