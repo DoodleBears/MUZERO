@@ -135,7 +135,7 @@ src/
 │   ├── mux/
 │   │   ├── mux-mediabunny.ts        # 新：渲染层 copy-remux（transmux 无重编码；WebCodecs transcode 为可选分支）
 │   │   └── mux-strategy.ts          # 新：chooseMuxStrategy + classifyAudioCodec（codec→容器裁决，纯）✅
-│   └── video-download.ts            # 新：runVideoDownload() orchestrator（纯+注入，仿 cache-stream.ts）
+│   └── video-download.ts            # 新：runVideoDownload() orchestrator（纯+注入，仿 cache-stream.ts）✅
 ├── workers/
 │   └── video-mux-worker.ts          # 新：渲染层 copy-remux 放 Worker（规则 7：重活不卡主线程）
 ├── lib/desktop/                     # 扩 bridge（仅 Phase 3 可选）：detectSystemFfmpeg?/transcodeWithSystemFfmpeg?（BYO，Electron-only）
@@ -397,8 +397,8 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 **Tasks:**
 - [ ] `mux/mux-mediabunny.ts`：mediabunny `Output` + `Mp4OutputFormat`/`WebMOutputFormat` copy-remux（必要时 WebCodecs transcode）。
 - [ ] `workers/video-mux-worker.ts`：mux 放 Worker（规则 7，不卡主线程）。
-- [ ] `video-download.ts` `runVideoDownload` orchestrator（纯+注入，fake-mux 单测）。
-- [ ] player-store `downloadStreamedVideo` action：注入 `mediaProxyUrl` fetch + worker mux + `writeMediaStorageBlob` store + 建/更新 track。
+- [x] `video-download.ts` `runVideoDownload` orchestrator（纯+注入，fake-mux 单测）。✅ 6 单测全绿（resolve→fetch×2→mux→store；登录/VIP/unsupported/异常 全走结构化 verdict、never throws）。
+- [ ] player-store `downloadStreamedVideo` action：注入 `mediaProxyUrl` fetch + worker mux + `writeMediaStorageBlob` store + 建/更新 track。（运行时，待 Electron 手测）
 - [ ] 复用 `bridge.saveFile` 实现「另存为文件」。
 
 #### Phase 2 Checklist
