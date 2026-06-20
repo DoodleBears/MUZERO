@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 持久下载队列（落 DB + 并发上限 + 重试 + 重启恢复 + UI 面板） | ✅ 完成（表/状态机/运行器/入队改造/App 启动恢复/下载面板；真字节进度待 P2） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 断点续传（Range 分片拉取 + 分片落盘 + 直链过期重解析） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 断点续传（Range 分片拉取 + 分片落盘 + 直链过期重解析） | 🔄 续传判定纯核心完成（`resumable-range`）；runJob 分片集成待做 | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 歌单/收藏夹自动定时同步（调度器 + 可选「同步即下载」） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -246,8 +246,8 @@ export function createPlaylistAutoSyncScheduler(deps): { tick; start; stop };
 ### Phase 2: 断点续传
 **Goal:** 任务分片 Range 下载、分片落盘、记录 `bytesDone`；中断后从断点续（含直链过期重解析）；低内存。
 **Tasks:**
-- [ ] `resumable-fetch.ts`（Range/206/200 + 偏移）+ 纯单测。
-- [ ] `runJob` 接续传：resolve→range→appendChunk(.part)→两轨齐→mux→落库。
+- [x] `resumable-range.ts` 纯续传判定（`rangeHeader`/`parseContentRange`/`planResume`：206+匹配 Content-Range→append、200/不匹配→replace、offset 0→全量；8 测绿）。
+- [ ] `runJob` 接续传：resolve→range→appendChunk(.part)→两轨齐→mux→落库（用 `resumable-range` 判定 + `writeMediaStorageBlob` chunked）。
 - [ ] 暂停/恢复保留 `bytesDone`；取消清 `.part`。
 
 #### Phase 2 Checklist
