@@ -86,7 +86,8 @@ describe("downloadStreamedVideoToLibrary", () => {
         sessionId: session.id,
         externalId: "BV1X163BQEo8",
         title: "Test video",
-        meta: { durationSec: 42 },
+        meta: { durationSec: 42, coverUrl: "https://cdn/cover.jpg" },
+        coverUrl: "https://cdn/cover.jpg",
         quality: "1080",
       },
       deps(),
@@ -100,6 +101,7 @@ describe("downloadStreamedVideoToLibrary", () => {
     expect(track?.kind).toBe("video");
     expect(track?.origin).toBe("streamed");
     expect(track?.blobId).toBeTruthy(); // local-backed → plays offline
+    expect(track?.coverBlobId).toBeTruthy(); // official cover downloaded to a local blob
     expect(track?.downloadedVideoHeight).toBe(1080);
     expect(track?.downloadedContainer).toBe("mp4");
     expect(track?.downloadedCodecs).toBe("avc+aac");
@@ -107,6 +109,25 @@ describe("downloadStreamedVideoToLibrary", () => {
 
     const inSet = await db.sessions.get(session.id);
     expect(inSet?.trackIds).toContain(res.trackId);
+  });
+
+  it("falls back to a poster frame when there is no source cover URL", async () => {
+    const session = await createSession(
+      { name: "Downloads", seedPrompt: "", config: { autoExtend: false }, displayMode: "video" },
+      db,
+    );
+    const posterFrame = vi.fn(async () => ({
+      blob: new Blob([new Uint8Array(80)], { type: "image/webp" }),
+      mime: "image/webp",
+    }));
+    const res = await downloadStreamedVideoToLibrary(
+      { source: stubSource(), sessionId: session.id, externalId: "BVx", title: "No cover" },
+      deps({ posterFrame }),
+    );
+    expect(res.kind).toBe("downloaded");
+    if (res.kind !== "downloaded") return;
+    expect(posterFrame).toHaveBeenCalledOnce();
+    expect((await db.tracks.get(res.trackId))?.coverBlobId).toBeTruthy();
   });
 
   it("uses the blob transport (YouTube) without fetching a URL", async () => {

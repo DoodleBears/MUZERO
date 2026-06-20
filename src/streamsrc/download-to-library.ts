@@ -11,7 +11,7 @@
 
 import type { MediaBlobStorageOptions } from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import { prependTrackIds } from "@/db/repositories";
+import { prependTrackIds, setTrackCover } from "@/db/repositories";
 import type { StreamSourceMeta } from "@/db/types";
 import { buildDownloadPlan } from "./download-plan";
 import { classifyAudioCodec, type MuxContainer } from "./mux/mux-strategy";
@@ -29,6 +29,8 @@ export interface DownloadStreamedVideoDeps {
   fetchBytes: (url: string, headers?: Record<string, string>) => Promise<Blob>;
   /** Copy-remux video + audio into one container blob. */
   mux: (video: Blob, audio: Blob, container: MuxContainer) => Promise<Blob>;
+  /** Extract a poster frame from the muxed video (fallback cover; needs DOM, so injected). */
+  posterFrame?: (video: Blob, durationSec?: number) => Promise<{ blob: Blob; mime: string } | null>;
   /** Progress 0..1 per stage. */
   onProgress?: (stage: "fetch" | "mux" | "store", ratio: number) => void;
   db?: MuzeroDB;
@@ -115,6 +117,18 @@ export async function downloadStreamedVideoToLibrary(
       downloadedCodecs: `${videoRes.video.codec}+${classifyAudioCodec(audioRes.stream.mime)}`,
       updatedAt: Date.now(),
     });
+
+    // Cover (best-effort; never fails the download): prefer the source's official cover,
+    // else extract a poster frame from the downloaded video itself.
+    await applyDownloadedCover(track.id, {
+      coverUrl: input.coverUrl,
+      video: muxed,
+      durationSec: input.meta?.durationSec,
+      fetchBytes: deps.fetchBytes,
+      posterFrame: deps.posterFrame,
+      db,
+      storage: deps.storage,
+    });
     deps.onProgress?.("store", 1);
 
     return {
@@ -126,5 +140,54 @@ export async function downloadStreamedVideoToLibrary(
     };
   } catch (err) {
     return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Give a downloaded track a local cover (best-effort — a missing cover never fails the
+ * download): prefer the source's official cover URL (downloaded to a local blob, so it's
+ * offline + WebGL-safe), else fall back to a poster frame extracted from the video.
+ */
+async function applyDownloadedCover(
+  trackId: string,
+  opts: {
+    coverUrl?: string;
+    video: Blob;
+    durationSec?: number;
+    fetchBytes: DownloadStreamedVideoDeps["fetchBytes"];
+    posterFrame?: DownloadStreamedVideoDeps["posterFrame"];
+    db: MuzeroDB;
+    storage?: MediaBlobStorageOptions;
+  },
+): Promise<void> {
+  if (opts.coverUrl) {
+    try {
+      // No headers — cover CDNs (e.g. hdslb) reject a foreign Referer; the proxy strips it.
+      const blob = await opts.fetchBytes(opts.coverUrl);
+      if (blob.size > 0) {
+        await setTrackCover(
+          { trackId, blob, mime: blob.type || "image/jpeg" },
+          opts.db,
+          opts.storage,
+        );
+        return;
+      }
+    } catch {
+      // fall through to a poster frame
+    }
+  }
+  if (opts.posterFrame) {
+    try {
+      const poster = await opts.posterFrame(opts.video, opts.durationSec);
+      if (poster && poster.blob.size > 0) {
+        await setTrackCover(
+          { trackId, blob: poster.blob, mime: poster.mime },
+          opts.db,
+          opts.storage,
+        );
+      }
+    } catch {
+      // best-effort: a cover is a nice-to-have, not required
+    }
   }
 }

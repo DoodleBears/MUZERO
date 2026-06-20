@@ -594,6 +594,12 @@ export function startPerfControlBridge(): void {
             return resp.blob();
           },
           mux: (v, a, container) => muxCopyTracks(v, a, container),
+          posterFrame: async (video, durationSec) => {
+            const { extractUsefulVideoPosterFrame } = await import("@/lib/video-poster-frame");
+            const file = new File([video], "download.mp4", { type: video.type || "video/mp4" });
+            const poster = await extractUsefulVideoPosterFrame(file, { durationSec });
+            return poster ? { blob: poster.blob, mime: poster.mime } : null;
+          },
         },
       );
 
@@ -608,6 +614,8 @@ export function startPerfControlBridge(): void {
               kind: track.kind,
               origin: track.origin,
               hasBlob: Boolean(track.blobId),
+              hasCover: Boolean(track.coverBlobId),
+              remoteCoverUrl: track.remoteCoverUrl,
               durationSec: track.durationSec,
               downloadedVideoHeight: track.downloadedVideoHeight,
               downloadedContainer: track.downloadedContainer,
