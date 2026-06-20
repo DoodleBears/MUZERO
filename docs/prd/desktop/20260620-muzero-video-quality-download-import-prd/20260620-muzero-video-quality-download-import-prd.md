@@ -19,6 +19,7 @@
 | 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | ✅ 核心完成：Bili/YT 下载 + mux + **入库为可离线播放 track**（实时 E2E）；saveFile / Worker / UI 待接 | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | ⛔ Won't do（2026-06-20 用户决策：能下载+导入+播放即够，不做「强制格式」，copy→原生容器已覆盖） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔄 核心完成：⌘F 在线行下载按钮 + 清晰度对话框 + 进度 + i18n×4（转码强制 mp4 UI 待 Phase 3） | [Phase 4 Checklist](#phase-4-checklist) |
+| 5 | Bilibili 收藏夹/合集同步 → 视频导入 | 🔲 调研+设计完成（bili 当前**无**歌单同步；fav API 可行；镜像 netease/qq + 复用下载链路） | [Phase 5](#phase-5调研--设计-bilibili-收藏夹--合集同步--视频导入) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -447,6 +448,31 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 - [ ] web/tauri 壳下入口隐藏且附桌面专属提示。
 - [ ] 端到端：选档→下载→进度→入库→离线播放→删除下载 全流程手测通过。
 
+### Phase 5（调研 + 设计）: Bilibili 收藏夹 / 合集同步 → 视频导入
+
+> 用户诉求：「B站同步歌单能不能同步**收藏夹**，按收藏夹里的视频导入视频」。本节是调研结论 + 设计，未实现。
+
+**现状（调研结论）**：**Bilibili 目前没有歌单/收藏夹同步**——bili source 只实现了 `search`/`resolve`/`resolveVideo`/`listVideoQualities`/`listParts`/`getTracksByIds`（单视频），**未实现** `getUserPlaylists`/`getPlaylistMeta`/`importPlaylist`（这三个只有网易云 [`netease-playlists.ts`](../../../../src/streamsrc/netease/netease-playlists.ts) + QQ [`qq-playlists.ts`](../../../../src/streamsrc/qq/qq-playlists.ts) 实现）。Settings「同步歌单」按钮对 B站也会显示（登录后），但点了 `getUserPlaylists?.()` 为 undefined → 返回 `[]` → 显示「无歌单」。所以**收藏夹同步是缺的、需要新建**。
+
+**可行性 + API（以仍维护的 yt-dlp 为准，不依赖已关停的 bilibili-API-collect，见 §8）**：
+- **收藏夹列表**：`/x/v3/fav/folder/created/list-all?up_mid=<mid>`（`mid` 取自 bili source 已在调用的 `/x/web-interface/nav` 响应）→ `list[]`：`{ id(=media_id), title, media_count, cover }`。
+- **收藏夹内容**：`/x/v3/fav/resource/list?media_id=<fid>&pn=<page>&ps=20&platform=web`（WBI 签名 + `SESSDATA`）→ `medias[]`：`{ bvid, title, cover, duration, upper:{name}, page(分P数) }` + `has_more` 翻页。
+- yt-dlp 支持 `space.bilibili.com/<uid>/favlist?fid=<id>` 与 `bilibili.com/medialist/detail/ml<id>`（[yt-dlp `bilibili.py`](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/bilibili.py)）——活源参考。
+- 相邻可选源（后续）：**合集/系列**（`/x/polymer/web-space/seasons_series_list`，`?sid=`）、**稍后再看**（`/x/v2/history/toview`）。本期聚焦收藏夹。
+
+**设计（镜像 netease/qq 歌单同步，最小新增）**：
+- 新建 [`src/streamsrc/bili/bili-playlists.ts`](../../../../src/streamsrc/bili/bili-playlists.ts)：纯解析函数 `parseFavFolders(json)→StreamPlaylist[]`、`parseFavResourceList(json)→{ hits: StreamSearchHit[]; hasMore: boolean }`（穷举单测，仿 netease-playlists 的纯函数 + 注入式请求）。
+- bili-source 实现三个接口：`getUserPlaylists()`（nav→mid → fav folder list）、`getPlaylistMeta(media_id)`、`importPlaylist(media_id)`（翻页拉全 `resource/list`，WBI 签名，cookie 经 `getCookie`）。每个 `media` → hit（`externalId=bvid`，`coverUrl=cover`，`durationSec`，`artist=upper.name`）。
+- [`parseStreamLink`](../../../../src/streamsrc/stream-link.ts) 识别收藏夹链接形态（`medialist/detail/ml<id>`、`favlist?fid=<id>`）→ `{ source:"bili", kind:"playlist", id:media_id }`，复用既有「粘贴歌单链接 → PlaylistImportDialog/openOnlinePlaylist」流程。
+
+**导入即下载视频（用户的核心诉求）**：收藏夹同步出来的每条都是 `bvid` 的 hit → 走既有 [`importStreamedPlaylist`/`addHitsToSet`](../../../../src/streamsrc/streamed-track-repo.ts) 建成一个集（streamed track）；随后**逐条或整单调既有视频下载流程**（`downloadStreamedHit` → resolveVideo + mux + 1080p 默认 + prefer-match-else-degrade）。即「按收藏夹里的视频导入并下载视频」= 同步收藏夹 hits + 复用 §4/§Phase2 的下载链路（含 `下载全部` 批量）。无需新解码/网络栈。
+
+**Phase 5 切分**：
+- **P5a 同步**：`bili-playlists.ts` + bili `getUserPlaylists`/`getPlaylistMeta`/`importPlaylist` + favlist 链接识别。落地后 Settings「同步歌单」对 B站即生效、粘贴收藏夹链接可导入。
+- **P5b 整单视频下载**：收藏夹导入后「下载全部为视频」（批量 = 循环 `downloadStreamedHit`，用默认清晰度 + 后台队列/进度——后台队列见 §7 仍为后续增强）。
+
+**合规**：沿用 §8——参考 yt-dlp/yutto 活源、不依赖已关停的 bilibili-API-collect；个人本地 + BYO `SESSDATA`；翻页加轻度限速/抖动降低风控（社区脚本经验）；不解密 DRM。
+
 ---
 
 ## 7. Out of Scope
@@ -493,6 +519,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | [LuanRT/BgUtils](https://github.com/LuanRT/BgUtils) | PoToken/BotGuard（`bgutils-js`）；须在渲染器 REAL DOM 铸 token，§4.6 依据 |
 | [LuanRT/YouTube.js](https://github.com/LuanRT/YouTube.js) | `youtubei.js`：YT 解密（`Format.decipher`）与 PoToken 集成；提取层韧性依赖（§4.6） |
 | ⚠️ [bilibili-API-collect（已关停）](https://github.com/SocialSisterYi/bilibili-API-collect) | 2026-01-28 律师函关停、勿依赖；仅作历史背景（§8） |
+| [yt-dlp Bilibili 收藏夹下载](https://yt-dlp.app/how-to-download-BilibiliCollectionList-videos) | 收藏夹/合集 URL 形态（`favlist?fid=` / `medialist/detail/ml<id>`）的活源参考（Phase 5 §） |
 
 ---
 
@@ -530,6 +557,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | 2026-06-20 | DoodleBear | 下载交互细化(用户定):⌘F 在线结果行→**两个按钮「下载音频/下载视频」**;**Enter 默认下载视频**(打开清晰度选择框),`AppSettings.enterDownloadsVideo` 开关(Settings→在线源,默认开,关→回车播放);新增**仅音频下载**路径(`download-to-library` audioOnly 分支→建 kind:audio 本地 track)。i18n×4。E2E:Bili 音频-only 下载 5.4MB kind:audio 入库 |
 | 2026-06-20 | DoodleBear | Phase 4 UI：⌘F 在线结果行加**下载按钮**（仅 bili/youtube，`canDownloadVideo` gate）→ **清晰度选择对话框**（[`download-quality-dialog.tsx`](../../../../src/components/stream/download-quality-dialog.tsx)：列档+体积估算+VIP 标+三段进度+完成/错误态）→ [`download-action.ts`](../../../../src/streamsrc/download-action.ts) `downloadStreamedHit`（真实 deps：mediaProxyUrl fetch + mediabunny mux + 抽帧封面，落「Downloads」集）。i18n×4（`download.*`）+ `AppSettings.streamDownloadsSetId`（附加字段）。tsc/biome 绿；overlay 挂载验证（dev driver 接受 open/type） |
 | 2026-06-20 | DoodleBear | 对齐现状基线：新增 §1.4「Bilibili 音频整条已打通」——同一已验证 playurl 响应已含 `dash.video[]`（现被丢弃），故 Bili 视频是对已验证请求的纯增量（仅加 `parseDashVideo`/`resolveVideo` + 视频侧 `fnval` 16→4048，不动音频路径）；§4.1 + §6 改为「Bili 低风险先行、YouTube 脆弱独立验收」 |
+| 2026-06-21 | DoodleBear | 调研 Bilibili 收藏夹同步（新增 Phase 5 §）：结论=**bili 当前无歌单/收藏夹同步**（只有 `getTracksByIds`，`getUserPlaylists`/`importPlaylist`/`getPlaylistMeta` 仅 netease/qq 实现，Settings「同步歌单」按钮对 bili 返回空）。设计：新建 `bili-playlists.ts` 镜像 netease/qq，走 `/x/v3/fav/folder/created/list-all`(mid 取自 nav) + `/x/v3/fav/resource/list`(WBI+SESSDATA+翻页)，favlist 链接识别;收藏夹 hits 复用既有导入 + 视频下载链路（按收藏夹视频导入并下载）。活源参考 yt-dlp（bilibili-API-collect 已关停）|
 
 ---
 
