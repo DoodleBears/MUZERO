@@ -379,7 +379,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 - [ ] `video-quality.ts` 跨源清晰度归一（label/height/fps/hdr/codec/requiresLogin）。
 - [ ] `provider.ts` 加可选 `listVideoQualities`/`resolveVideo`；bili/youtube source 实装，netease 不实装。
 - [x] `mux/mux-strategy.ts` `chooseMuxStrategy` + `classifyAudioCodec`（默认 copy、音轨配对视频容器族、mkv 归档兜底、force-mp4 才 transcode）+ `download-plan.ts` `buildDownloadPlan`（纯）。✅ 16 单测全绿（`resolveDownloadPlan` 的 provider-calling 包装并入 Phase 2 orchestrator）。
-- [ ] `Track`/`StreamSourceConfig` 附加字段（零迁移）。
+- [x] `Track`（`downloadedVideoHeight`/`downloadedContainer`/`downloadedCodecs`）/`StreamSourceConfig`（`videoQuality`）附加非索引字段，零 Dexie 迁移。✅
 
 > **排期建议（基于 §1.4 基线）**：Bilibili 视频是对**已验证请求**的纯增量，可**先单独 ship**（Phase 1+2 只做 Bili 即可端到端最快见效）；YouTube 视频依赖活体对抗的 sig/n/PoToken（§4.6），**单独验收、不阻塞 Bili**。
 

@@ -50,6 +50,8 @@ export interface StreamSourceConfig {
   expiresAt?: number;
   /** Source-specific quality key (e.g. netease "lossless", bili "high"). */
   quality?: string;
+  /** Preferred video download resolution key (e.g. "1080" / "max"); independent of audio `quality`. */
+  videoQuality?: string;
   lastAuthAt?: number;
 }
 
@@ -175,6 +177,15 @@ export interface Track {
   streamExternalId?: string;
   /** Display snapshot so the library renders without an online round-trip. */
   streamMeta?: StreamSourceMeta;
+  // --- Downloaded video snapshot (streamed video persisted via mux, see video PRD) ---
+  // Additive, non-indexed. Set once a streamed video is downloaded + muxed to a local
+  // file (blobId/storageKey filled); used to badge "⬇ 1080p" and for diagnostics.
+  /** Actual landed resolution height of the downloaded video (px). */
+  downloadedVideoHeight?: number;
+  /** Container of the downloaded file ("mp4" | "webm" | "mkv"). */
+  downloadedContainer?: string;
+  /** Codecs of the downloaded file, e.g. "avc1+mp4a" (display/diagnostics). */
+  downloadedCodecs?: string;
   /** Safe display-only source snapshot for tracks imported from a cloud drive. */
   cloudSource?: CloudSourceAttribution;
 }
