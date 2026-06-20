@@ -25,7 +25,10 @@ import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
-import { useTransparentWindowRepaint } from "@/hooks/use-transparent-window-repaint";
+import {
+  useContinuousTransparentRepaint,
+  useTransparentWindowRepaint,
+} from "@/hooks/use-transparent-window-repaint";
 import {
   nowPlayingCoverBacklightVars,
   resolveNowPlayingCoverBacklightAppearance,
@@ -88,6 +91,7 @@ export default function App() {
   const hasAmbientTrack = usePlayerStore(
     (s) => s.currentIndex >= 0 && Boolean(s.queue[s.currentIndex]),
   );
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const [trackSearchOpen, setTrackSearchOpen] = useState(false);
   const fullscreenRestoreRef = useRef<{ element: HTMLElement; until: number } | null>(null);
   const settings = useSettings();
@@ -275,6 +279,11 @@ export default function App() {
       fadeMs: 200,
     },
   );
+  // While the lyrics-only capture is playing, an UNFOCUSED transparent macOS window
+  // stops clearing, so the moving lyrics smear into a 残影. Force a per-frame repaint to
+  // keep the (usually unfocused) overlay trail-free; gated to playing so it idles when
+  // paused/static.
+  useContinuousTransparentRepaint(lyricsOnlyIdle && isPlaying);
 
   // The non-active tabs stay MOUNTED (display:none) to keep their subscriptions warm.
   // App re-renders on transient chrome state (idle/hover during a drag), and these

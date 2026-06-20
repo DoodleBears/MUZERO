@@ -11,7 +11,10 @@ vi.mock("@/lib/desktop/bridge", () => ({
   }),
 }));
 
-import { useTransparentWindowRepaint } from "./use-transparent-window-repaint";
+import {
+  useContinuousTransparentRepaint,
+  useTransparentWindowRepaint,
+} from "./use-transparent-window-repaint";
 
 describe("useTransparentWindowRepaint", () => {
   beforeEach(() => {
@@ -66,6 +69,60 @@ describe("useTransparentWindowRepaint", () => {
 
     rerender({ active: false });
     expect(() => act(() => vi.advanceTimersByTime(2000))).not.toThrow();
+    expect(repaint).not.toHaveBeenCalled();
+  });
+});
+
+describe("useContinuousTransparentRepaint", () => {
+  let frames: FrameRequestCallback[];
+
+  beforeEach(() => {
+    repaint.mockClear();
+    shell.hasRepaint = true;
+    frames = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Drain queued rAF callbacks (each re-queues the next frame).
+  const tick = (n: number) => {
+    for (let i = 0; i < n; i += 1) {
+      const cb = frames.shift();
+      cb?.(performance.now());
+    }
+  };
+
+  it("repaints every animation frame while active (clears the unfocused window)", () => {
+    renderHook(() => useContinuousTransparentRepaint(true));
+    tick(3);
+    expect(repaint.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("does not run while inactive", () => {
+    renderHook(() => useContinuousTransparentRepaint(false));
+    tick(3);
+    expect(repaint).not.toHaveBeenCalled();
+  });
+
+  it("stops repainting after it goes inactive", () => {
+    const { rerender } = renderHook(({ active }) => useContinuousTransparentRepaint(active), {
+      initialProps: { active: true },
+    });
+    tick(1);
+    const callsWhileActive = repaint.mock.calls.length;
+    rerender({ active: false });
+    tick(3);
+    expect(repaint.mock.calls.length).toBe(callsWhileActive);
+  });
+
+  it("no-ops on shells without a repaint capability", () => {
+    shell.hasRepaint = false;
+    renderHook(() => useContinuousTransparentRepaint(true));
+    expect(() => tick(3)).not.toThrow();
     expect(repaint).not.toHaveBeenCalled();
   });
 });

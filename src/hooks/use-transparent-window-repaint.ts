@@ -43,3 +43,38 @@ export function useTransparentWindowRepaint(visible: boolean, options?: { fadeMs
     };
   }, [visible, fadeMs]);
 }
+
+/**
+ * Force a full window repaint EVERY animation frame while `active`.
+ *
+ * A focused macOS window composites (and clears) continuously, but an UNFOCUSED
+ * transparent window stops getting cleared — so moving lyrics smear into a "残影"
+ * the moment focus leaves (the usual state for an OBS/desktop overlay). Driving
+ * `webContents.invalidate()` from the renderer's rAF (which keeps running for a
+ * visible window regardless of focus, especially with `backgroundThrottling:false`)
+ * forces the surface to clear each frame, so the unfocused capture stays trail-free.
+ *
+ * Use ONLY while content is actually moving (lyrics playing in the transparent
+ * capture) — it's a per-frame repaint. Pauses automatically when the window is
+ * hidden/occluded (rAF stops) and on shells without `repaint` (web/Tauri no-op).
+ */
+export function useContinuousTransparentRepaint(active: boolean): void {
+  useEffect(() => {
+    if (!active) return;
+    const repaint = resolveDesktopBridge().windowControls?.repaint;
+    if (!repaint) return;
+
+    let raf = 0;
+    let stopped = false;
+    const loop = () => {
+      if (stopped) return;
+      void repaint();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [active]);
+}
