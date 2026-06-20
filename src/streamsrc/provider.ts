@@ -48,6 +48,55 @@ export type StreamResolveResult =
   | { kind: "no-permission"; reason: string }
   | { kind: "error"; message: string };
 
+export type VideoCodec = "avc" | "hevc" | "vp9" | "av1" | "other";
+
+/** A resolved DASH video-only track — paired with a {@link PlayableStream} audio track
+ *  and muxed at download time (video sources serve audio + video separately). */
+export interface PlayableVideoTrack {
+  /** Bare CDN URL (un-proxied); the desktop media proxy wraps it + injects `headers`. */
+  url: string;
+  /** Headers the media GET must carry (e.g. bili `Referer`/`User-Agent`). */
+  headers?: Record<string, string>;
+  /** Container mime, e.g. `video/mp4`. */
+  mime: string;
+  codec: VideoCodec;
+  width?: number;
+  height?: number;
+  fps?: number;
+  hdr?: boolean;
+  bandwidth?: number;
+  /** When the URL stops working (ms epoch); re-resolve past this. */
+  expiresAt?: number;
+}
+
+/** A selectable video quality for the download picker (cross-source normalized). */
+export interface VideoQualityOption {
+  /** Stable key the caller passes back to {@link StreamSourceProvider.resolveVideo}. */
+  key: string;
+  /** Display label, e.g. `1080P60` / `4K HDR`. */
+  label: string;
+  height: number;
+  fps?: number;
+  hdr?: boolean;
+  codec: VideoCodec;
+  /** Whether this tier needs login / membership (source decides; may be undefined). */
+  requiresLogin?: boolean;
+  bandwidth?: number;
+}
+
+export interface StreamVideoResolveOptions {
+  /** Preferred quality key from {@link VideoQualityOption.key} (e.g. `"1080"` / `"max"`). */
+  quality?: string;
+  signal?: AbortSignal;
+  trace?: Pick<DiagnosticContext, "traceId" | "trackId" | "sessionId" | "sourceId">;
+}
+
+export type StreamVideoResolveResult =
+  | { kind: "ok"; video: PlayableVideoTrack }
+  | { kind: "requires-login" }
+  | { kind: "no-permission"; reason: string }
+  | { kind: "error"; message: string };
+
 export interface StreamSearchOptions {
   limit?: number;
   signal?: AbortSignal;
@@ -78,6 +127,16 @@ export interface StreamSourceProvider {
   isAuthed(): boolean;
   search(query: string, opts?: StreamSearchOptions): Promise<StreamSearchHit[]>;
   resolve(externalId: string, opts?: StreamResolveOptions): Promise<StreamResolveResult>;
+  /** List selectable video qualities for the download picker (sources with video only). */
+  listVideoQualities?(
+    externalId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<VideoQualityOption[]>;
+  /** Resolve a video-only track at a chosen quality (separate from the audio `resolve`). */
+  resolveVideo?(
+    externalId: string,
+    opts?: StreamVideoResolveOptions,
+  ): Promise<StreamVideoResolveResult>;
   /** The logged-in user's playlists (optional; requires login). */
   getUserPlaylists?(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]>;
   /** Resolve specific track ids (from a pasted song link) to hits (optional). */

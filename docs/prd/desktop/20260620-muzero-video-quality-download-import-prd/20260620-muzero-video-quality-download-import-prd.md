@@ -374,7 +374,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 
 **Tasks:**
 - [x] **Bilibili 视频轨解析/选档（低风险，先行）**：新文件 `bili-video.ts` 的 `parseDashVideo` + `selectVideoByResolution`（镜像音频；codec 容器兼容默认 AVC-first，可配置）。✅ 9 单测全绿。
-- [ ] **Bilibili 视频 resolve**：`bili-source.ts` 加 `resolveVideo`/`listVideoQualities`，视频侧 `fnval` 由 `16` 提至 `4048`——**复用已验证的 view→cid→playurl（§1.4），不动音频路径**。
+- [x] **Bilibili 视频 resolve**：`bili-source.ts` 加 `resolveVideo`/`listVideoQualities`，视频侧 `fnval` 由 `16` 提至 `4048`——复用已验证的 view→cid→playurl（§1.4），音频路径未动（34 bili 测全绿，含既有音频）；provider.ts 加 `PlayableVideoTrack`/`VideoQualityOption`/`resolveVideo?`/`listVideoQualities?`。✅
 - [ ] **YouTube（脆弱，独立验收）**：`youtube-formats.ts` 加 `pickAdaptiveVideo`（按 `height/fps/hdr` 选档，codec 仅决定容器配对、**不硬编码画质排名**）；复用 [`youtube-ytjs.ts`](../../../../src/streamsrc/youtube/youtube-ytjs.ts) 的 sig/n + PoToken（§4.6）。
 - [ ] `video-quality.ts` 跨源清晰度归一（label/height/fps/hdr/codec/requiresLogin）。
 - [ ] `provider.ts` 加可选 `listVideoQualities`/`resolveVideo`；bili/youtube source 实装，netease 不实装。
@@ -495,6 +495,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | 6 | bilibili-API-collect / BBDown 关停后，Bili 提取的仍维护参考？ | ✅ Resolved (2026-06-20) | yt-dlp `bilibili.py`（活跃，Unlicense）+ yutto；不再依赖已死项目（§4.1/§8） |
 | 7 | Mediabunny copy-remux 的 YT/B站 codec×容器兼容边界？ | ✅ 矩阵已明 / 🔲 播放边界待实测 | mp4 容器层面几乎全收，但 Chromium 仅可靠播 AVC+AAC@mp4 与 VP9·AV1+Opus@webm → 「音轨配对视频容器族」即可纯 copy（§4.2）；精确播放边界 Phase 2 实测 |
 | 8 | PoToken 在纯 Electron（无 yt-dlp）栈如何取、是否需后端？ | ✅ Resolved (2026-06-20) | `bgutils-js` 在**渲染器 REAL DOM** 铸（已是 `youtube-ytjs.ts` 做法），无需后端；headless/主进程不可；归入提取层韧性（§4.6） |
+| 9 | Bili「锁定的更高档」（未登录时仍想展示 1080P+/4K 以引导登录）如何列出？ | Open（v1 仅列可用档） | v1 `listVideoQualities` 只列 playurl **实际返回**的档（最准）；展示锁定更高档需解析 `support_formats[]`（带 `need_login`/`need_vip`），留后续 UI 增强 |
 
 ---
 

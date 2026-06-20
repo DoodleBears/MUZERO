@@ -13,13 +13,23 @@ import type { StreamHttp } from "../http";
 import { withQuery } from "../http";
 import type {
   PlayableStream,
+  PlayableVideoTrack,
   StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
   StreamSearchOptions,
   StreamSourceProvider,
+  StreamVideoResolveOptions,
+  StreamVideoResolveResult,
+  VideoQualityOption,
 } from "../provider";
 import { type BiliQualityKey, parseDashAudio, selectAudioByPreference } from "./bili-resolve";
+import {
+  type BiliVideoCodec,
+  type BiliVideoStream,
+  parseDashVideo,
+  selectVideoByResolution,
+} from "./bili-video";
 import { deriveMixinKey, extractWbiKeyFromUrl, signWbi } from "./bili-wbi";
 
 const NAV_URL = "https://api.bilibili.com/x/web-interface/nav";
@@ -31,6 +41,9 @@ const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 // DASH (1<<4); fourk on. Audio tracks come back regardless of the video `qn`.
 const FNVAL_DASH = "16";
+// Richer DASH mask for VIDEO resolve: DASH + 4K + 8K + HDR + Dolby Vision + AV1 flags
+// (4048 = 16+64+128+256+512+1024+2048, matching yt-dlp). Audio path keeps FNVAL_DASH.
+const FNVAL_DASH_VIDEO = "4048";
 const KEY_TTL_MS = 10 * 60 * 1000;
 
 export interface BiliSourceDeps {
@@ -134,6 +147,74 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
     return data?.cid ?? data?.pages?.[0]?.cid ?? null;
   }
 
+  /** Fetch the DASH video tracks via the same signed playurl (richer fnval). */
+  async function fetchVideoStreams(
+    externalId: string,
+    signal?: AbortSignal,
+  ): Promise<BiliVideoStream[]> {
+    const [bvid, cidHint] = externalId.split("#");
+    const cid = cidHint ? Number(cidHint) : await fetchFirstCid(bvid, signal);
+    if (!cid) return [];
+    const url = await signedUrl(
+      PLAYURL_URL,
+      { bvid, cid: String(cid), fnval: FNVAL_DASH_VIDEO, fourk: "1" },
+      signal,
+    );
+    const json = await getJson(url, signal);
+    return parseDashVideo(json.data);
+  }
+
+  async function resolveVideo(
+    externalId: string,
+    opts?: StreamVideoResolveOptions,
+  ): Promise<StreamVideoResolveResult> {
+    try {
+      const streams = await fetchVideoStreams(externalId, opts?.signal);
+      if (!streams.length) return { kind: "error", message: "no video stream" };
+      const pick = selectVideoByResolution(streams, { maxHeight: parseMaxHeight(opts?.quality) });
+      if (!pick?.urls.length) return { kind: "error", message: "no video stream" };
+      const video: PlayableVideoTrack = {
+        url: pick.urls[0],
+        headers: { Referer: REFERER, "User-Agent": USER_AGENT },
+        mime: pick.mimeType ?? "video/mp4",
+        codec: pick.codec,
+        width: pick.width,
+        height: pick.height,
+        fps: pick.frameRate,
+        bandwidth: pick.bandwidth,
+        expiresAt: deadlineFromUrl(pick.urls[0]),
+      };
+      return { kind: "ok", video };
+    } catch (err) {
+      return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  async function listVideoQualities(
+    externalId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<VideoQualityOption[]> {
+    const streams = await fetchVideoStreams(externalId, opts?.signal);
+    // One option per resolution; keep the most container-friendly codec (AVC-first) as
+    // the representative. The actual codec is re-picked at resolveVideo time.
+    const byHeight = new Map<number, BiliVideoStream>();
+    for (const s of streams) {
+      const h = s.height ?? 0;
+      const cur = byHeight.get(h);
+      if (!cur || codecPriority(s.codec) < codecPriority(cur.codec)) byHeight.set(h, s);
+    }
+    return [...byHeight.values()]
+      .sort((a, b) => (b.height ?? 0) - (a.height ?? 0))
+      .map((s) => ({
+        key: String(s.height ?? 0),
+        label: videoLabel(s),
+        height: s.height ?? 0,
+        fps: s.frameRate,
+        codec: s.codec,
+        bandwidth: s.bandwidth,
+      }));
+  }
+
   return {
     id: "bili",
     label: "Bilibili",
@@ -141,7 +222,31 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
     isAuthed: () => Boolean(deps.getCookie?.()),
     search,
     resolve,
+    resolveVideo,
+    listVideoQualities,
   };
+}
+
+const VIDEO_CODEC_ORDER: BiliVideoCodec[] = ["avc", "hevc", "av1", "other"];
+
+/** AVC-first ranking for the per-resolution representative (container-compat, not quality). */
+function codecPriority(codec: BiliVideoCodec): number {
+  const i = VIDEO_CODEC_ORDER.indexOf(codec);
+  return i === -1 ? VIDEO_CODEC_ORDER.length : i;
+}
+
+/** Parse a quality key ("1080" / "max" / undefined) into a max-height cap. */
+function parseMaxHeight(quality?: string): number | undefined {
+  if (!quality || quality === "max") return undefined;
+  const n = Number(quality);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** Display label like `1080P` / `2160P60` (fps suffix only above 30). */
+function videoLabel(s: BiliVideoStream): string {
+  const h = s.height ?? 0;
+  const fps = s.frameRate && s.frameRate > 30 ? String(s.frameRate) : "";
+  return `${h}P${fps}`;
 }
 
 interface RawSearchItem {

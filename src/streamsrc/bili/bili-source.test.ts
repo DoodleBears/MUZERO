@@ -45,6 +45,45 @@ const SEARCH = {
 
 const VIEW = { code: 0, data: { bvid: "BV1xx411c7mD", cid: 998877, pages: [{ cid: 998877 }] } };
 
+/** A playurl body with DASH video (multi-codec 1080p) + an audio track to ignore. */
+const PLAYURL_VIDEO = {
+  code: 0,
+  data: {
+    dash: {
+      video: [
+        {
+          id: 64,
+          baseUrl: "https://upos-sz-mirror08c.bilivideo.com/v720-avc.m4s?deadline=1700003600",
+          bandwidth: 1200000,
+          codecs: "avc1.640020",
+          width: 1280,
+          height: 720,
+          frameRate: "30",
+        },
+        {
+          id: 80,
+          baseUrl: "https://upos-sz-mirror08c.bilivideo.com/v1080-avc.m4s?deadline=1700003600",
+          bandwidth: 2400000,
+          codecs: "avc1.640032",
+          width: 1920,
+          height: 1080,
+          frameRate: "30",
+        },
+        {
+          id: 80,
+          baseUrl: "https://upos-sz-mirror08c.bilivideo.com/v1080-av1.m4s",
+          bandwidth: 1500000,
+          codecs: "av01.0.08M.08",
+          width: 1920,
+          height: 1080,
+          frameRate: "30",
+        },
+      ],
+      audio: [{ id: 30280, baseUrl: "https://upos/a.m4s", bandwidth: 192000, codecs: "mp4a.40.2" }],
+    },
+  },
+};
+
 const PLAYURL = {
   code: 0,
   data: {
@@ -142,5 +181,54 @@ describe("createBiliSource", () => {
     ]);
     const res = await source.resolve("BV1xx411c7mD");
     expect(res.kind).toBe("error");
+  });
+});
+
+describe("createBiliSource.resolveVideo / listVideoQualities", () => {
+  it("resolves a video track via view → cid → playurl(fnval=4048), AVC-first by default", async () => {
+    const { source, calls } = deps([
+      ["/x/web-interface/nav", NAV],
+      ["/wbi/view", VIEW],
+      ["/player/wbi/playurl", PLAYURL_VIDEO],
+    ]);
+    const res = await source.resolveVideo?.("BV1xx411c7mD");
+    expect(res?.kind).toBe("ok");
+    if (res?.kind !== "ok") return;
+    expect(res.video.height).toBe(1080);
+    expect(res.video.codec).toBe("avc"); // default codec preference favors AVC for mp4 copy
+    expect(res.video.mime).toBe("video/mp4");
+    expect(res.video.headers?.Referer).toBe("https://www.bilibili.com");
+    expect(res.video.expiresAt).toBe(1700003600 * 1000); // from CDN deadline=
+    // The video resolve must use the richer DASH mask, NOT the audio fnval=16.
+    const playurlCall = calls.find((c) => c.url.includes("/player/wbi/playurl"));
+    expect(playurlCall?.url).toMatch(/fnval=4048/);
+  });
+
+  it("honors a quality cap (720 does not return 1080)", async () => {
+    const { source } = deps([
+      ["/x/web-interface/nav", NAV],
+      ["/player/wbi/playurl", PLAYURL_VIDEO],
+    ]);
+    const res = await source.resolveVideo?.("BV1xx411c7mD#998877", { quality: "720" });
+    expect(res?.kind === "ok" && res.video.height).toBe(720);
+  });
+
+  it("lists one quality option per resolution, highest first, AVC-first representative", async () => {
+    const { source } = deps([
+      ["/x/web-interface/nav", NAV],
+      ["/player/wbi/playurl", PLAYURL_VIDEO],
+    ]);
+    const opts = await source.listVideoQualities?.("BV1xx411c7mD#998877");
+    expect(opts?.map((o) => o.height)).toEqual([1080, 720]);
+    expect(opts?.[0]).toMatchObject({ key: "1080", label: "1080P", codec: "avc" });
+  });
+
+  it("returns an error result when playurl has no video", async () => {
+    const { source } = deps([
+      ["/x/web-interface/nav", NAV],
+      ["/player/wbi/playurl", { code: 0, data: { dash: { video: [] } } }],
+    ]);
+    const res = await source.resolveVideo?.("BV1xx411c7mD#998877");
+    expect(res?.kind).toBe("error");
   });
 });
