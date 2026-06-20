@@ -16,6 +16,7 @@ function createFakeWindow({ ignoreMouseEvents = true } = {}) {
       send: vi.fn(),
     },
     setAlwaysOnTop: vi.fn(),
+    setVisibleOnAllWorkspaces: vi.fn(),
     ...(ignoreMouseEvents
       ? {
           setIgnoreMouseEvents: vi.fn(),
@@ -42,6 +43,34 @@ describe("electron window pin controller", () => {
     expect(controller.getMode(win)).toBe("pin-click-through");
     expect(win.setAlwaysOnTop).toHaveBeenCalledWith(true);
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
+  });
+
+  it("makes a pinned window follow across all Spaces and reverts when unpinned", () => {
+    const { win } = createFakeWindow();
+    const controller = createWindowPinController();
+
+    controller.applyMode(win, "pin");
+    // A pinned overlay must follow the user across macOS Spaces (and over fullscreen
+    // apps), not stay stuck on the Space it was pinned in.
+    expect(win.setVisibleOnAllWorkspaces).toHaveBeenLastCalledWith(true, {
+      visibleOnFullScreen: true,
+    });
+
+    controller.applyMode(win, "off");
+    expect(win.setVisibleOnAllWorkspaces).toHaveBeenLastCalledWith(false, {
+      visibleOnFullScreen: true,
+    });
+  });
+
+  it("keeps a click-through pinned overlay visible on every Space", () => {
+    const { win } = createFakeWindow();
+    const controller = createWindowPinController();
+
+    controller.applyMode(win, "pin-click-through");
+
+    expect(win.setVisibleOnAllWorkspaces).toHaveBeenLastCalledWith(true, {
+      visibleOnFullScreen: true,
+    });
   });
 
   it("cycles only between off and normal pin", () => {
