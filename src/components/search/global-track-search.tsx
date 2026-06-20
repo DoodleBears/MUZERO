@@ -530,7 +530,8 @@ export function GlobalTrackSearch({
       event.preventDefault();
       const item = navItems[selectedIndex];
       if (!item) return;
-      // Enter on a downloadable online result → open the quality picker (Settings can disable);
+      // Enter on a downloadable online result → download straight away at the Settings
+      // default quality (no picker — that's the ⬇ button's job). Settings can disable this;
       // Shift+Enter and audio-only sources fall through to the normal play path.
       if (
         item.type === "online" &&
@@ -538,7 +539,8 @@ export function GlobalTrackSearch({
         !event.shiftKey &&
         canDownloadVideo(item.hit.source)
       ) {
-        setDownloadHit(item.hit);
+        startBackgroundDownload(item.hit);
+        onOpenChange(false);
         return;
       }
       void activate(item, event.shiftKey);
