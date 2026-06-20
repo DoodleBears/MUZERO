@@ -131,10 +131,10 @@ src/
 │   ├── youtube/
 │   │   └── youtube-formats.ts       # 扩：pickAdaptiveVideo()（镜像 pickAdaptiveAudio）
 │   ├── video-quality.ts             # 新：跨源统一「清晰度档」模型 + 归一化（label/height/hdr/codec）
-│   ├── download-plan.ts             # 新：resolveDownloadPlan() + chooseMuxStrategy()（纯函数）
+│   ├── download-plan.ts             # 新：buildDownloadPlan()（纯，pair video+audio → DownloadPlan）✅
 │   ├── mux/
 │   │   ├── mux-mediabunny.ts        # 新：渲染层 copy-remux（transmux 无重编码；WebCodecs transcode 为可选分支）
-│   │   └── mux-strategy.ts          # 新：codec→原生容器（mp4/webm）映射 + copy/transcode 裁决（纯）
+│   │   └── mux-strategy.ts          # 新：chooseMuxStrategy + classifyAudioCodec（codec→容器裁决，纯）✅
 │   └── video-download.ts            # 新：runVideoDownload() orchestrator（纯+注入，仿 cache-stream.ts）
 ├── workers/
 │   └── video-mux-worker.ts          # 新：渲染层 copy-remux 放 Worker（规则 7：重活不卡主线程）
@@ -378,7 +378,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 - [ ] **YouTube（脆弱，独立验收）**：`youtube-formats.ts` 加 `pickAdaptiveVideo`（按 `height/fps/hdr` 选档，codec 仅决定容器配对、**不硬编码画质排名**）；复用 [`youtube-ytjs.ts`](../../../../src/streamsrc/youtube/youtube-ytjs.ts) 的 sig/n + PoToken（§4.6）。
 - [ ] `video-quality.ts` 跨源清晰度归一（label/height/fps/hdr/codec/requiresLogin）。
 - [ ] `provider.ts` 加可选 `listVideoQualities`/`resolveVideo`；bili/youtube source 实装，netease 不实装。
-- [ ] `download-plan.ts` `resolveDownloadPlan` + `mux-strategy.ts` `chooseMuxStrategy`（音轨配对视频容器族）。
+- [x] `mux/mux-strategy.ts` `chooseMuxStrategy` + `classifyAudioCodec`（默认 copy、音轨配对视频容器族、mkv 归档兜底、force-mp4 才 transcode）+ `download-plan.ts` `buildDownloadPlan`（纯）。✅ 16 单测全绿（`resolveDownloadPlan` 的 provider-calling 包装并入 Phase 2 orchestrator）。
 - [ ] `Track`/`StreamSourceConfig` 附加字段（零迁移）。
 
 > **排期建议（基于 §1.4 基线）**：Bilibili 视频是对**已验证请求**的纯增量，可**先单独 ship**（Phase 1+2 只做 Bili 即可端到端最快见效）；YouTube 视频依赖活体对抗的 sig/n/PoToken（§4.6），**单独验收、不阻塞 Bili**。
