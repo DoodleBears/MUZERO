@@ -34,11 +34,14 @@ import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload"
 const DISABLE_COVER_RESOURCES_FOR_BISECT = false;
 
 /**
- * Gallery grids should use thumbnail derivatives. Full-resolution originals stay
- * for focused surfaces like Now Playing; using them for a large wall increases
- * renderer Blob URLs and decoded bitmap pressure with little visible benefit.
+ * Gallery grids render the full-resolution original cover (square-cropped at
+ * display time by object-fit:cover). The 160px thumbnail derivative looked soft on
+ * hi-DPI grid cards (~2× upscale); originals are crisp. The extra renderer Blob
+ * URLs / decoded-bitmap pressure is an accepted trade-off for a local library.
+ * List-view cards still pass `isGrid=false` to stay on the cheap thumbnail — small
+ * enough that downscaling keeps them sharp.
  */
-export const GRID_USE_ORIGINAL_COVER = false;
+export const GRID_USE_ORIGINAL_COVER = true;
 
 export interface TrackCoverResource {
   /**
@@ -306,12 +309,11 @@ export function useTrackThumbnailUrl(
 }
 
 /**
- * Cover URL for a gallery grid card. Normally the 160px `thumbnail` derivative
- * (same as {@link useTrackThumbnailUrl}); under the {@link GRID_USE_ORIGINAL_COVER}
- * experiment, the full-resolution original (square-cropped at display time). Both
- * hooks are called unconditionally to satisfy the rules of hooks; the unused one
- * receives `undefined` so it does no resolve work. `isGrid` lets a list-view card
- * stay on the cheap thumbnail so the experiment is isolated to the grid.
+ * Cover URL for a gallery grid card. With {@link GRID_USE_ORIGINAL_COVER} on, grid
+ * cards use the full-resolution original (square-cropped at display time by
+ * object-fit:cover); list-view cards (`isGrid=false`) stay on the cheap thumbnail
+ * derivative. Both hooks are called unconditionally to satisfy the rules of hooks;
+ * the unused one receives `undefined` so it does no resolve work.
  */
 export function useGridCoverUrl(track: TrackCoverInput | undefined, isGrid = true): string | null {
   const useOriginal = GRID_USE_ORIGINAL_COVER && isGrid;

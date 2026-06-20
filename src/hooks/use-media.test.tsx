@@ -363,11 +363,28 @@ describe("useTrackMediaUrl", () => {
 });
 
 describe("useGridCoverUrl", () => {
-  it("uses the thumbnail derivative for grid cards instead of the full original cover", async () => {
+  it("uses the full-resolution original cover for grid cards (not the thumbnail derivative)", async () => {
+    const ensure = vi.mocked(ensureCoverThumbnailDerivative);
+    ensure.mockClear();
+    const createSpy = vi.mocked(URL.createObjectURL);
+    createSpy.mockClear();
+
+    const { result } = renderHook(() =>
+      useGridCoverUrl({ id: "trk_grid_orig", coverBlobId: "blb_grid_orig" }, true),
+    );
+
+    await act(async () => {});
+
+    expect(ensure).not.toHaveBeenCalled();
+    expect(result.current).toMatch(/^blob:cover-/);
+    expect(createSpy).toHaveBeenCalledExactlyOnceWith(coverBlob);
+  });
+
+  it("keeps list-view cards on the cheap thumbnail derivative", async () => {
     const thumbnailBlob = new Blob([new Uint8Array([7])], { type: "image/webp" });
     derivState.resolved = {
       blob: thumbnailBlob,
-      blobId: "blb_grid_thumb_derivative",
+      blobId: "blb_list_thumb_derivative",
       derivative: {},
     };
     const ensure = vi.mocked(ensureCoverThumbnailDerivative);
@@ -376,7 +393,7 @@ describe("useGridCoverUrl", () => {
     createSpy.mockClear();
 
     const { result } = renderHook(() =>
-      useGridCoverUrl({ id: "trk_grid_thumb", coverBlobId: "blb_grid_thumb" }, true),
+      useGridCoverUrl({ id: "trk_list_thumb", coverBlobId: "blb_list_thumb" }, false),
     );
 
     expect(result.current).toBeNull();
