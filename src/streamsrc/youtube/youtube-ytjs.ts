@@ -347,6 +347,105 @@ function ytjsExpiresInSeconds(info: YtMusicInfo): number | undefined {
     : undefined;
 }
 
+// --- Playlist normalization (regular YouTube + YouTube Music). youtubei item shapes vary
+// across feed types/versions, so these read each field defensively from a loose interface.
+
+interface YtjsThumb {
+  url?: string;
+  width?: number;
+}
+interface YtjsPlaylistItem {
+  id?: string;
+  video_id?: string;
+  title?: string | { text?: string };
+  author?: { name?: string } | string;
+  artists?: Array<{ name?: string }>;
+  duration?: { seconds?: number } | number;
+  thumbnails?: YtjsThumb[];
+  thumbnail?: YtjsThumb[] | { contents?: YtjsThumb[] };
+}
+interface YtjsPlaylistPage {
+  info?: { title?: string | { text?: string }; thumbnails?: YtjsThumb[] };
+  title?: string | { text?: string };
+  header?: { title?: string | { text?: string } };
+  metadata?: { title?: string | { text?: string } };
+  items?: YtjsPlaylistItem[];
+  videos?: YtjsPlaylistItem[];
+  has_continuation?: boolean;
+  getContinuation?: () => Promise<YtjsPlaylistPage>;
+}
+interface NormPlaylistItem {
+  videoId: string;
+  title: string;
+  author?: string;
+  durationSec?: number;
+  coverUrl?: string;
+}
+
+function ytText(v: string | { text?: string } | undefined): string | undefined {
+  return typeof v === "string" ? v : v?.text;
+}
+function ytBestThumb(thumbs: YtjsThumb[] | undefined): string | undefined {
+  if (!thumbs?.length) return undefined;
+  return thumbs.reduce<YtjsThumb>((a, b) => ((b.width ?? 0) > (a.width ?? 0) ? b : a), thumbs[0])
+    .url;
+}
+function ytDuration(d: YtjsPlaylistItem["duration"]): number | undefined {
+  if (typeof d === "number") return d;
+  return typeof d?.seconds === "number" ? d.seconds : undefined;
+}
+function ytAuthor(it: YtjsPlaylistItem): string | undefined {
+  if (typeof it.author === "string") return it.author;
+  return it.author?.name ?? it.artists?.[0]?.name;
+}
+function ytItemThumb(it: YtjsPlaylistItem): string | undefined {
+  if (Array.isArray(it.thumbnail)) return ytBestThumb(it.thumbnail);
+  return ytBestThumb(it.thumbnails) ?? ytBestThumb(it.thumbnail?.contents);
+}
+
+const PLAYLIST_ITEM_CAP = 500;
+const PLAYLIST_PAGE_CAP = 12;
+
+/** Walk a playlist's continuation pages (capped) into a flat normalized item list. */
+async function collectPlaylist(first: YtjsPlaylistPage): Promise<{
+  name: string;
+  coverUrl?: string;
+  items: NormPlaylistItem[];
+}> {
+  const items: NormPlaylistItem[] = [];
+  let page: YtjsPlaylistPage | undefined = first;
+  let guard = 0;
+  while (page && guard < PLAYLIST_PAGE_CAP && items.length < PLAYLIST_ITEM_CAP) {
+    for (const it of page.items ?? page.videos ?? []) {
+      const videoId = it.id ?? it.video_id;
+      if (typeof videoId !== "string" || !videoId) continue;
+      items.push({
+        videoId,
+        title: ytText(it.title) ?? videoId,
+        author: ytAuthor(it),
+        durationSec: ytDuration(it.duration),
+        coverUrl: ytItemThumb(it),
+      });
+      if (items.length >= PLAYLIST_ITEM_CAP) break;
+    }
+    if (!page.has_continuation || !page.getContinuation) break;
+    try {
+      page = await page.getContinuation();
+    } catch {
+      break;
+    }
+    guard += 1;
+  }
+  const name =
+    ytText(first.info?.title) ??
+    ytText(first.title) ??
+    ytText(first.header?.title) ??
+    ytText(first.metadata?.title) ??
+    "Playlist";
+  const coverUrl = ytBestThumb(first.info?.thumbnails) ?? items[0]?.coverUrl;
+  return { name, coverUrl, items };
+}
+
 export function createYtjsRuntime(): YoutubeRuntime {
   return {
     async resolveAudio(videoId: string, opts?: { trace?: YoutubeTrace }) {
@@ -676,6 +775,29 @@ export function createYtjsRuntime(): YoutubeRuntime {
         };
       } catch {
         return { title: videoId, coverUrl: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` };
+      }
+    },
+    async getPlaylist(playlistId) {
+      let yt: Innertube;
+      try {
+        yt = await getInnertube();
+      } catch {
+        return null;
+      }
+      // Regular YouTube playlist first; fall back to the YouTube Music playlist shape.
+      try {
+        const pl = (await yt.getPlaylist(playlistId)) as unknown as YtjsPlaylistPage;
+        const out = await collectPlaylist(pl);
+        if (out.items.length) return out;
+      } catch {
+        // fall through to music
+      }
+      try {
+        const mpl = (await yt.music.getPlaylist(playlistId)) as unknown as YtjsPlaylistPage;
+        const out = await collectPlaylist(mpl);
+        return out.items.length ? out : null;
+      } catch {
+        return null;
       }
     },
   };

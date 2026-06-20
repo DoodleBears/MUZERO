@@ -12,6 +12,7 @@ import { createDiagnosticLogger, log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type {
   PlayableVideoTrack,
+  StreamPlaylist,
   StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
@@ -87,6 +88,18 @@ export interface YoutubeRuntime {
     author?: string;
     coverUrl?: string;
     durationSec?: number;
+  } | null>;
+  /** Fetch a playlist's name/cover + items (regular YouTube or YouTube Music, paged). */
+  getPlaylist?: (playlistId: string) => Promise<{
+    name: string;
+    coverUrl?: string;
+    items: Array<{
+      videoId: string;
+      title: string;
+      author?: string;
+      durationSec?: number;
+      coverUrl?: string;
+    }>;
   } | null>;
 }
 
@@ -281,6 +294,39 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     return out;
   }
 
+  async function getPlaylistMeta(
+    playlistRef: string,
+    _opts?: { signal?: AbortSignal },
+  ): Promise<StreamPlaylist | null> {
+    if (!deps.runtime?.getPlaylist) return null;
+    const pl = await deps.runtime.getPlaylist(playlistRef);
+    if (!pl) return null;
+    return {
+      id: playlistRef,
+      source: "youtube",
+      name: pl.name,
+      coverUrl: pl.coverUrl,
+      trackCount: pl.items.length,
+    };
+  }
+
+  async function importPlaylist(
+    playlistRef: string,
+    _opts?: { signal?: AbortSignal },
+  ): Promise<StreamSearchHit[]> {
+    if (!deps.runtime?.getPlaylist) return [];
+    const pl = await deps.runtime.getPlaylist(playlistRef);
+    if (!pl) return [];
+    return pl.items.map((it) => ({
+      source: "youtube" as const,
+      externalId: it.videoId,
+      title: it.title,
+      artist: it.author,
+      durationSec: it.durationSec,
+      coverUrl: it.coverUrl,
+    }));
+  }
+
   return {
     id: "youtube",
     label: "YouTube",
@@ -291,6 +337,8 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     resolveVideo,
     listVideoQualities,
     getTracksByIds,
+    getPlaylistMeta,
+    importPlaylist,
   };
 }
 

@@ -656,6 +656,16 @@ export function startPerfControlBridge(): void {
         now: () => Date.now(),
         getCookie: (id) => settings.streamSources?.[id]?.cookie,
       });
+      if (ref.kind === "playlist") {
+        const playlist = (await source?.getPlaylistMeta?.(ref.id)) ?? null;
+        const items = (await source?.importPlaylist?.(ref.id)) ?? [];
+        return {
+          ref,
+          playlist,
+          itemCount: items.length,
+          sample: items.slice(0, 3).map((h) => ({ externalId: h.externalId, title: h.title })),
+        };
+      }
       if (!source?.getTracksByIds) return { ref, hit: null };
       const [hit] = await source.getTracksByIds([ref.id]);
       return { ref, hit: hit ?? null };
