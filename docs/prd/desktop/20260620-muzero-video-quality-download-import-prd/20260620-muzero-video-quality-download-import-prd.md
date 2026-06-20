@@ -18,7 +18,7 @@
 | 1 | 基础设施：视频轨解析 + 清晰度模型 + 下载计划 resolver（纯函数，零 mux） | ✅ Bili + YouTube 切片（实时 E2E 验证） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | ✅ 核心完成：Bili/YT 下载 + mux + **入库为可离线播放 track**（实时 E2E）；saveFile / Worker / UI 待接 | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔄 核心完成：⌘F 在线行下载按钮 + 清晰度对话框 + 进度 + i18n×4（转码强制 mp4 UI 待 Phase 3） | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -520,6 +520,7 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 | 2026-06-20 | DoodleBear | task #9 下载入库：`download-to-library.ts` `downloadStreamedVideoToLibrary`（resolve→fetch/blob→mux→`cacheStreamedTrackBlob` 建本地视频 track，保留 origin:streamed + 来源引用）。登录后 Bili 1080p 入库 + 控制端点驱动 **app 内离线播放成立**（isPlaying/displayMode:video）。Phase 2 核心完成 |
 | 2026-06-20 | DoodleBear | 封面：下载入库**优先官方封面**（Bili `view.pic` / YT `getBasicInfo` thumbnail，新增各源 `getTracksByIds`/`resolveMeta`），无则视频抽帧兜底；`recoverStreamedTrackCover` 省流补封面。E2E：Bili 1080p + YT track 均补上官方封面（via:"official"） |
 | 2026-06-20 | DoodleBear | 粘贴链接/裸 id 定向解析：`parseStreamLink` 加 Bili/YouTube（忽略 URL 参数）+ `parseBareStreamId`（裸 BV/av/11 字符 YT id）；⌘F hook 命中即 `getTracksByIds` 定向解析、跳过关键词搜索。E2E 6 例（含用户 3 条 URL + 裸号 + 普通查询回退）全过 |
+| 2026-06-20 | DoodleBear | Phase 4 UI：⌘F 在线结果行加**下载按钮**（仅 bili/youtube，`canDownloadVideo` gate）→ **清晰度选择对话框**（[`download-quality-dialog.tsx`](../../../../src/components/stream/download-quality-dialog.tsx)：列档+体积估算+VIP 标+三段进度+完成/错误态）→ [`download-action.ts`](../../../../src/streamsrc/download-action.ts) `downloadStreamedHit`（真实 deps：mediaProxyUrl fetch + mediabunny mux + 抽帧封面，落「Downloads」集）。i18n×4（`download.*`）+ `AppSettings.streamDownloadsSetId`（附加字段）。tsc/biome 绿；overlay 挂载验证（dev driver 接受 open/type） |
 | 2026-06-20 | DoodleBear | 对齐现状基线：新增 §1.4「Bilibili 音频整条已打通」——同一已验证 playurl 响应已含 `dash.video[]`（现被丢弃），故 Bili 视频是对已验证请求的纯增量（仅加 `parseDashVideo`/`resolveVideo` + 视频侧 `fnval` 16→4048，不动音频路径）；§4.1 + §6 改为「Bili 低风险先行、YouTube 脆弱独立验收」 |
 
 ---

@@ -106,6 +106,22 @@
     "linkResult": "From link",
     "linkNotFound": "Couldn't resolve that link"
   },
+  "download": {
+    "setName": "Downloads",
+    "button": "Download",
+    "title": "Download video",
+    "subtitle": "Pick a quality to save into your library",
+    "loadingQualities": "Loading qualities…",
+    "noQualities": "No downloadable video for this source",
+    "estSize": "~{{size}}",
+    "stageFetch": "Downloading…",
+    "stageMux": "Merging audio + video…",
+    "stageStore": "Saving…",
+    "done": "Saved to your library",
+    "failed": "Download failed",
+    "loginRequired": "Log in to this source to unlock higher quality",
+    "close": "Close"
+  },
   "streamSources": {
     "title": "Online sources",
     "redline": "Personal use · your own account · respect each platform's terms",

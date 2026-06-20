@@ -100,6 +100,22 @@
     "linkResult": "リンクから",
     "linkNotFound": "リンクを解決できませんでした"
   },
+  "download": {
+    "setName": "ダウンロード",
+    "button": "ダウンロード",
+    "title": "動画をダウンロード",
+    "subtitle": "画質を選んでライブラリに保存します",
+    "loadingQualities": "画質を取得中…",
+    "noQualities": "このソースにダウンロード可能な動画がありません",
+    "estSize": "約 {{size}}",
+    "stageFetch": "ダウンロード中…",
+    "stageMux": "音声と映像を結合中…",
+    "stageStore": "保存中…",
+    "done": "ライブラリに保存しました",
+    "failed": "ダウンロードに失敗しました",
+    "loginRequired": "このソースにログインすると高画質が利用できます",
+    "close": "閉じる"
+  },
   "streamSources": {
     "title": "オンラインソース",
     "redline": "個人利用 · 自分のアカウント · 各プラットフォームの規約を遵守",

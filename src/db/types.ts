@@ -653,6 +653,8 @@ export interface AppSettings {
   streamSources?: Partial<Record<StreamSourceId, StreamSourceConfig>>;
   /** The set that collects songs played from an online source via global search. */
   streamOnlineSetId?: string;
+  /** The set that collects videos downloaded into the library (origin streamed + blobId). */
+  streamDownloadsSetId?: string;
   /**
    * Auto-download streamed songs to a local blob after they play (offline cache,
    * Phase 5). On by default so online songs become available offline after play.

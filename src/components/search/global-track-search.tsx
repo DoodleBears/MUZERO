@@ -2,6 +2,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import {
   Captions,
   CornerDownLeft,
+  Download,
   Globe,
   ListMusic,
   ListPlus,
@@ -13,6 +14,7 @@ import type { KeyboardEvent } from "react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
+import { DownloadQualityDialog } from "@/components/stream/download-quality-dialog";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -58,6 +60,7 @@ import {
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { canDownloadVideo } from "@/streamsrc/download-action";
 import type { StreamPlaylist, StreamSearchHit } from "@/streamsrc/provider";
 import { searchGlobalLocalLibrary } from "@/workers/global-search-local-client";
 import type { GlobalSearchLocalResults } from "@/workers/global-search-local-core";
@@ -119,6 +122,8 @@ export function GlobalTrackSearch({
   const [menuIndex, setMenuIndex] = useState(0);
   // Escape dismisses the `@` menu without closing the overlay; cleared on next keystroke.
   const [menuDismissed, setMenuDismissed] = useState(false);
+  // The online hit whose download quality-picker is open (null = closed).
+  const [downloadHit, setDownloadHit] = useState<StreamSearchHit | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   // The trailing `@mention` the caret is inside, and the text we actually search
@@ -747,6 +752,9 @@ export function GlobalTrackSearch({
                     selected={selectedIndex === onlineStart + i}
                     onMouseEnter={() => setSelectedIndex(onlineStart + i)}
                     onPlay={() => void activate({ type: "online", hit }, false)}
+                    onDownload={
+                      canDownloadVideo(hit.source) ? () => setDownloadHit(hit) : undefined
+                    }
                   />
                 ))}
                 {link && !onlineSearching && onlineHits.length === 0 && !playlistLink && (
@@ -784,6 +792,7 @@ export function GlobalTrackSearch({
           </div>
         </div>
       </div>
+      <DownloadQualityDialog hit={downloadHit} onClose={() => setDownloadHit(null)} />
     </div>
   );
 }
@@ -1228,52 +1237,72 @@ function PlaylistLinkCard({ playlist, onOpen }: { playlist: StreamPlaylist; onOp
   );
 }
 
-/** A result row for an online streaming source — cover + title + source badge. */
+/** A result row for an online streaming source — cover + title + source badge + download. */
 function OnlineResultRow({
   hit,
   index,
   selected,
   onMouseEnter,
   onPlay,
+  onDownload,
 }: {
   hit: StreamSearchHit;
   index: number;
   selected: boolean;
   onMouseEnter: () => void;
   onPlay: () => void;
+  /** Present only for sources that can download video (Bilibili / YouTube). */
+  onDownload?: () => void;
 }) {
+  const { t } = useTranslation();
   const subtitle = [hit.artist, hit.album].filter(Boolean).join(" · ");
   return (
-    <button
-      type="button"
+    <div
       data-nav-index={index}
-      onClick={onPlay}
       onMouseEnter={onMouseEnter}
       role="option"
       aria-selected={selected}
+      tabIndex={-1}
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
+        "group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
         selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
       )}
     >
-      <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
-        {hit.coverUrl ? (
-          // hdslb (bilibili) blocks a foreign Referer but serves with none; netease
-          // covers don't care — so no-referrer fixes bili and is safe for both.
-          <img
-            src={hit.coverUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="size-full object-cover"
-          />
-        ) : (
-          <Disc3Icon size={16} />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-sm">{hit.title}</div>
-        <div className="truncate text-muted-foreground text-xs">{subtitle || hit.source}</div>
-      </div>
+      <button
+        type="button"
+        onClick={onPlay}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
+          {hit.coverUrl ? (
+            // hdslb (bilibili) blocks a foreign Referer but serves with none; netease
+            // covers don't care — so no-referrer fixes bili and is safe for both.
+            <img
+              src={hit.coverUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="size-full object-cover"
+            />
+          ) : (
+            <Disc3Icon size={16} />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-sm">{hit.title}</div>
+          <div className="truncate text-muted-foreground text-xs">{subtitle || hit.source}</div>
+        </div>
+      </button>
+      {onDownload ? (
+        <button
+          type="button"
+          onClick={onDownload}
+          aria-label={t("download.button")}
+          title={t("download.button")}
+          className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background/60 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+        >
+          <Download className="size-4" />
+        </button>
+      ) : null}
       <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground uppercase">
         {hit.source}
       </span>
@@ -1282,6 +1311,6 @@ function OnlineResultRow({
           {formatDuration(hit.durationSec)}
         </span>
       ) : null}
-    </button>
+    </div>
   );
 }
