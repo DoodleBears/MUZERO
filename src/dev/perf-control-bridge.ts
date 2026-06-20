@@ -604,7 +604,8 @@ export function startPerfControlBridge(): void {
           coverUrl,
           quality:
             (payload.quality as string | undefined) ??
-            (settings as { defaultVideoQuality?: string }).defaultVideoQuality,
+            (settings as { defaultVideoQuality?: string }).defaultVideoQuality ??
+            "1080",
           audioOnly: Boolean(payload.audioOnly),
         },
         {

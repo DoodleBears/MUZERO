@@ -18,6 +18,9 @@ import type { StreamPart, StreamSearchHit, VideoQualityOption } from "./provider
 import { createStreamSource } from "./registry";
 import { createStreamHttp } from "./stream-http";
 
+/** Effective default download resolution when the user hasn't set one (Settings shows this). */
+export const DEFAULT_VIDEO_QUALITY = "1080";
+
 function makeSource(sourceId: StreamSearchHit["source"], cookie?: string) {
   return createStreamSource(sourceId, {
     http: createStreamHttp(),
@@ -89,7 +92,7 @@ export async function downloadStreamedHit(
   const bridge = resolveDesktopBridge();
   // No explicit pick (batch / quick download) → fall back to the configured default quality;
   // the source's selector degrades to the closest available tier (prefer-match-else-downgrade).
-  const quality = opts?.quality ?? settings.defaultVideoQuality;
+  const quality = opts?.quality ?? settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY;
 
   return downloadStreamedVideoToLibrary(
     {

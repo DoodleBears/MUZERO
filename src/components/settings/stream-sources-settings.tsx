@@ -19,6 +19,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
+import { DEFAULT_VIDEO_QUALITY } from "@/streamsrc/download-action";
 import {
   cookieStringHasAuth,
   STREAM_LOGIN_CONFIGS,
@@ -198,7 +199,7 @@ export function StreamSourcesSettings() {
           <div className="flex items-center justify-between gap-2 text-sm">
             <span>{t("streamSources.defaultVideoQuality")}</span>
             <Select
-              value={settings.defaultVideoQuality ?? "max"}
+              value={settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY}
               onValueChange={(value) => {
                 if (value) void saveSettings({ defaultVideoQuality: value });
               }}

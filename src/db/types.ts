@@ -659,8 +659,8 @@ export interface AppSettings {
    *  Undefined = on (the default). Set false to keep Enter = play. */
   enterDownloadsVideo?: boolean;
   /** Default video-download resolution ("max" | "2160" | "1080" …). Used for batch
-   *  downloads + as the implicit quality; the picker degrades to the closest available.
-   *  Undefined = "max" (highest). */
+   *  downloads + as the implicit quality; the source degrades to the closest available.
+   *  Undefined = "1080" (see DEFAULT_VIDEO_QUALITY). */
   defaultVideoQuality?: string;
   /**
    * Auto-download streamed songs to a local blob after they play (offline cache,
