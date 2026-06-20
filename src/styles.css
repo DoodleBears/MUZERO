@@ -307,32 +307,6 @@
     box-shadow: none !important;
   }
 
-  /* Transparent lyrics capture: strip EVERY effect that gets its own compositing layer
-     (text-shadow, box-shadow, backdrop-filter, and ALL `filter` — i.e. the karaoke word
-     `drop-shadow` AND the cascade engine's per-row `blur`) across the WHOLE document.
-     On a transparent window the OS does NOT keep these layers in sync with the text
-     layer's transform: as the lyrics move, the shadow/blur stays frozen behind them (the
-     "残影"), and a hidden (opacity-0) layer's detached effect can even keep painting on
-     its own. There's no reliable way to force them to track the text on a transparent
-     window (a Chromium compositing bug), so we remove them entirely in this mode — only
-     the lyrics are visible here anyway, and the solid text fill repaints cleanly. (The
-     cascade per-row blur is intentionally sacrificed here; it's the inactive-line softening,
-     not core to readability. A non-blurred text STROKE stays ghost-free for legibility.) */
-  html[data-muzero-lyrics-overlay="true"],
-  html[data-muzero-lyrics-overlay="true"] * {
-    text-shadow: none !important;
-    box-shadow: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    filter: none !important;
-    /* `will-change: transform` (Tailwind `will-change-transform` on every lyric line +
-       the cascade engine's inline hint) forces each line onto its OWN permanent GPU
-       compositing layer. On a transparent macOS window those layers are never cleared as
-       they move, so old line/shadow frames freeze behind the scroll — the "残影". Drop the
-       hint so the lines repaint into the shared surface instead of orphaned layers. */
-    will-change: auto !important;
-  }
-
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls,
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls * {
     -webkit-app-region: no-drag;

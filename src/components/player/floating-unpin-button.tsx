@@ -153,7 +153,7 @@ export function FloatingUnpinButton({ revealed }: { revealed: boolean }) {
           // are blurred regions painted outside/over the element that Chromium fails
           // to clear, leaving a "残影" ghost. They're not needed for an overlay the
           // user composites anyway — a solid translucent pill keeps controls legible.
-          "lyrics-overlay-surface -translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 z-10 flex items-center gap-1.5 rounded-full bg-black/30 p-1 transition duration-200 [-webkit-app-region:no-drag]",
+          "-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 z-10 flex items-center gap-1.5 rounded-full bg-black/30 p-1 transition duration-200 [-webkit-app-region:no-drag]",
           revealed ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
         )}
         data-no-drag

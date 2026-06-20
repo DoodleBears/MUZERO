@@ -53,8 +53,6 @@ contextBridge.exposeInMainWorld("muzero", {
     quitApp: () => ipcRenderer.invoke("muzero:window:quitApp"),
     getState: () => ipcRenderer.invoke("muzero:window:getState"),
     repaint: () => ipcRenderer.invoke("muzero:window:repaint"),
-    setContinuousRepaint: (enabled) =>
-      ipcRenderer.invoke("muzero:window:setContinuousRepaint", enabled),
     onClickThroughHover: (callback) => {
       const listener = (_event, hovered) => callback(hovered === true);
       ipcRenderer.on(CLICK_THROUGH_HOVER_CHANNEL, listener);

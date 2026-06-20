@@ -227,12 +227,6 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       preload: path.join(__dirname, "preload.cjs"),
-      // Keep the renderer rendering at full rate when the window is visible but
-      // UNFOCUSED. macOS otherwise throttles an unfocused window, which on a
-      // transparent surface stops it clearing — moving lyrics in the OBS/desktop
-      // capture then smear into a stale-frame ghost. Required for the per-frame
-      // repaint (useContinuousTransparentRepaint) to actually run while unfocused.
-      backgroundThrottling: false,
     },
   });
 

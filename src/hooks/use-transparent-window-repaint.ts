@@ -43,27 +43,3 @@ export function useTransparentWindowRepaint(visible: boolean, options?: { fadeMs
     };
   }, [visible, fadeMs]);
 }
-
-/**
- * Keep an UNFOCUSED transparent window recompositing while `active`.
- *
- * A focused macOS window composites (and clears) continuously, but an UNFOCUSED
- * transparent window stops — so moving lyrics smear into a "残影" the moment focus
- * leaves (the usual state for a desktop/OBS overlay). `webContents.invalidate()` is
- * too weak to force an unfocused recomposite; a tiny `setOpacity` nudge IS (the same
- * recomposite focusing triggers). That loop runs in the MAIN process so it's immune
- * to renderer / focus throttling — this hook just toggles it on/off.
- *
- * Use ONLY while content is actually moving (lyrics playing in the transparent
- * capture). No-op on shells without the control (web/Tauri).
- */
-export function useContinuousTransparentRepaint(active: boolean): void {
-  useEffect(() => {
-    const setContinuousRepaint = resolveDesktopBridge().windowControls?.setContinuousRepaint;
-    if (!setContinuousRepaint || !active) return;
-    void setContinuousRepaint(true);
-    return () => {
-      void setContinuousRepaint(false);
-    };
-  }, [active]);
-}

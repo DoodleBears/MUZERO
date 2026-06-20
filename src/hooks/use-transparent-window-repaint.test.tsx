@@ -2,20 +2,16 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const repaint = vi.hoisted(() => vi.fn(() => Promise.resolve()));
-const setContinuousRepaint = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const shell = vi.hoisted(() => ({ hasRepaint: true }));
 
 vi.mock("@/lib/desktop/bridge", () => ({
   resolveDesktopBridge: () => ({
     kind: "electron",
-    windowControls: shell.hasRepaint ? { repaint, setContinuousRepaint } : {},
+    windowControls: shell.hasRepaint ? { repaint } : {},
   }),
 }));
 
-import {
-  useContinuousTransparentRepaint,
-  useTransparentWindowRepaint,
-} from "./use-transparent-window-repaint";
+import { useTransparentWindowRepaint } from "./use-transparent-window-repaint";
 
 describe("useTransparentWindowRepaint", () => {
   beforeEach(() => {
@@ -71,44 +67,5 @@ describe("useTransparentWindowRepaint", () => {
     rerender({ active: false });
     expect(() => act(() => vi.advanceTimersByTime(2000))).not.toThrow();
     expect(repaint).not.toHaveBeenCalled();
-  });
-});
-
-describe("useContinuousTransparentRepaint", () => {
-  beforeEach(() => {
-    setContinuousRepaint.mockClear();
-    shell.hasRepaint = true;
-  });
-
-  it("starts the main-process recomposite loop while active", () => {
-    renderHook(() => useContinuousTransparentRepaint(true));
-    expect(setContinuousRepaint).toHaveBeenCalledWith(true);
-  });
-
-  it("does not start while inactive", () => {
-    renderHook(() => useContinuousTransparentRepaint(false));
-    expect(setContinuousRepaint).not.toHaveBeenCalled();
-  });
-
-  it("stops the loop when it goes inactive", () => {
-    const { rerender } = renderHook(({ active }) => useContinuousTransparentRepaint(active), {
-      initialProps: { active: true },
-    });
-    setContinuousRepaint.mockClear();
-    rerender({ active: false });
-    expect(setContinuousRepaint).toHaveBeenCalledWith(false);
-  });
-
-  it("stops the loop on unmount", () => {
-    const { unmount } = renderHook(() => useContinuousTransparentRepaint(true));
-    setContinuousRepaint.mockClear();
-    unmount();
-    expect(setContinuousRepaint).toHaveBeenCalledWith(false);
-  });
-
-  it("no-ops on shells without the control (web / tauri)", () => {
-    shell.hasRepaint = false;
-    expect(() => renderHook(() => useContinuousTransparentRepaint(true))).not.toThrow();
-    expect(setContinuousRepaint).not.toHaveBeenCalled();
   });
 });
