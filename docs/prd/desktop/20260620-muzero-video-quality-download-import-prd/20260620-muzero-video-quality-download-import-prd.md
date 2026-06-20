@@ -15,7 +15,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 基础设施：视频轨解析 + 清晰度模型 + 下载计划 resolver（纯函数，零 mux） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 基础设施：视频轨解析 + 清晰度模型 + 下载计划 resolver（纯函数，零 mux） | 🔄 Bili 切片 ✅（YouTube `pickAdaptiveVideo` 待做） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 渲染层 mediabunny copy-remux 下载（AVC+AAC 直接封装）+ 落盘/入库 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 可选转码（**不打包 FFmpeg**）：WebCodecs 能力探测 + 自带系统 ffmpeg（BYO）兜底 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 清晰度选择 UI + 下载进度 + 入口 + i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -384,10 +384,11 @@ components/track/          # download-quality-dialog.tsx（新）：清晰度列
 > **排期建议（基于 §1.4 基线）**：Bilibili 视频是对**已验证请求**的纯增量，可**先单独 ship**（Phase 1+2 只做 Bili 即可端到端最快见效）；YouTube 视频依赖活体对抗的 sig/n/PoToken（§4.6），**单独验收、不阻塞 Bili**。
 
 #### Phase 1 Checklist
-- [ ] 用 canned B站 playurl（含 `dash.video[]`）+ YT player 响应，单测能列出正确清晰度档并选中目标分辨率直链。
-- [ ] Bilibili：视频侧 `fnval=4048` 取流后**音频路径回归无变化**（既有音频 resolve/播放测试全绿）。
-- [ ] `chooseMuxStrategy` 对 AVC+AAC→mp4 copy、VP9/AV1+Opus→webm copy、强制 mp4 跨编码→transcode 全分支命中（穷举单测）。
-- [ ] 全项目 `tsc` 绿；既有音频 resolve/缓存测试无回归。
+- [x] Bilibili：canned playurl（含 `dash.video[]`）能列出清晰度档并选中目标分辨率直链。✅
+- [ ] YouTube：`pickAdaptiveVideo` 对 canned player 响应选档（YT 切片待做，§1.4 脆弱独立验收）。
+- [x] Bilibili：视频侧 `fnval=4048` 取流后**音频路径回归无变化**（既有音频 resolve/播放测试全绿）。✅
+- [x] `chooseMuxStrategy` 对 AVC+AAC→mp4 copy、VP9/AV1+Opus→webm copy、强制 mp4 跨编码→transcode 全分支命中（穷举单测）。✅
+- [x] 全项目 `tsc` 绿；全量 Vitest **3165 passed / 0 failed**，既有音频 resolve/缓存测试无回归。✅
 
 ### Phase 2: 渲染层 mediabunny copy-remux 下载 + 落盘/入库
 
