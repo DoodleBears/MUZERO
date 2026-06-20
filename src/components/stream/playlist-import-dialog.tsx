@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ListPlus, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, Download, ListPlus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -7,6 +7,7 @@ import { Disc3Icon } from "@/components/ui/disc-3";
 import { useSessions } from "@/hooks/use-app-data";
 import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { canDownloadVideo, downloadPlaylistVideos } from "@/streamsrc/download-action";
 import type { StreamPlaylist } from "@/streamsrc/provider";
 
 /**
@@ -220,15 +221,33 @@ export function PlaylistImportDialog({
           >
             {t("playlistImport.cancel")}
           </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={createNewSet}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm transition-opacity hover:opacity-90 disabled:opacity-60"
-          >
-            <ListPlus className="size-4" />
-            {busy ? t("streamSources.importing") : t("playlistImport.newSet")}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Video sources (Bilibili / YouTube): download every item as a local video,
+                each with its own progress notification, at the default quality. */}
+            {canDownloadVideo(pl.source) && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void downloadPlaylistVideos(pl.source, pl.id);
+                  onClose();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-60"
+              >
+                <Download className="size-4" />
+                {t("download.allVideos")}
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={createNewSet}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              <ListPlus className="size-4" />
+              {busy ? t("streamSources.importing") : t("playlistImport.newSet")}
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

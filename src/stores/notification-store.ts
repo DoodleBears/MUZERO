@@ -45,6 +45,8 @@ export interface NotificationItem {
   actions?: NotificationAction[];
   /** Rich debugging context surfaced by the error "copy" button. */
   debug?: ErrorDebugInfo;
+  /** Determinate progress 0..1 (e.g. a download) — renders a thin bar. */
+  progress?: number;
 }
 
 // Errors and loading spinners stay put; everything else fades on its own.
@@ -65,7 +67,7 @@ interface NotificationState {
   ) => string;
   update: (
     id: string,
-    patch: Partial<Pick<NotificationItem, "type" | "message" | "detail" | "duration">>,
+    patch: Partial<Pick<NotificationItem, "type" | "message" | "detail" | "duration" | "progress">>,
   ) => void;
   dismiss: (id: string) => void;
   clear: () => void;
@@ -148,7 +150,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 }));
 
 type NotifyOpts = Partial<
-  Pick<NotificationItem, "detail" | "duration" | "dismissible" | "actions" | "debug">
+  Pick<NotificationItem, "detail" | "duration" | "dismissible" | "actions" | "debug" | "progress">
 > & {
   /** Raw thrown value — normalized into `debug` for the copy payload. */
   error?: unknown;

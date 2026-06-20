@@ -29,8 +29,59 @@ export function parseStreamLink(text: string): StreamLinkRef | null {
   } catch {
     return null;
   }
-  if (url.hostname.toLowerCase().endsWith("music.163.com")) return parseNetease(url);
-  if (url.hostname.toLowerCase().endsWith("y.qq.com")) return parseQq(url);
+  const host = url.hostname.toLowerCase();
+  if (host.endsWith("music.163.com")) return parseNetease(url);
+  if (host.endsWith("y.qq.com")) return parseQq(url);
+  if (host.endsWith("bilibili.com")) return parseBili(url);
+  if (host === "youtu.be" || host.endsWith("youtube.com")) return parseYoutube(url);
+  return null;
+}
+
+const BV_RE = /^BV[0-9A-Za-z]{8,}$/;
+const AV_RE = /^av\d+$/i;
+// A YouTube video id is exactly 11 url-safe chars. Heuristic: a bare 11-char token is
+// treated as a YT id (the user asked for raw-id input) — BV ids are 12 chars so they're
+// checked first and never collide.
+const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * Recognize a *bare* id the user typed directly — a Bilibili `BV…`/`av…` number or a
+ * YouTube 11-char video id — so the ⌘F overlay resolves it targeted (via getTracksByIds)
+ * instead of running a keyword search. Returns null for ordinary text queries.
+ */
+export function parseBareStreamId(text: string): StreamLinkRef | null {
+  const q = text.trim();
+  if (BV_RE.test(q) || AV_RE.test(q)) return { source: "bili", kind: "song", id: q };
+  if (YT_ID_RE.test(q)) return { source: "youtube", kind: "song", id: q };
+  return null;
+}
+
+function parseBili(url: URL): StreamLinkRef | null {
+  // /video/BV…  (also matches with a trailing slash or query string; av… is legacy).
+  const video = url.pathname.match(/\/video\/(BV[0-9A-Za-z]+|av\d+)/i);
+  if (video) return { source: "bili", kind: "song", id: video[1] };
+  // 收藏夹: space.bilibili.com/<uid>/favlist?fid=<media_id> — fid IS the media_id.
+  const fid = url.searchParams.get("fid");
+  if (/\/favlist/i.test(url.pathname) && fid && /^\d+$/.test(fid)) {
+    return { source: "bili", kind: "playlist", id: fid };
+  }
+  // 收藏夹分享: bilibili.com/medialist/detail/ml<media_id>.
+  const ml = url.pathname.match(/\/medialist\/detail\/ml(\d+)/i);
+  if (ml) return { source: "bili", kind: "playlist", id: ml[1] };
+  return null;
+}
+
+function parseYoutube(url: URL): StreamLinkRef | null {
+  if (url.hostname.toLowerCase() === "youtu.be") {
+    const id = url.pathname.split("/").filter(Boolean)[0];
+    return id ? { source: "youtube", kind: "song", id } : null;
+  }
+  const path = url.pathname.match(/\/(?:shorts|embed|v)\/([\w-]+)/);
+  if (path) return { source: "youtube", kind: "song", id: path[1] };
+  const v = url.searchParams.get("v");
+  if (v) return { source: "youtube", kind: "song", id: v };
+  const list = url.searchParams.get("list");
+  if (list) return { source: "youtube", kind: "playlist", id: list };
   return null;
 }
 

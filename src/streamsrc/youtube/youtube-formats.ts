@@ -76,3 +76,94 @@ export function audioMimeFor(format: YoutubeFormat): string {
   // `audio/mp4; codecs="mp4a.40.2"` → `audio/mp4`; <audio> doesn't want the codecs.
   return format.mimeType.split(";")[0].trim() || "audio/mp4";
 }
+
+// --- Video-only adaptive selection (download): mirrors the audio picker but keyed on
+// resolution, and mirrors bili-video's selectVideoByResolution. Pure, exhaustively tested.
+
+export type VideoCodecKind = "avc" | "vp9" | "av1" | "other";
+
+export interface YoutubeVideoFormat {
+  itag: number;
+  /** e.g. `video/mp4; codecs="avc1.640028"` or `video/webm; codecs="vp9"`. */
+  mimeType: string;
+  bitrate?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  qualityLabel?: string;
+}
+
+export interface PickedVideo {
+  format: YoutubeVideoFormat;
+  codec: VideoCodecKind;
+}
+
+/** Classify a video format's codec from its mimeType. */
+export function videoCodecOf(mimeType: string): VideoCodecKind {
+  const m = mimeType.toLowerCase();
+  if (m.includes("avc1") || m.includes("h264")) return "avc";
+  if (m.includes("vp9") || m.includes("vp09")) return "vp9";
+  if (m.includes("av01") || m.includes("av1")) return "av1";
+  return "other";
+}
+
+/** Container-compat default (AVC-first → mp4 copy with AAC; NOT a quality ranking). */
+const VIDEO_CODEC_ORDER: VideoCodecKind[] = ["avc", "vp9", "av1", "other"];
+
+export interface PickVideoOptions {
+  /** Cap the resolution (height in px). Omit = pick the highest available. */
+  maxHeight?: number;
+  codecPreference?: VideoCodecKind[];
+}
+
+function videoOnly(formats: YoutubeVideoFormat[]): YoutubeVideoFormat[] {
+  return formats.filter((f) => f.mimeType.toLowerCase().startsWith("video/"));
+}
+
+function heightOf(f: YoutubeVideoFormat): number {
+  return f.height ?? 0;
+}
+
+/**
+ * Pick the best video-only format for a target height: prefer the highest height ≤
+ * `maxHeight` (downgrade from the cap); if all are above the cap, take the lowest
+ * (minimal upgrade); with no cap, take the highest. Within the chosen height, order by
+ * `codecPreference` (AVC-first) then by highest bitrate. Null if there are no formats.
+ */
+export function pickAdaptiveVideo(
+  formats: YoutubeVideoFormat[],
+  opts: PickVideoOptions = {},
+): PickedVideo | null {
+  const candidates = videoOnly(formats);
+  if (!candidates.length) return null;
+  const { maxHeight, codecPreference = VIDEO_CODEC_ORDER } = opts;
+
+  const heights = [...new Set(candidates.map(heightOf))].sort((a, b) => a - b);
+  let targetHeight: number;
+  if (maxHeight === undefined) {
+    targetHeight = heights[heights.length - 1];
+  } else {
+    const eligible = heights.filter((h) => h <= maxHeight);
+    targetHeight = eligible.length ? eligible[eligible.length - 1] : heights[0];
+  }
+
+  const codecRank = (codec: VideoCodecKind): number => {
+    const i = codecPreference.indexOf(codec);
+    return i === -1 ? codecPreference.length : i;
+  };
+
+  const best = candidates
+    .filter((f) => heightOf(f) === targetHeight)
+    .map((format) => ({ format, codec: videoCodecOf(format.mimeType) }))
+    .sort(
+      (a, b) =>
+        codecRank(a.codec) - codecRank(b.codec) ||
+        (b.format.bitrate ?? 0) - (a.format.bitrate ?? 0),
+    )[0];
+  return best ?? null;
+}
+
+/** The mime to store/play a picked video format (codecs stripped). */
+export function videoMimeFor(format: YoutubeVideoFormat): string {
+  return format.mimeType.split(";")[0].trim() || "video/mp4";
+}

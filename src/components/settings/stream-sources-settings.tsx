@@ -5,6 +5,7 @@ import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog
 import { QrLoginDialog } from "@/components/stream/qr-login-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
+import { DEFAULT_VIDEO_QUALITY } from "@/streamsrc/download-action";
 import {
   cookieStringHasAuth,
   STREAM_LOGIN_CONFIGS,
@@ -34,6 +36,17 @@ const SOURCES: { id: StreamSourceId; label: string; qualities: string[] }[] = [
   { id: "bili", label: "Bilibili", qualities: ["low", "medium", "high", "lossless"] },
   // QQ caps at plaintext tiers — no lossless-beyond / encrypted .mflac/.mgg (PRD red line).
   { id: "qq", label: "QQ 音乐", qualities: ["flac", "320", "m4a", "128"] },
+];
+
+/** Default video-download resolution (prefer-match-else-downgrade per source). */
+const VIDEO_QUALITY_OPTIONS: { value: string; label: string }[] = [
+  { value: "max", label: "Auto" },
+  { value: "2160", label: "2160P" },
+  { value: "1440", label: "1440P" },
+  { value: "1080", label: "1080P" },
+  { value: "720", label: "720P" },
+  { value: "480", label: "480P" },
+  { value: "360", label: "360P" },
 ];
 
 /**
@@ -183,6 +196,43 @@ export function StreamSourcesSettings() {
               </div>
             );
           })}
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span>{t("streamSources.defaultVideoQuality")}</span>
+            <Select
+              value={settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY}
+              onValueChange={(value) => {
+                if (value) void saveSettings({ defaultVideoQuality: value });
+              }}
+            >
+              <SelectTrigger className="h-8 w-auto min-w-24 px-2 text-foreground text-xs">
+                <SelectValue>
+                  {(value) =>
+                    VIDEO_QUALITY_OPTIONS.find((o) => o.value === value)?.label ?? (value as string)
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {VIDEO_QUALITY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <label
+            htmlFor="stream-enter-downloads"
+            className="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              id="stream-enter-downloads"
+              checked={settings.enterDownloadsVideo !== false}
+              onCheckedChange={(checked) =>
+                void saveSettings({ enterDownloadsVideo: checked === true })
+              }
+            />
+            <span>{t("streamSources.enterDownloads")}</span>
+          </label>
           <StreamCacheControls />
         </CardContent>
       </Card>

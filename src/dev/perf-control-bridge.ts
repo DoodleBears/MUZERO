@@ -13,7 +13,8 @@ import {
   saveSettings,
   setTrackTags,
 } from "@/db/repositories";
-import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS } from "@/db/types";
+import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, type StreamSourceId } from "@/db/types";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { EXAMPLE_TRACK_TITLE, loadExampleTrackAssets } from "@/lib/example-track";
 import { log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata } from "@/lib/media-metadata";
@@ -32,7 +33,16 @@ import {
 } from "@/shortcuts/actions";
 import { normalizeTab, useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { buildDownloadPlan } from "@/streamsrc/download-plan";
+import {
+  downloadStreamedVideoToLibrary,
+  recoverStreamedTrackCover,
+} from "@/streamsrc/download-to-library";
+import { createStreamSource } from "@/streamsrc/registry";
+import { createStreamHttp } from "@/streamsrc/stream-http";
+import { parseBareStreamId, parseStreamLink } from "@/streamsrc/stream-link";
 import { getSearchPerfSnapshot, resetSearchPerf } from "@/workers/search-client";
+import { muxCopyTracksViaWorker } from "@/workers/video-mux-client";
 import { getSearchDriver } from "./search-drive";
 
 export interface PerfControlCommand {
@@ -52,7 +62,13 @@ export interface PerfControlCommand {
     | "renderTrace"
     | "liveRequest"
     | "sessions"
-    | "seedExample";
+    | "seedExample"
+    | "streamProbe"
+    | "streamDownload"
+    | "downloadToLibrary"
+    | "recoverCover"
+    | "resolveLink"
+    | "syncPlaylists";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -88,6 +104,18 @@ interface PerfCommandHandlerDeps {
   listSessions?: () => Promise<unknown>;
   /** Seed a small playable set for harnesses that run against a fresh profile DB. */
   seedExample?: () => Promise<unknown>;
+  /** Probe a stream source's video resolve/quality-list against the live API (dev E2E). */
+  streamProbe?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Full download E2E: resolve video+audio, fetch bytes, copy-remux, return sizes. */
+  streamDownload?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Download a streamed video INTO the library (task #9): creates a playable track. */
+  downloadToLibrary?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Backfill an existing streamed track's official cover (no video re-download). */
+  recoverCover?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Detect a link / bare id and resolve it targeted (getTracksByIds) — paste-to-resolve. */
+  resolveLink?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** List a source's user playlists (Bilibili 收藏夹 sync); optional `importId` to import one. */
+  syncPlaylists?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -244,6 +272,30 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         if (!deps.seedExample) throw new Error("seedExample not wired");
         return deps.seedExample();
       }
+      case "streamProbe": {
+        if (!deps.streamProbe) throw new Error("streamProbe not wired");
+        return deps.streamProbe(command.payload ?? {});
+      }
+      case "streamDownload": {
+        if (!deps.streamDownload) throw new Error("streamDownload not wired");
+        return deps.streamDownload(command.payload ?? {});
+      }
+      case "downloadToLibrary": {
+        if (!deps.downloadToLibrary) throw new Error("downloadToLibrary not wired");
+        return deps.downloadToLibrary(command.payload ?? {});
+      }
+      case "recoverCover": {
+        if (!deps.recoverCover) throw new Error("recoverCover not wired");
+        return deps.recoverCover(command.payload ?? {});
+      }
+      case "resolveLink": {
+        if (!deps.resolveLink) throw new Error("resolveLink not wired");
+        return deps.resolveLink(command.payload ?? {});
+      }
+      case "syncPlaylists": {
+        if (!deps.syncPlaylists) throw new Error("syncPlaylists not wired");
+        return deps.syncPlaylists(command.payload ?? {});
+      }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
     }
@@ -384,6 +436,342 @@ export function startPerfControlBridge(): void {
             autoExtend: s.config?.autoExtend ?? false,
           }))
           .sort((a, b) => b.trackCount - a.trackCount),
+      };
+    },
+    // Probe a stream source's video resolve against the LIVE API (dev E2E for the
+    // video-download work). Builds the source the same way the app does; returns only
+    // sanitized shape (heights/codecs/mime/header-keys) — never the signed URL or cookie.
+    streamProbe: async (payload) => {
+      const sourceId = String(payload.sourceId ?? "bili") as StreamSourceId;
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error(`source ${sourceId} unavailable`);
+
+      // Resolve a live externalId: explicit, or the first hit of a real search.
+      let externalId = String(payload.externalId ?? "");
+      let searchHits: Array<{ externalId: string; title: string }> = [];
+      if (!externalId && payload.search) {
+        const hits = await source.search(String(payload.search), { limit: 5 });
+        searchHits = hits.map((h) => ({ externalId: h.externalId, title: h.title }));
+        externalId = hits[0]?.externalId ?? "";
+      }
+      if (!externalId) throw new Error("externalId or search required");
+
+      // Audio resolve is the known-good baseline; comparing isolates video-path issues.
+      const audioRes = await source.resolve(externalId, {});
+      const audio =
+        audioRes.kind === "ok"
+          ? { kind: "ok", mime: audioRes.stream.mime, quality: audioRes.stream.quality }
+          : audioRes;
+
+      // listVideoQualities is light (metadata only) for both sources. resolveVideo is NOT
+      // probed here — for YouTube it downloads the whole stream; use /stream/download for
+      // the full resolve→fetch→mux E2E.
+      const qualities = source.listVideoQualities
+        ? await source.listVideoQualities(externalId)
+        : [];
+      return { sourceId, externalId, searchHits, audio, qualities };
+    },
+    // Full download E2E: resolve video+audio → fetch bytes via the media proxy → copy-remux
+    // with mediabunny → report sizes (no DB write; this proves the runtime mux path). To keep
+    // the byte download small, `search` picks the SHORTEST hit.
+    streamDownload: async (payload) => {
+      const sourceId = String(payload.sourceId ?? "bili") as StreamSourceId;
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source?.resolveVideo) throw new Error(`source ${sourceId} has no resolveVideo`);
+
+      let externalId = String(payload.externalId ?? "");
+      let picked: { title?: string; durationSec?: number } | undefined;
+      if (!externalId && payload.search) {
+        const hits = await source.search(String(payload.search), { limit: 10 });
+        const byDur = hits
+          .filter((h) => (h.durationSec ?? 0) > 0)
+          .sort((a, b) => (a.durationSec ?? 0) - (b.durationSec ?? 0));
+        const hit = byDur[0] ?? hits[0];
+        picked = hit ? { title: hit.title, durationSec: hit.durationSec } : undefined;
+        externalId = hit?.externalId ?? "";
+      }
+      if (!externalId) throw new Error("externalId or search required");
+
+      const videoRes = await source.resolveVideo(externalId, {
+        quality: payload.quality as string | undefined,
+      });
+      if (videoRes.kind !== "ok") return { stage: "resolveVideo", result: videoRes };
+      const audioRes = await source.resolve(externalId, {});
+      if (audioRes.kind !== "ok") return { stage: "resolveAudio", result: audioRes };
+
+      const plan = buildDownloadPlan(videoRes.video, audioRes.stream);
+      if (plan.strategy.kind !== "copy") return { stage: "strategy", strategy: plan.strategy };
+
+      const bridge = resolveDesktopBridge();
+      const fetchBytes = async (url: string, headers?: Record<string, string>): Promise<Blob> => {
+        const proxied = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
+        const resp = await fetch(proxied);
+        if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+        return resp.blob();
+      };
+      // YouTube returns bytes (blob transport); Bilibili returns a URL to fetch.
+      const [videoBlob, audioBlob] = await Promise.all([
+        videoRes.video.blob ?? fetchBytes(videoRes.video.url ?? "", videoRes.video.headers),
+        audioRes.stream.blob ?? fetchBytes(audioRes.stream.mediaUrl ?? "", audioRes.stream.headers),
+      ]);
+      const muxed = await muxCopyTracksViaWorker(videoBlob, audioBlob, plan.strategy.container);
+      // Persist to the app's media storage so the file is KEPT (not just measured).
+      let savedStorageKey: string | undefined;
+      let savedBytes: number | undefined;
+      if (payload.save !== false && bridge.writeMediaStorageBlob) {
+        const safeId = externalId.replace(/[^\w.-]/g, "_");
+        savedStorageKey = `downloads/${safeId}-${videoRes.video.height ?? 0}p.${plan.strategy.container}`;
+        await bridge.writeMediaStorageBlob({ storageKey: savedStorageKey, blob: muxed });
+        savedBytes = (await bridge.statMediaStorageFile?.({ storageKey: savedStorageKey }))?.bytes;
+      }
+      return {
+        externalId,
+        title: picked?.title,
+        durationSec: picked?.durationSec,
+        container: plan.strategy.container,
+        height: videoRes.video.height,
+        codec: videoRes.video.codec,
+        videoBytes: videoBlob.size,
+        audioBytes: audioBlob.size,
+        muxedBytes: muxed.size,
+        muxedType: muxed.type,
+        savedStorageKey,
+        savedBytes,
+      };
+    },
+    // Download a streamed video INTO the library (task #9): ensure a "Downloads" set,
+    // run the real persist-to-track path, and read the track back for verification.
+    downloadToLibrary: async (payload) => {
+      const sourceId = String(payload.sourceId ?? "bili") as StreamSourceId;
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error(`source ${sourceId} unavailable`);
+
+      let externalId = String(payload.externalId ?? "");
+      let title = String(payload.title ?? "");
+      let meta: import("@/db/types").StreamSourceMeta | undefined;
+      let coverUrl: string | undefined;
+      if (!externalId && payload.search) {
+        const [hit] = await source.search(String(payload.search), { limit: 1 });
+        externalId = hit?.externalId ?? "";
+        title = hit?.title ?? externalId;
+        meta = hit
+          ? {
+              artist: hit.artist,
+              album: hit.album,
+              coverUrl: hit.coverUrl,
+              durationSec: hit.durationSec,
+            }
+          : undefined;
+        coverUrl = hit?.coverUrl;
+      }
+      if (!externalId) throw new Error("externalId or search required");
+      if (!title) title = externalId;
+
+      const { createSession: createSess, listSessions } = await import("@/db/repositories");
+      const sessions = await listSessions();
+      const existing = sessions.find((s) => s.name === "Downloads");
+      const session =
+        existing ??
+        (await createSess({
+          name: "Downloads",
+          seedPrompt: "",
+          config: { autoExtend: false },
+          displayMode: "video",
+        }));
+
+      const bridge = resolveDesktopBridge();
+      const progressSamples: Array<{ stage: string; ratio: number }> = [];
+      const result = await downloadStreamedVideoToLibrary(
+        {
+          source,
+          sessionId: session.id,
+          externalId,
+          title,
+          meta,
+          coverUrl,
+          quality:
+            (payload.quality as string | undefined) ??
+            (settings as { defaultVideoQuality?: string }).defaultVideoQuality ??
+            "1080",
+          audioOnly: Boolean(payload.audioOnly),
+        },
+        {
+          fetchBytes: async (url, headers, onBytes) => {
+            const proxied = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
+            const resp = await fetch(proxied);
+            if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+            const total =
+              Number(
+                resp.headers.get("content-length") || resp.headers.get("x-muzero-content-length"),
+              ) || 0;
+            if (!onBytes || !total || !resp.body) return resp.blob();
+            const reader = resp.body.getReader();
+            const chunks: BlobPart[] = [];
+            let loaded = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) {
+                chunks.push(value);
+                loaded += value.length;
+                onBytes(loaded, total);
+              }
+            }
+            return new Blob(chunks, { type: resp.headers.get("content-type") ?? "" });
+          },
+          mux: (v, a, container) => muxCopyTracksViaWorker(v, a, container),
+          posterFrame: async (video, durationSec) => {
+            const { extractUsefulVideoPosterFrame } = await import("@/lib/video-poster-frame");
+            const file = new File([video], "download.mp4", { type: video.type || "video/mp4" });
+            const poster = await extractUsefulVideoPosterFrame(file, { durationSec });
+            return poster ? { blob: poster.blob, mime: poster.mime } : null;
+          },
+          onProgress: (stage, ratio) => {
+            progressSamples.push({ stage, ratio: Math.round(ratio * 100) / 100 });
+          },
+        },
+      );
+
+      const track = result.kind === "downloaded" ? await getTrack(result.trackId) : null;
+      return {
+        sessionId: session.id,
+        result,
+        fetchProgressSamples: progressSamples.filter((s) => s.stage === "fetch").length,
+        lastFetchRatio: progressSamples.filter((s) => s.stage === "fetch").at(-1)?.ratio ?? null,
+        track: track
+          ? {
+              id: track.id,
+              title: track.title,
+              kind: track.kind,
+              origin: track.origin,
+              hasBlob: Boolean(track.blobId),
+              hasCover: Boolean(track.coverBlobId),
+              remoteCoverUrl: track.remoteCoverUrl,
+              durationSec: track.durationSec,
+              downloadedVideoHeight: track.downloadedVideoHeight,
+              downloadedContainer: track.downloadedContainer,
+              downloadedCodecs: track.downloadedCodecs,
+            }
+          : null,
+      };
+    },
+    // Detect a link / bare id (mirrors the ⌘F overlay) and resolve it targeted via the
+    // source's getTracksByIds — proves "paste URL / type BV → the right video, no keyword search".
+    resolveLink: async (payload) => {
+      const text = String(payload.text ?? "");
+      const ref = parseStreamLink(text) ?? parseBareStreamId(text);
+      if (!ref) return { ref: null, hit: null };
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(ref.source, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (ref.kind === "playlist") {
+        const playlist = (await source?.getPlaylistMeta?.(ref.id)) ?? null;
+        const items = (await source?.importPlaylist?.(ref.id)) ?? [];
+        return {
+          ref,
+          playlist,
+          itemCount: items.length,
+          sample: items.slice(0, 3).map((h) => ({ externalId: h.externalId, title: h.title })),
+        };
+      }
+      if (!source?.getTracksByIds) return { ref, hit: null };
+      const [hit] = await source.getTracksByIds([ref.id]);
+      return { ref, hit: hit ?? null };
+    },
+    // List a source's user playlists (Bilibili 收藏夹 sync); `importId` imports one to hits.
+    syncPlaylists: async (payload) => {
+      const sourceId = String(payload.sourceId ?? "bili") as StreamSourceId;
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error(`source ${sourceId} unavailable`);
+      const playlists = (await source.getUserPlaylists?.()) ?? [];
+      let imported: unknown = null;
+      if (payload.importId) {
+        const hits = (await source.importPlaylist?.(String(payload.importId))) ?? [];
+        imported = {
+          count: hits.length,
+          sample: hits.slice(0, 3).map((h) => ({ externalId: h.externalId, title: h.title })),
+        };
+      }
+      let downloaded: unknown = null;
+      if (payload.importId && payload.downloadAll) {
+        const { downloadHitsAsVideo } = await import("@/streamsrc/download-action");
+        const all = (await source.importPlaylist?.(String(payload.importId))) ?? [];
+        const limit = payload.limit ? Number(payload.limit) : undefined;
+        const hits = limit ? all.slice(0, limit) : all;
+        downloaded = await downloadHitsAsVideo(hits, { quality: payload.quality as string });
+      }
+      return { playlists, imported, downloaded };
+    },
+    // Backfill an existing streamed track's official cover (no video re-download).
+    recoverCover: async (payload) => {
+      const trackId = String(payload.trackId ?? "");
+      if (!trackId) throw new Error("trackId required");
+      const track = await getTrack(trackId);
+      if (!track?.streamSourceId) throw new Error("not a streamed track");
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const source = createStreamSource(track.streamSourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error("source unavailable");
+      const bridge = resolveDesktopBridge();
+      const { resolveMediaBlob } = await import("@/db/media-blob-storage");
+      const result = await recoverStreamedTrackCover(trackId, source, {
+        fetchBytes: async (url, headers) => {
+          const proxied = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
+          const resp = await fetch(proxied);
+          if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+          return resp.blob();
+        },
+        readMedia: async (blobId) => (await resolveMediaBlob(blobId))?.blob ?? null,
+        posterFrame: async (video, durationSec) => {
+          const { extractUsefulVideoPosterFrame } = await import("@/lib/video-poster-frame");
+          const file = new File([video], "video.mp4", { type: video.type || "video/mp4" });
+          const poster = await extractUsefulVideoPosterFrame(file, { durationSec });
+          return poster ? { blob: poster.blob, mime: poster.mime } : null;
+        },
+      });
+      const after = await getTrack(trackId);
+      return {
+        result,
+        hasCover: Boolean(after?.coverBlobId),
+        remoteCoverUrl: after?.remoteCoverUrl,
       };
     },
     seedExample: async () => {
