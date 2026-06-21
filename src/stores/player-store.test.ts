@@ -1619,3 +1619,199 @@ describe("player-store order/content decoupling (Axis B-1)", () => {
     });
   });
 });
+
+// --- Phase 1: context-aware play (playback-queue-model PRD, Part A) -------------
+
+describe("player-store context-aware play (playTrackInContext)", () => {
+  async function putMediaBlob(db: MuzeroDB, trackId: string, blobId: string) {
+    await db.mediaBlobs.put({
+      id: blobId,
+      trackId,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+    });
+  }
+  function readyTrack(id: string, sessionId: string, title: string, blobId: string): Track {
+    return { ...track(id, sessionId, title), status: "ready", blobId };
+  }
+
+  it(
+    "plays a shared track in the set the user is viewing, not its home set",
+    async () => {
+      const { db, repos, usePlayerStore } = await loadRuntime();
+      const setX = await repos.createSession({
+        name: "X",
+        seedPrompt: "",
+        config: { autoExtend: false },
+      });
+      const setY = await repos.createSession({
+        name: "Y",
+        seedPrompt: "",
+        config: { autoExtend: false },
+      });
+      // A's HOME set is X (created there); B's home is Y. A is ALSO added to Y.
+      const a = readyTrack("trk_a", setX.id, "A", "blb_a");
+      const b = readyTrack("trk_b", setY.id, "B", "blb_b");
+      await db.tracks.bulkAdd([a, b]);
+      await putMediaBlob(db, a.id, "blb_a");
+      await putMediaBlob(db, b.id, "blb_b");
+      await repos.prependTrackIds(setX.id, [a.id]); // X = [a]
+      await repos.prependTrackIds(setY.id, [b.id]);
+      await repos.prependTrackIds(setY.id, [a.id]); // Y = [a, b]
+
+      usePlayerStore.getState().init();
+      // The set-detail view of Y renders Y's tracks in display order, then clicks A.
+      const yTracks = await repos.getTracksByIds([a.id, b.id]);
+      await usePlayerStore.getState().playTrackInContext(yTracks[0], {
+        source: { kind: "set", setId: setY.id },
+        tracks: yTracks,
+      });
+
+      await waitFor(() => {
+        const s = usePlayerStore.getState();
+        expect(s.activeSessionId).toBe(setY.id); // NOT setX (A's home)
+        expect(s.queueSource).toEqual({ kind: "set", setId: setY.id });
+        expect(s.queue.map((t) => t.id)).toEqual([a.id, b.id]); // Y's queue, not X's
+        expect(s.queue[s.currentIndex]?.id).toBe(a.id);
+      });
+      await expect(repos.getPlayQueue()).resolves.toMatchObject({ contextSetId: setY.id });
+    },
+    PLAYER_STORE_INTEGRATION_TEST_TIMEOUT_MS,
+  );
+
+  it("plays a track from the viewed set even when it was removed from its home set", async () => {
+    // A.sessionId = X (home) but A is NOT a member of X anymore; only Y. The old
+    // playTrack switched to X (whose queue lacks A) → findIndex -1 → silent no-op.
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const setX = await repos.createSession({
+      name: "X",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const setY = await repos.createSession({
+      name: "Y",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const a = readyTrack("trk_a", setX.id, "A", "blb_a");
+    await db.tracks.bulkAdd([a]);
+    await putMediaBlob(db, a.id, "blb_a");
+    await repos.prependTrackIds(setY.id, [a.id]); // only Y contains A; X.trackIds = []
+
+    usePlayerStore.getState().init();
+    const yTracks = await repos.getTracksByIds([a.id]);
+    await usePlayerStore.getState().playTrackInContext(yTracks[0], {
+      source: { kind: "set", setId: setY.id },
+      tracks: yTracks,
+    });
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.activeSessionId).toBe(setY.id);
+      expect(s.queue.map((t) => t.id)).toEqual([a.id]);
+      expect(s.currentIndex).toBe(0);
+    });
+    expect(mediaEngineMock.play).toHaveBeenCalled(); // actually played, not a silent no-op
+  });
+
+  it("loads the queue in the drag-reordered display order via setActiveSession", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const set = await repos.createSession({
+      name: "S",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const t1 = track("trk_1", set.id, "One");
+    const t2 = track("trk_2", set.id, "Two");
+    const t3 = track("trk_3", set.id, "Three");
+    await db.tracks.bulkAdd([t1, t2, t3]);
+    await repos.prependTrackIds(set.id, [t1.id, t2.id, t3.id]); // membership [t1,t2,t3]
+    // Drag-reorder ranks → display order [t3, t1, t2].
+    await db.sessions.update(set.id, {
+      trackRanks: { [t3.id]: 0, [t1.id]: 100, [t2.id]: 200 },
+    });
+
+    usePlayerStore.getState().init();
+    await usePlayerStore.getState().setActiveSession(set.id);
+
+    await waitFor(() => {
+      expect(usePlayerStore.getState().queue.map((t) => t.id)).toEqual([t3.id, t1.id, t2.id]);
+    });
+  });
+
+  it("inherits DJ auto-extend from the viewed set's config", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const djSet = await repos.createSession({
+      name: "DJ",
+      seedPrompt: "late night drive",
+      config: { autoExtend: true },
+    });
+    const uploadSet = await repos.createSession({
+      name: "Uploads",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const a = readyTrack("trk_dj", djSet.id, "DJ song", "blb_dj");
+    const b = readyTrack("trk_up", uploadSet.id, "Upload", "blb_up");
+    await db.tracks.bulkAdd([a, b]);
+    await putMediaBlob(db, a.id, "blb_dj");
+    await putMediaBlob(db, b.id, "blb_up");
+    await repos.prependTrackIds(djSet.id, [a.id]);
+    await repos.prependTrackIds(uploadSet.id, [b.id]);
+
+    usePlayerStore.getState().init();
+    const djTracks = await repos.getTracksByIds([a.id]);
+    await usePlayerStore.getState().playTrackInContext(djTracks[0], {
+      source: { kind: "set", setId: djSet.id },
+      tracks: djTracks,
+    });
+    await waitFor(() => expect(usePlayerStore.getState().djEnabled).toBe(true));
+
+    const uploadTracks = await repos.getTracksByIds([b.id]);
+    await usePlayerStore.getState().playTrackInContext(uploadTracks[0], {
+      source: { kind: "set", setId: uploadSet.id },
+      tracks: uploadTracks,
+    });
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.activeSessionId).toBe(uploadSet.id);
+      expect(s.djEnabled).toBe(false);
+    });
+  });
+
+  it("stays in the active set and plays the clicked track when clicking within it", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const set = await repos.createSession({
+      name: "S",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const t1 = readyTrack("trk_1", set.id, "One", "blb_1");
+    const t2 = readyTrack("trk_2", set.id, "Two", "blb_2");
+    await db.tracks.bulkAdd([t1, t2]);
+    await putMediaBlob(db, t1.id, "blb_1");
+    await putMediaBlob(db, t2.id, "blb_2");
+    await repos.prependTrackIds(set.id, [t1.id, t2.id]); // [t1, t2]
+
+    usePlayerStore.getState().init();
+    const tracks = await repos.getTracksByIds([t1.id, t2.id]);
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[0], { source: { kind: "set", setId: set.id }, tracks });
+    await waitFor(() => expect(usePlayerStore.getState().currentIndex).toBe(0));
+
+    // Click the second track of the SAME viewed set → stays in set, plays it.
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[1], { source: { kind: "set", setId: set.id }, tracks });
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.activeSessionId).toBe(set.id);
+      expect(s.queue.map((t) => t.id)).toEqual([t1.id, t2.id]);
+      expect(s.queue[s.currentIndex]?.id).toBe(t2.id);
+    });
+  });
+});

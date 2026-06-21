@@ -1518,7 +1518,6 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
               setSelectedSetId(null);
             })
           }
-          onPlayAll={() => void playSet(selectedSetId)}
         />
       </RenderTraceBoundary>
     );
@@ -2058,7 +2057,6 @@ function SetDetailView({
   anchorTrackId,
   coverViewTransitionName,
   onBack,
-  onPlayAll,
 }: {
   setId: string;
   trackById: Map<string, Track>;
@@ -2069,11 +2067,10 @@ function SetDetailView({
    *  the user tapped on the wall (set only when arriving via a cover morph). */
   coverViewTransitionName?: string;
   onBack: () => void;
-  onPlayAll: () => void;
 }) {
   const { t } = useTranslation();
   const session = useLiveQuery(() => getSession(setId), [setId]);
-  const playTrack = usePlayerStore((s) => s.playTrack);
+  const playTrackInContext = usePlayerStore((s) => s.playTrackInContext);
   const fileRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
   const [name, setName] = useState("");
@@ -2428,14 +2425,32 @@ function SetDetailView({
             anchorTrackId={pendingAnchorTrackId}
             selectedTrackId={selectedTrack?.id}
             onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
-            onPlay={(track) => void playTrack(track)}
+            onPlay={(track) =>
+              void playTrackInContext(track, {
+                source: { kind: "set", setId },
+                tracks: shownTracks,
+              })
+            }
             alphabetLetterOf={alphabetLetterOf}
             emptyHint={t("gallery.empty")}
             listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
             className="min-h-0 flex-1"
             startActions={
               <>
-                <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    // "Play all" follows the displayed order (filters/sorts/search) —
+                    // 所见即所播 (PRD Q1). Plays from the first shown track in-context.
+                    if (shownTracks.length > 0) {
+                      void playTrackInContext(shownTracks[0], {
+                        source: { kind: "set", setId },
+                        tracks: shownTracks,
+                      });
+                    }
+                  }}
+                  disabled={shownTracks.length === 0}
+                >
                   <Play className="size-4" /> {t("gallery.playAll")}
                 </Button>
                 <AddTracksMenu setId={setId} />

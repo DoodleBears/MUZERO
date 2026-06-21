@@ -15,7 +15,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Set 上下文 + 顺序对齐（修复主 bug） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Set 上下文 + 顺序对齐（修复主 bug） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 派生实体 / 系统歌单 / 全部歌曲上下文统一 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Online 歌单（发现 tab 第 5 项）上下文 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）** | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -402,20 +402,20 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 **Goal:** 在歌单 Y 点 A 就在 Y 播；队列顺序对齐显示顺序；A 不在归属集时不再静默无声。
 
 **Tasks:**
-- [ ] `QueueSource` 不动（set 已有）；新增 `playTrackInContext`（仅实现 `kind:"set"` 分支 + 非 set 暂走 `playSystemPlaylist` 风格 stub）。
-- [ ] `setActiveSession` 内队列改用 `orderedSetTrackIds`（§4.3）。
-- [ ] `SetDetailView`：`onPlay` 改为 `playTrackInContext(track, { source:{kind:"set",setId}, tracks: shownTracks })`；`onPlayAll` 对齐到 `shownTracks`（§5.2 方案 A）。
-- [ ] 「已在该集」短路（§4.2）保留廉价点击路径。
-- [ ] 集成测试（见 §6 Phase 1 Checklist，遵守硬规则 7）。
+- [x] 新增 `playTrackInContext`（[player-store.ts](../../../../src/stores/player-store.ts)）：`kind:"set"` 分支走 `setActiveSession(setId,{tracks})`；非 set 分支**已完整落地**（不是 stub）经新内部 `activateExplicitQueue`，`playSystemPlaylist` 也收敛到它。新增 `PlaybackContext` 类型。
+- [x] `setActiveSession` 内队列改用 `orderedSetTrackIds` + 可选 `opts.tracks`（显式显示顺序）。
+- [x] `SetDetailView`（[search-page.tsx](../../../../src/pages/search-page.tsx)）：`onPlay` → `playTrackInContext(track,{source:{set,setId},tracks:shownTracks})`；「播放全部」改为本地 handler 用 `shownTracks`（去掉 `onPlayAll` prop，§5.2 方案 A）。
+- [x] 「已在该集 + 显示顺序一致」短路（§4.2）保留廉价点击路径。
+- [x] 集成测试（5 个，见下 Checklist，硬规则 7）。
 
 ### Phase 1 Checklist
 
-- [ ] 单测：A ∈ {X(home), Y}，`playTrackInContext(A, set:Y)` → `queueSource={set,Y}`、`contextSetId=Y`、queue==Y 的有序列表、currentIndex 指向 A。
-- [ ] 单测（次生症状）：A 已从 home 集 X 移除但仍在 Y → 在 Y 播放成功（旧代码此处静默 no-op）。
-- [ ] 单测（顺序）：Y 拖拽重排（有 `trackRanks`）→ 队列顺序 == `orderedSetTrackIds(Y)`，且「播放全部」与「点单曲」顺序一致。
-- [ ] 单测（autoExtend）：Y 是 DJ 集（`autoExtend=true`）→ 从 Y 播放后续歌在 Y 上触发；Y 是上传集 → 不触发。
-- [ ] 回归：在「当前已激活的集」内点歌走短路、不整队列重装（队列引用/`lastQueueSig` 不变）。
-- [ ] `make check`（typecheck + lint + vitest）通过。
+- [x] 单测：A ∈ {X(home), Y}，`playTrackInContext(A, set:Y)` → `queueSource={set,Y}`、`contextSetId=Y`、queue==Y 的有序列表、currentIndex 指向 A。
+- [x] 单测（次生症状）：A 已从 home 集 X 移除但仍在 Y → 在 Y 播放成功 + `mediaEngine.play` 被调用（旧代码此处静默 no-op）。
+- [x] 单测（顺序）：Y 拖拽重排（有 `trackRanks`）→ `setActiveSession` 队列顺序 == `orderedSetTrackIds(Y)`；「播放全部」走 `shownTracks` 与「点单曲」同序（UI 层，已对齐）。
+- [x] 单测（autoExtend）：DJ 集（`autoExtend=true`）→ `djEnabled=true`；上传集 → `djEnabled=false`。
+- [x] 回归：在「当前已激活的集」内点歌停留在该集、播放点击项（行为测试）；全量 `player-store.test`（37）+ `queue.test`（48）通过。
+- [x] `make check` 等价：tsc `--noEmit` 通过、biome 通过、vitest 通过。
 
 ### Phase 2: 派生实体 / 系统歌单 / 全部歌曲上下文统一
 

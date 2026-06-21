@@ -105,6 +105,7 @@ import {
   upcomingManualIndices,
   windowManualIndices,
 } from "@/player/queue";
+import { orderedSetTrackIds } from "@/player/set-order";
 import { describeTrackSwitch } from "@/player/switch-trace";
 import {
   beginFolderImport,
@@ -191,6 +192,17 @@ export type QueueSource =
   | { kind: "system-playlist"; id: SystemPlaylistId }
   | { kind: "online-playlist"; playlist: StreamPlaylist };
 
+/**
+ * Where a play action gets its queue: the source label (drives autoExtend + the
+ * "playing from" UI) plus the EXACT ordered tracks the user is looking at. Playback
+ * context comes from this — the surface the user clicked — never from `Track.sessionId`
+ * (a track can belong to many sets). See the playback-queue-model PRD (Part A).
+ */
+export interface PlaybackContext {
+  source: QueueSource;
+  tracks: Track[];
+}
+
 interface PlayerState {
   activeSessionId: string | null;
   /** Non-persisted "playing from" label source. System playlists are not DjSession rows. */
@@ -219,7 +231,13 @@ interface PlayerState {
   djError: string | null;
 
   init: () => void;
-  setActiveSession: (sessionId: string) => Promise<void>;
+  /**
+   * Load a 歌单 into the queue. By default the queue order follows the set's rank
+   * arbiter (`orderedSetTrackIds`), matching the set-detail display. Pass
+   * `opts.tracks` to load an EXACT ordered list (e.g. the filtered/sorted rows the
+   * user is viewing) — used by {@link PlayerState.playTrackInContext}.
+   */
+  setActiveSession: (sessionId: string, opts?: { tracks?: Track[] }) => Promise<void>;
   playSystemPlaylist: (playlistId: SystemPlaylistId, tracks: Track[]) => Promise<void>;
   rebuildEngine: () => Promise<void>;
   play: () => Promise<void>;
@@ -231,6 +249,13 @@ interface PlayerState {
   cueIndex: (index: number) => Promise<void>;
   /** Play a specific track, switching sets if needed (search/library result). */
   playTrack: (track: Track) => Promise<void>;
+  /**
+   * Play a track in an EXPLICIT context (the歌单/列表 the user clicked in) — the
+   * queue loads from `ctx.tracks` in the order shown and the context is `ctx.source`,
+   * NOT the track's home set. Fixes "playing a song shared across sets switches to
+   * the wrong set". See the playback-queue-model PRD (Part A).
+   */
+  playTrackInContext: (track: Track, ctx: PlaybackContext) => Promise<void>;
   /** Insert a specific track right after the current play position. */
   playNextTrack: (track: Track) => Promise<void>;
   /**
@@ -506,6 +531,51 @@ export function queueEntriesKey(ids: string[]): string {
 
 function currentTrack(state: PlayerState): Track | undefined {
   return state.currentIndex >= 0 ? state.queue[state.currentIndex] : undefined;
+}
+
+/** Whether the queue already holds exactly these ids in this order. */
+function sameTrackIds(queue: Track[], ids: string[]): boolean {
+  if (queue.length !== ids.length) return false;
+  for (let i = 0; i < ids.length; i += 1) {
+    if (queue[i]?.id !== ids[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Load an explicit ordered track list into the queue under a non-set context
+ * (system playlist / derived entity / library / online playlist). No `contextSetId`
+ * → DJ auto-extend stays off. The single loader behind `playSystemPlaylist` and the
+ * non-set branch of `playTrackInContext` (set context goes through `setActiveSession`).
+ */
+async function activateExplicitQueue(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  tracks: Track[],
+  source: QueueSource,
+): Promise<void> {
+  get().init();
+  await get().rebuildEngine();
+  watchSetForAppend(null, [], true);
+
+  const trackIds = tracks.map((t) => t.id);
+  loadedTrackId = null;
+  cancelPlaybackLoading(set);
+  await playQueueSet(trackIds, { currentIndex: -1 });
+  consumedTrackIds = new Set(trackIds);
+  lastQueueSig = queueSig(tracks);
+  set({
+    activeSessionId: null,
+    queueSource: source,
+    queue: tracks,
+    currentIndex: -1,
+    wantPlay: false,
+    playbackLoading: null,
+    positionSec: 0,
+    durationSec: 0,
+    displayMode: "video",
+    djEnabled: false,
+  });
 }
 
 function playableDurationSec(value: number | undefined): number {
@@ -1059,7 +1129,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     djEngine = createDjEngine({ db, brain, provider });
   },
 
-  async setActiveSession(sessionId) {
+  async setActiveSession(sessionId, opts) {
     const totalStartedAt = performance.now();
     log.debug("player", "setActiveSession start", { sessionId });
     get().init();
@@ -1075,7 +1145,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     notePerfWork("session.activate.getSession", performance.now() - sessionStartedAt, {
       sessionId,
     });
-    const trackIds = session?.trackIds ?? [];
+    // Queue order = exactly what the user sees. `opts.tracks` carries the displayed
+    // (possibly filtered/sorted) rows; otherwise fall back to the set's rank arbiter
+    // (NOT raw `trackIds`, which ignores drag-reorder — see set-order.ts).
+    const orderedTracks = opts?.tracks;
+    const trackIds = orderedTracks
+      ? orderedTracks.map((t) => t.id)
+      : orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks);
     loadedTrackId = null;
     cancelPlaybackLoading(set);
 
@@ -1090,7 +1166,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     });
     consumedTrackIds = new Set(trackIds);
     const fetchTracksStartedAt = performance.now();
-    const initialQueue = await getTracksByIds(trackIds);
+    const initialQueue = orderedTracks ?? (await getTracksByIds(trackIds));
     notePerfWork("session.activate.fetchTracks", performance.now() - fetchTracksStartedAt, {
       sessionId,
       tracks: trackIds.length,
@@ -1134,28 +1210,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       playlistId,
       trackCount: tracks.length,
     });
-    get().init();
-    await get().rebuildEngine();
-    watchSetForAppend(null, [], true);
-
-    const trackIds = tracks.map((track) => track.id);
-    loadedTrackId = null;
-    cancelPlaybackLoading(set);
-    await playQueueSet(trackIds, { currentIndex: -1 });
-    consumedTrackIds = new Set(trackIds);
-    lastQueueSig = queueSig(tracks);
-    set({
-      activeSessionId: null,
-      queueSource: { kind: "system-playlist", id: playlistId },
-      queue: tracks,
-      currentIndex: -1,
-      wantPlay: false,
-      playbackLoading: null,
-      positionSec: 0,
-      durationSec: 0,
-      displayMode: "video",
-      djEnabled: false,
-    });
+    await activateExplicitQueue(set, get, tracks, { kind: "system-playlist", id: playlistId });
   },
 
   async play() {
@@ -1248,6 +1303,44 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queueLength: get().queue.length,
     });
     if (idx >= 0) await get().playIndex(idx);
+  },
+
+  async playTrackInContext(trackToPlay, ctx) {
+    const ids = ctx.tracks.map((t) => t.id);
+    const idx = ctx.tracks.findIndex((t) => t.id === trackToPlay.id);
+    log.debug("player", "playTrackInContext", {
+      trackId: trackToPlay.id,
+      sourceKind: ctx.source.kind,
+      index: idx,
+      count: ids.length,
+    });
+    // Defensive: the track must be in the provided context (the UI always passes the
+    // list it rendered, so this only guards against a programming error).
+    if (idx < 0) return;
+
+    if (ctx.source.kind === "set") {
+      const { setId } = ctx.source;
+      const st = get();
+      // Cheap path: already playing from this exact set + displayed order → just jump,
+      // don't re-seed the whole queue.
+      const alreadyHere =
+        st.activeSessionId === setId &&
+        st.queueSource?.kind === "set" &&
+        st.queueSource.setId === setId &&
+        sameTrackIds(st.queue, ids);
+      if (!alreadyHere) {
+        // Load the VIEWED set into the queue in the exact displayed order. Context is
+        // the surface clicked (setId), never trackToPlay.sessionId (its home set).
+        await get().setActiveSession(setId, { tracks: ctx.tracks });
+      }
+      await get().playIndex(idx);
+      return;
+    }
+
+    // Non-set context (system-playlist / entity / library / online-playlist): load the
+    // explicit ordered tracks. No contextSetId → DJ auto-extend stays off.
+    await activateExplicitQueue(set, get, ctx.tracks, ctx.source);
+    await get().playIndex(idx);
   },
 
   async playNextTrack(track) {
