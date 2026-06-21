@@ -689,6 +689,58 @@ describe("player-store playback resume", () => {
     expect(mediaEngineMock.play).toHaveBeenCalled();
   });
 
+  it("publishes byte progress on playbackLoading while the next R2 track downloads", async () => {
+    const { db, first, second, usePlayerStore } = await seedQueue(0);
+    await db.mediaBlobs.put({
+      id: "blb_first",
+      trackId: first.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+    });
+    await db.tracks.update(first.id, { status: "ready", blobId: "blb_first" });
+    await db.tracks.update(second.id, {
+      status: "ready",
+      remoteMediaUrl: "https://media.example.com/second.mp3",
+    });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0);
+    usePlayerStore.setState({ isPlaying: true });
+    mediaEngineMock.loadBlob.mockClear();
+
+    // Record every progress value the store publishes during the download.
+    const progressSeen: Array<number | undefined> = [];
+    const unsub = usePlayerStore.subscribe((s) => {
+      if (s.playbackLoading) progressSeen.push(s.playbackLoading.progress);
+    });
+
+    // Two 5-byte chunks, total 10 → progress should step through 0.5 then 1.0.
+    let chunkIndex = 0;
+    const chunks = [new Uint8Array(5), new Uint8Array(5)];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (chunkIndex < chunks.length) controller.enqueue(chunks[chunkIndex++]);
+        else controller.close();
+      },
+    });
+    platformFetchMock.mockImplementationOnce(
+      async () =>
+        new Response(body, {
+          headers: { "content-type": "audio/mpeg", "content-length": "10" },
+        }),
+    );
+
+    await usePlayerStore.getState().playIndex(1);
+    unsub();
+
+    expect(progressSeen).toContain(0.5);
+    expect(usePlayerStore.getState().playbackLoading).toBeNull();
+    expectLoadedBlob("audio", "audio/mpeg");
+  });
+
   it("ignores a stale R2 handoff when the user moves on before the download finishes", async () => {
     const { db, first, second, usePlayerStore } = await seedQueue(0);
     await db.mediaBlobs.put({

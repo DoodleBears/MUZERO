@@ -74,6 +74,7 @@ import {
 import { isNcmFile } from "@/lib/ncm-decode";
 import { notePerfWork } from "@/lib/perf-counters";
 import { getAppFetch } from "@/lib/platform";
+import { streamResponseToBlob } from "@/lib/stream-to-blob";
 import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { describeTrackCoverSource, describeTrackMediaSource } from "@/lib/track-source";
 import { centeredSquareCrop } from "@/lib/video-frame-score";
@@ -462,6 +463,8 @@ export interface PlaybackLoadingState {
   title: string;
   sourceKind: PlaybackSourceKind;
   startedAt: number;
+  /** 0..1 byte progress of download-before-play, once a Content-Length is known. */
+  progress?: number;
 }
 
 interface PlaybackLoadRequest {
@@ -579,6 +582,19 @@ function clearPlaybackLoading(set: (p: Partial<PlayerState>) => void, requestId:
   if (!isPlaybackLoadCurrent(requestId)) return;
   playbackLoadAbort = null;
   set({ playbackLoading: null });
+}
+
+/** Update the active load's byte progress (download-before-play), ignoring stale requests. */
+function setPlaybackLoadingProgress(
+  set: (p: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  requestId: number,
+  ratio: number,
+): void {
+  if (!isPlaybackLoadCurrent(requestId)) return;
+  const current = get().playbackLoading;
+  if (!current) return;
+  set({ playbackLoading: { ...current, progress: Math.max(0, Math.min(1, ratio)) } });
 }
 
 function cancelPlaybackLoading(set: (p: Partial<PlayerState>) => void): void {
@@ -727,6 +743,7 @@ async function fetchStreamMediaBytes(
   url: string,
   headers: Record<string, string> | undefined,
   trace?: PlaybackTraceContext,
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<Blob> {
   const bridge = resolveDesktopBridge();
   const target = url.startsWith("blob:")
@@ -738,7 +755,9 @@ async function fetchStreamMediaBytes(
     ? await fetch(target)
     : await (await getAppFetch())(target);
   if (!resp.ok) throw new Error(`download failed (${resp.status})`);
-  const blob = await resp.blob();
+  // Stream the body when a total is known so download-before-play shows real % progress;
+  // otherwise this degrades to a one-shot blob read (no progress).
+  const blob = await streamResponseToBlob(resp, onProgress);
   if (blob.size === 0) throw new Error("empty media");
   return blob;
 }
@@ -753,9 +772,10 @@ async function downloadStreamForPlayback(
   url: string,
   headers: Record<string, string> | undefined,
   trace?: PlaybackTraceContext,
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<Blob | null> {
   try {
-    return await fetchStreamMediaBytes(track, url, headers, trace);
+    return await fetchStreamMediaBytes(track, url, headers, trace, onProgress);
   } catch (err) {
     log.warn("player", "download-before-play failed; streaming instead", {
       trackId: track.id,
@@ -3760,6 +3780,7 @@ async function fetchRemotePlaybackBlob(
   track: Track,
   trace: PlaybackTraceContext | undefined,
   signal?: AbortSignal,
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<{ blob: Blob; bytes: number; mime: string }> {
   const url = track.remoteMediaUrl;
   if (!url) throw new Error("Track has no remote media URL");
@@ -3772,7 +3793,7 @@ async function fetchRemotePlaybackBlob(
   const response = await fetcher(url, { cache: "no-store", signal });
   if (!response.ok) throw new Error(`Remote playback fetch failed: HTTP ${response.status}`);
 
-  const blob = await response.blob();
+  const blob = await streamResponseToBlob(response, onProgress);
   if (blob.size === 0) throw new Error("Remote playback fetch returned an empty file");
   const mime = response.headers.get("content-type") ?? blob.type ?? "application/octet-stream";
   tracePlaybackLoad("media.load.remote.blob", track, trace, {
@@ -4344,11 +4365,19 @@ async function ensureLoadedAndPlay(
       } else {
         const request = beginPlaybackLoading(set, track, sourceKind);
         activeRequestId = request.id;
+        let lastPct = -1;
         try {
           const media = await fetchRemotePlaybackBlob(
             track,
             playbackTrace,
             request.controller.signal,
+            (loaded, total) => {
+              if (total <= 0) return;
+              const pct = Math.round((loaded / total) * 100);
+              if (pct === lastPct) return;
+              lastPct = pct;
+              setPlaybackLoadingProgress(set, get, request.id, loaded / total);
+            },
           );
           if (!continueCurrent("remote-fetched")) return;
           await mediaEngine.loadBlob(media.blob, track.kind);
@@ -4469,12 +4498,22 @@ async function ensureLoadedAndPlay(
         const request = beginPlaybackLoading(set, track, sourceKind);
         activeRequestId = request.id;
         setStreamDownloading(track.id, true);
+        // Throttle byte progress to integer-percent steps so a chunky download doesn't
+        // fire a store write per chunk (the indicator + Dock cover only need ~100 ticks).
+        let lastPct = -1;
         try {
           resolvedBlob = await downloadStreamForPlayback(
             track,
             resolvedUrl,
             resolved.headers,
             playbackTrace,
+            (loaded, total) => {
+              if (total <= 0) return;
+              const pct = Math.round((loaded / total) * 100);
+              if (pct === lastPct) return;
+              lastPct = pct;
+              setPlaybackLoadingProgress(set, get, request.id, loaded / total);
+            },
           );
         } finally {
           setStreamDownloading(track.id, false);

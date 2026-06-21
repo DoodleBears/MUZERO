@@ -55,6 +55,7 @@ import { startCloudAutoSyncScheduler } from "@/stores/cloud-auto-sync";
 import { useDesktopWindowStore } from "@/stores/desktop-window-store";
 import { startDownloadIndicator } from "@/stores/download-indicator";
 import { useNavStore } from "@/stores/nav-store";
+import { startPlaybackIndicator } from "@/stores/playback-indicator";
 import { usePlayerStore } from "@/stores/player-store";
 import { startPlaylistAutoSyncScheduler } from "@/stores/playlist-auto-sync";
 import { startSyncIndicator } from "@/stores/sync-indicator";
@@ -143,6 +144,12 @@ export default function App() {
   // the old floating badge — all background progress now lives in the notification stack).
   useEffect(() => {
     startDownloadIndicator();
+  }, []);
+
+  // Surface a slow song-switch load/download as a threshold-gated toast (instant local
+  // switches stay quiet; the Dock cover spinner is the immediate feedback).
+  useEffect(() => {
+    startPlaybackIndicator();
   }, []);
 
   // Visible per-drive R2 auto-sync scheduler. It delegates to the same
