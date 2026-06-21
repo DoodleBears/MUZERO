@@ -13,6 +13,7 @@ import type { MediaBlobStorageOptions } from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { prependTrackIds, setTrackCover } from "@/db/repositories";
 import type { StreamSourceMeta } from "@/db/types";
+import { errorToText } from "@/lib/error-details";
 import { buildDownloadPlan } from "./download-plan";
 import { classifyAudioCodec, type MuxContainer } from "./mux/mux-strategy";
 import type { StreamSourceProvider } from "./provider";
@@ -190,7 +191,7 @@ export async function downloadStreamedVideoToLibrary(
       container,
     };
   } catch (err) {
-    return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+    return { kind: "error", message: errorToText(err) };
   }
 }
 
@@ -278,7 +279,7 @@ async function downloadAudioOnly(
       container: "mp4",
     };
   } catch (err) {
-    return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+    return { kind: "error", message: errorToText(err) };
   }
 }
 

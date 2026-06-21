@@ -302,6 +302,24 @@ function getQueueRunner(): DownloadQueueRunner {
     scheduleRetry: (delayMs, cb) => {
       setTimeout(cb, delayMs);
     },
+    // Terminal failure (login/permission, or out of retries) → a copyable error toast. The
+    // detail line is concise; the copy button carries the full message + stack (errorToText
+    // preserved it from the throw site through `lastError`).
+    onPermanentFailure: (job) => {
+      const raw = job.lastError ?? "";
+      if (raw === "login") {
+        notify.error(i18n.t("player.streamNeedsAccess"), { detail: job.title });
+        return;
+      }
+      notify.error(i18n.t("download.failed"), {
+        detail: job.title,
+        debug: {
+          message: raw.split("\n")[0] || job.title,
+          stack: raw,
+          source: `download:${job.source}`,
+        },
+      });
+    },
   });
   return queueRunner;
 }

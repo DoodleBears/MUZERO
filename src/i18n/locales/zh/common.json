@@ -133,7 +133,9 @@
     "statusFailed": "失败",
     "statusPaused": "已暂停",
     "retry": "重试",
-    "remove": "移除"
+    "remove": "移除",
+    "copyError": "复制错误详情",
+    "errorCopied": "已复制错误详情"
   },
   "playlistSync": {
     "title": "订阅的歌单",

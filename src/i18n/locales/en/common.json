@@ -142,7 +142,9 @@
     "statusFailed": "Failed",
     "statusPaused": "Paused",
     "retry": "Retry",
-    "remove": "Remove"
+    "remove": "Remove",
+    "copyError": "Copy error details",
+    "errorCopied": "Error details copied"
   },
   "playlistSync": {
     "title": "Subscribed playlists",

@@ -1,10 +1,11 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import type { TFunction } from "i18next";
-import { Download, Loader2, RotateCcw, X } from "lucide-react";
+import { Copy, Download, Loader2, RotateCcw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { db } from "@/db/muzero-db";
 import type { DownloadJob } from "@/db/types";
 import { cn } from "@/lib/utils";
+import { notify } from "@/stores/notification-store";
 import { clearFinishedDownloads, removeDownload, retryDownload } from "@/streamsrc/download-action";
 
 /** The persistent download queue — live progress, per-job retry/remove, clear-finished. */
@@ -95,6 +96,21 @@ function DownloadRow({ job }: { job: DownloadJob }) {
       </div>
       {job.status === "active" && (
         <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+      )}
+      {job.status === "failed" && job.lastError && (
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard
+              ?.writeText(job.lastError ?? "")
+              .then(() => notify.success(t("download.errorCopied")));
+          }}
+          aria-label={t("download.copyError")}
+          title={t("download.copyError")}
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:text-foreground"
+        >
+          <Copy className="size-4" />
+        </button>
       )}
       {job.status === "failed" && (
         <button

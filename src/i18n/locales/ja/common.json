@@ -133,7 +133,9 @@
     "statusFailed": "失敗",
     "statusPaused": "一時停止",
     "retry": "再試行",
-    "remove": "削除"
+    "remove": "削除",
+    "copyError": "エラー詳細をコピー",
+    "errorCopied": "エラー詳細をコピーしました"
   },
   "playlistSync": {
     "title": "登録したプレイリスト",

@@ -22,6 +22,7 @@ import { BG, type BgConfig } from "bgutils-js";
 import { Innertube, Log, Platform } from "youtubei.js";
 import type { DiagnosticContext } from "@/lib/diagnostics";
 import { sanitizeUrlForTrace } from "@/lib/diagnostics";
+import { errorToText } from "@/lib/error-details";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import { aliasRestrictedHeaders } from "../stream-http";
@@ -679,7 +680,7 @@ export function createYtjsRuntime(): YoutubeRuntime {
           phase: "fail",
           errorKind: "unknown",
         });
-        return { kind: "unavailable", reason: String(err) };
+        return { kind: "unavailable", reason: errorToText(err) };
       }
     },
     async resolveVideo(videoId, opts): Promise<YoutubeVideoPlayback> {
@@ -702,7 +703,10 @@ export function createYtjsRuntime(): YoutubeRuntime {
           return readableStreamToBlob(stream, mime);
         });
       } catch (err) {
-        return { kind: "unavailable", reason: `youtube video download failed: ${String(err)}` };
+        return {
+          kind: "unavailable",
+          reason: `youtube video download failed: ${errorToText(err)}`,
+        };
       }
       if (blob.size === 0) return { kind: "unavailable", reason: "empty youtube video download" };
       log.info("youtube", "resolved video", {

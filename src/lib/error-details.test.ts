@@ -1,5 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { extractErrorDebugInfo, formatErrorClipboardText } from "@/lib/error-details";
+import { errorToText, extractErrorDebugInfo, formatErrorClipboardText } from "@/lib/error-details";
+
+describe("errorToText", () => {
+  it("keeps the stack (which begins with name: message)", () => {
+    const err = new Error("boom");
+    err.stack = "Error: boom\n    at foo (a.ts:1:1)";
+    expect(errorToText(err)).toBe("Error: boom\n    at foo (a.ts:1:1)");
+  });
+
+  it("appends HTTP status + code when present (youtubei non-2xx)", () => {
+    const err = Object.assign(new Error("The server responded with a non 2xx status code"), {
+      stack: "Error: non 2xx",
+      status: 403,
+      code: "FETCH_FAILED",
+    });
+    const text = errorToText(err);
+    expect(text).toContain("Error: non 2xx");
+    expect(text).toContain("status: 403");
+    expect(text).toContain("code: FETCH_FAILED");
+  });
+
+  it("appends a formatted cause", () => {
+    const err = Object.assign(new Error("outer"), {
+      stack: "Error: outer",
+      cause: new Error("inner reason"),
+    });
+    expect(errorToText(err)).toContain("cause: Error: inner reason");
+  });
+
+  it("falls back to a string for non-Error throws", () => {
+    expect(errorToText("plain string")).toBe("plain string");
+    expect(errorToText({ a: 1 })).toBe('{"a":1}');
+  });
+});
 
 describe("extractErrorDebugInfo", () => {
   it("pulls name / message / stack from an Error", () => {

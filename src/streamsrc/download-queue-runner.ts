@@ -7,6 +7,7 @@
  */
 
 import type { DownloadJob } from "@/db/types";
+import { errorToText } from "@/lib/error-details";
 import {
   canRetry,
   createDownloadJob,
@@ -40,6 +41,8 @@ export interface DownloadQueueDeps {
   /** Schedule a retry after `delayMs` (injectable so tests control time). */
   scheduleRetry: (delayMs: number, cb: () => void) => void;
   onChange?: () => void;
+  /** A job has failed terminally (no retries left / non-retriable) — surface it to the user. */
+  onPermanentFailure?: (job: DownloadJob) => void;
 }
 
 export interface DownloadQueueRunner {
@@ -111,10 +114,12 @@ export function createDownloadQueueRunner(deps: DownloadQueueDeps): DownloadQueu
       } else if (result.retriable) {
         await failAndMaybeRetry(job, result.error);
       } else {
+        // Terminal (login / permission) — no retry; surface it.
         await deps.updateJob(job.id, { status: "failed", lastError: result.error });
+        deps.onPermanentFailure?.({ ...job, status: "failed", lastError: result.error });
       }
     } catch (err) {
-      await failAndMaybeRetry(job, err instanceof Error ? err.message : String(err));
+      await failAndMaybeRetry(job, errorToText(err));
     } finally {
       running.delete(job.id);
       deps.onChange?.();
@@ -129,6 +134,8 @@ export function createDownloadQueueRunner(deps: DownloadQueueDeps): DownloadQueu
       deps.scheduleRetry(retryBackoffMs(attempts), () => {
         void deps.updateJob(job.id, { status: "pending" }).then(() => tick());
       });
+    } else {
+      deps.onPermanentFailure?.({ ...job, attempts, status: "failed", lastError: error });
     }
   }
 

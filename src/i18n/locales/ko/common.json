@@ -133,7 +133,9 @@
     "statusFailed": "실패",
     "statusPaused": "일시중지",
     "retry": "재시도",
-    "remove": "제거"
+    "remove": "제거",
+    "copyError": "오류 세부정보 복사",
+    "errorCopied": "오류 세부정보를 복사함"
   },
   "playlistSync": {
     "title": "구독한 플레이리스트",

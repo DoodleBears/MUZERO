@@ -160,6 +160,25 @@ export function extractErrorDebugInfo(
 }
 
 /**
+ * Flatten a thrown value into a copy-friendly multi-line string that PRESERVES the stack +
+ * any HTTP status / code — for embedding in an error `message`/`reason` that crosses layers
+ * which only carry strings (the download chain → queue `lastError` → the copy button). V8's
+ * `err.stack` already begins with `name: message`, so it stands alone as the summary + trace.
+ */
+export function errorToText(err: unknown): string {
+  if (err instanceof Error) {
+    const extra = err as Error & { status?: unknown; code?: unknown };
+    const parts = [err.stack ?? `${err.name}: ${err.message}`];
+    if (extra.status != null) parts.push(`status: ${String(extra.status)}`);
+    if (extra.code != null) parts.push(`code: ${String(extra.code)}`);
+    const cause = (err as Error & { cause?: unknown }).cause;
+    if (cause != null && cause !== err) parts.push(`cause: ${formatCause(cause) ?? String(cause)}`);
+    return parts.join("\n");
+  }
+  return stringifyUnknown(err) ?? String(err);
+}
+
+/**
  * Capture a stack trace at the current call site, used as a fallback when the
  * thrown value carried none of its own (a bare string throw, a `MediaError` /
  * `DOMException`, or a `notify.error` called with just a message). Trims the
