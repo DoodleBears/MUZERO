@@ -102,6 +102,13 @@ export interface TrackMediaMetadata {
  */
 export interface Track {
   id: string;
+  /**
+   * The track's ORIGIN / home set — where it was created (provenance + delete-cascade
+   * + sourcePath dedup). A track can belong to MANY sets (each `DjSession.trackIds`),
+   * so this is NOT "the set it's in". **Playback context is never resolved from this**
+   * field — it comes from the surface the user clicked (see `playTrackInContext` /
+   * `QueueSource`). Codename-stable id (rule 4). See the playback-queue-model PRD.
+   */
   sessionId: string;
   title: string;
   kind: TrackKind;
@@ -332,6 +339,28 @@ export interface PlayQueueEntry {
   requested?: boolean;
 }
 
+/**
+ * Serializable snapshot of the play context's source — persisted so a relaunch can
+ * restore the "playing from" label + jump-to-source for NON-set contexts (set context
+ * uses {@link PlayQueue.contextSetId} + the session name). Structurally mirrors the
+ * store's `QueueSource`; kept here (not imported from the store) to avoid a cycle.
+ */
+export type PersistedQueueSource =
+  | { kind: "set"; setId: string }
+  | { kind: "system-playlist"; id: string }
+  | { kind: "entity"; entityKind: "artist" | "album"; entityKey: string; label: string }
+  | {
+      kind: "online-playlist";
+      playlist: {
+        id: string;
+        name: string;
+        coverUrl?: string;
+        trackCount: number;
+        source: StreamSourceId;
+      };
+    }
+  | { kind: "library" };
+
 export interface PlayQueue {
   id: "main"; // singleton
   entries: PlayQueueEntry[];
@@ -339,6 +368,18 @@ export interface PlayQueue {
   repeat: "off" | "one" | "all";
   /** Which 歌单 we're "playing from" — drives autoExtend continuation + UI. */
   contextSetId?: string;
+  /**
+   * Persisted "playing from" source (incl. non-set contexts) — restores the label +
+   * jump-to-source on relaunch. Additive, non-indexed (no Dexie bump). See the
+   * playback-queue-model PRD (Q3).
+   */
+  queueSource?: PersistedQueueSource;
+  /**
+   * The active context's NATURAL (pre-shuffle) order, persisted so "turn shuffle off"
+   * restores the curated order even after a relaunch (the materialized shuffle lives in
+   * `entries`). Additive, non-indexed. See the playback-queue-model PRD (Q3/Q8).
+   */
+  naturalOrderIds?: string[];
   updatedAt: number;
 }
 
@@ -1004,6 +1045,13 @@ export interface AppSettings {
   /** Persisted global transport toggles. */
   playerRepeatMode?: "off" | "one" | "all";
   playerShuffle?: boolean;
+  /**
+   * Re-roll the shuffle every time the shuffle switch is toggled on. Default false:
+   * a playlist's shuffle is stable — generated once when you start shuffling it and
+   * reused when toggling off/on (only switching playlist re-rolls), mirroring NetEase.
+   * On: toggling shuffle on always produces a fresh order. See playback-queue-model PRD (Q8).
+   */
+  shuffleReshuffleOnToggle?: boolean;
   /** Persisted playback volume (0–1). */
   playerVolume?: number;
   /** Persisted resume pointer for the AI DJ chat runtime. */

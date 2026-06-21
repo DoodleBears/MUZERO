@@ -59,7 +59,8 @@
     "title": "队列",
     "ready": "已就绪 {{ready}}/{{total}}",
     "addFiles": "添加文件",
-    "empty": "空歌单 —— 添加文件，或让 DJ 来填充。"
+    "empty": "空歌单 —— 添加文件，或让 DJ 来填充。",
+    "nextInQueue_other": "接下来播放 · {{count}}"
   },
   "folderImport": {
     "cta": "导入文件夹",
@@ -850,6 +851,8 @@
     "repeatOne": "单曲循环",
     "repeatAll": "列表循环",
     "shuffleHint": "新队列默认按随机顺序播放。",
+    "shuffleReshuffleLabel": "每次开启随机都重新洗牌",
+    "shuffleReshuffleHint": "开启：每次打开随机都生成新的随机顺序。关闭（默认）：同一歌单的随机顺序保持不变，直到切换歌单。",
     "storageTitle": "存储与缓存",
     "storageUsageTitle": "设备存储",
     "storageUsageRatio": "已使用 {{usage}} / {{quota}} · {{percent}}%",

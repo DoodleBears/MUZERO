@@ -11,6 +11,7 @@ import {
   findStreamedTrack,
   hitToStreamedInput,
   isStreamedTrackCached,
+  materializeHitsToTracks,
   summarizeStreamedCache,
 } from "./streamed-track-repo";
 
@@ -299,6 +300,29 @@ describe("offline cache (Phase 5)", () => {
       bytes: 1000,
       sources: [{ sourceId: "bili", count: 1, bytes: 1000 }],
     });
+  });
+});
+
+describe("materializeHitsToTracks", () => {
+  const a: StreamSearchHit = { source: "netease", externalId: "1", title: "A" };
+  const b: StreamSearchHit = { source: "netease", externalId: "2", title: "B" };
+
+  it("returns rows in hit order without touching set membership", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const tracks = await materializeHitsToTracks(set.id, [b, a], db);
+    expect(tracks.map((t) => t.title)).toEqual(["B", "A"]); // hit order, not sorted
+    expect(tracks.every((t) => t.origin === "streamed")).toBe(true);
+    // Queue items, not collection members: the set's trackIds stays empty.
+    expect((await db.sessions.get(set.id))?.trackIds ?? []).toEqual([]);
+    expect(await db.tracks.count()).toBe(2);
+  });
+
+  it("dedupes on replay: same hits return the same rows (idempotent)", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const first = await materializeHitsToTracks(set.id, [a, b], db);
+    const second = await materializeHitsToTracks(set.id, [a, b], db);
+    expect(second.map((t) => t.id)).toEqual(first.map((t) => t.id));
+    expect(await db.tracks.count()).toBe(2);
   });
 });
 

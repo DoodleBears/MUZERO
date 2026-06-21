@@ -148,6 +148,25 @@ export async function addHitsToSet(
   return { added: addedIds.size, skipped: hits.length - addedIds.size };
 }
 
+/**
+ * Materialize a batch of hits into streamed `Track` rows (deduped by source +
+ * externalId within `sessionId`) and return them IN HIT ORDER. Unlike
+ * {@link addHitsToSet} it does NOT touch the set's membership (`trackIds`): the rows
+ * are queue items for an online-playlist play context, with `sessionId` only their
+ * provenance / offline-cache home. Stream URLs stay unresolved (resolved per play).
+ */
+export async function materializeHitsToTracks(
+  sessionId: string,
+  hits: StreamSearchHit[],
+  db: MuzeroDB = defaultDb,
+): Promise<Track[]> {
+  const tracks: Track[] = [];
+  for (const hit of hits) {
+    tracks.push(await createStreamedTrack(hitToStreamedInput(sessionId, hit), db));
+  }
+  return tracks;
+}
+
 // ---------------------------------------------------- offline cache (Phase 5) ----
 // Streamed tracks resolve a short-lived URL per play. Optionally we download those
 // bytes into `mediaBlobs` (role "media") and set `Track.blobId` so the player's

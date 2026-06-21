@@ -100,11 +100,10 @@ import {
   manualStepIndex,
   prevIndex,
   type RepeatMode,
-  shuffleManualNext,
-  shufflePrev,
   upcomingManualIndices,
   windowManualIndices,
 } from "@/player/queue";
+import { orderedSetTrackIds } from "@/player/set-order";
 import { describeTrackSwitch } from "@/player/switch-trace";
 import {
   beginFolderImport,
@@ -139,6 +138,7 @@ import {
   cacheStreamedTrackBlob,
   createStreamedTrack,
   hitToStreamedInput,
+  materializeHitsToTracks,
 } from "@/streamsrc/streamed-track-repo";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getOrCreateLocalDevice } from "@/sync/device-repo";
@@ -189,7 +189,23 @@ const DEFAULT_PLAYER_VOLUME = 0.9;
 export type QueueSource =
   | { kind: "set"; setId: string }
   | { kind: "system-playlist"; id: SystemPlaylistId }
-  | { kind: "online-playlist"; playlist: StreamPlaylist };
+  | { kind: "online-playlist"; playlist: StreamPlaylist }
+  // A derived library entity (one artist or one album); `entityKey` is the projection
+  // key from library-index.ts, `label` the display name. See playback-queue-model PRD.
+  | { kind: "entity"; entityKind: "artist" | "album"; entityKey: string; label: string }
+  // The whole library — the gallery 全部歌曲 (tracks) tab.
+  | { kind: "library" };
+
+/**
+ * Where a play action gets its queue: the source label (drives autoExtend + the
+ * "playing from" UI) plus the EXACT ordered tracks the user is looking at. Playback
+ * context comes from this — the surface the user clicked — never from `Track.sessionId`
+ * (a track can belong to many sets). See the playback-queue-model PRD (Part A).
+ */
+export interface PlaybackContext {
+  source: QueueSource;
+  tracks: Track[];
+}
 
 interface PlayerState {
   activeSessionId: string | null;
@@ -219,7 +235,13 @@ interface PlayerState {
   djError: string | null;
 
   init: () => void;
-  setActiveSession: (sessionId: string) => Promise<void>;
+  /**
+   * Load a 歌单 into the queue. By default the queue order follows the set's rank
+   * arbiter (`orderedSetTrackIds`), matching the set-detail display. Pass
+   * `opts.tracks` to load an EXACT ordered list (e.g. the filtered/sorted rows the
+   * user is viewing) — used by {@link PlayerState.playTrackInContext}.
+   */
+  setActiveSession: (sessionId: string, opts?: { tracks?: Track[] }) => Promise<void>;
   playSystemPlaylist: (playlistId: SystemPlaylistId, tracks: Track[]) => Promise<void>;
   rebuildEngine: () => Promise<void>;
   play: () => Promise<void>;
@@ -229,8 +251,21 @@ interface PlayerState {
   /** Load + show a track WITHOUT playing it (boot resume) — no gesture-blocked
    * play() / AudioContext. Playback waits for a real user gesture. */
   cueIndex: (index: number) => Promise<void>;
-  /** Play a specific track, switching sets if needed (search/library result). */
+  /**
+   * Play a single track in its HOME set (`track.sessionId`). Only for CONTEXTLESS
+   * single-track plays where there is no surrounding list — the global search box and
+   * the AI-DJ chat "play this" tool. Any view that renders a list (set/entity/system/
+   * library/online detail) MUST use {@link PlayerState.playTrackInContext} instead, so
+   * the queue comes from the viewed list, not the track's home set (Q7; see PRD Part A).
+   */
   playTrack: (track: Track) => Promise<void>;
+  /**
+   * Play a track in an EXPLICIT context (the歌单/列表 the user clicked in) — the
+   * queue loads from `ctx.tracks` in the order shown and the context is `ctx.source`,
+   * NOT the track's home set. Fixes "playing a song shared across sets switches to
+   * the wrong set". See the playback-queue-model PRD (Part A).
+   */
+  playTrackInContext: (track: Track, ctx: PlaybackContext) => Promise<void>;
   /** Insert a specific track right after the current play position. */
   playNextTrack: (track: Track) => Promise<void>;
   /**
@@ -248,9 +283,18 @@ interface PlayerState {
   playRequestNext: (track: Track) => Promise<void>;
   /** Play a song from an online source (global search): import it into the online set, then play. */
   playStreamedHit: (hit: StreamSearchHit) => Promise<void>;
-  /** Play a batch of online hits in order (Discover "play all"): queue the tail into the
-   *  online set, then play the head via the same single-play path. */
-  playStreamedHits: (hits: StreamSearchHit[]) => Promise<void>;
+  /**
+   * Play an online playlist (发现 tab) as its OWN context: materialize the whole
+   * playlist's track metadata into the queue (in hit order, deduped) and play from
+   * `startIndex`, with `queueSource = { online-playlist }`. Stream URLs resolve
+   * lazily per play. The shared online set is only the rows' cache/provenance home —
+   * it is NOT the play context. See the playback-queue-model PRD (Part B / §4.6).
+   */
+  playOnlinePlaylist: (
+    playlist: StreamPlaylist,
+    hits: StreamSearchHit[],
+    startIndex: number,
+  ) => Promise<void>;
   /**
    * Import a source playlist into a NEW set of streamed tracks (tagged with the
    * playlist ref for later incremental re-sync); returns how many were added.
@@ -316,7 +360,8 @@ interface PlayerState {
   seek: (sec: number) => void;
   setVolume: (v: number) => void;
   setRepeat: (mode: RepeatMode) => void;
-  setShuffle: (on: boolean) => void;
+  /** Resolves once the queue has been materialized (shuffle on) / restored (off). */
+  setShuffle: (on: boolean) => Promise<void>;
   setDisplayMode: (mode: SetDisplayMode) => Promise<void>;
   /** Import uploaded audio/video files into the active set. */
   addUploads: (files: FileList | File[]) => Promise<void>;
@@ -406,9 +451,16 @@ let lyricsTimer: ReturnType<typeof setTimeout> | null = null;
 // dismiss or replace it in place (never stacks). Module scope, not store state.
 let lyricsToastId: string | null = null;
 let playbackSettingsLoaded = false;
-// The active shuffled play order (queue indices). Non-reactive: next/prev read it,
-// setShuffle rebuilds it, and it self-heals when stale vs the queue length.
-let shuffleOrder: number[] = [];
+// The active context's NATURAL (pre-shuffle) order, captured on every queue load.
+// Non-reactive (module scope, rule 6). Lets "turn shuffle off" restore the order the
+// user curated/saw, since shuffle is materialized into the queue itself (no parallel
+// permutation). Persistence of this across reloads is Phase 4b (Q3/Q8).
+let naturalOrderIds: string[] = [];
+// The stable materialized shuffle for the current context + which context it belongs to
+// (Q8): toggling the shuffle switch off→on within the SAME playlist reuses this order;
+// only switching playlist (different key) re-rolls. Module scope (rule 6); within-session.
+let shuffleOrderIds: string[] = [];
+let shuffleContextKey = "";
 // True while a cover-pager drag window is open. Non-reactive (module scope, rule 6):
 // the gesture owns the visual window, so DJ auto-extend is held off until it settles
 // (no queue mutation under the user's finger). Flipped by `setCoverGestureActive`.
@@ -506,6 +558,152 @@ export function queueEntriesKey(ids: string[]): string {
 
 function currentTrack(state: PlayerState): Track | undefined {
   return state.currentIndex >= 0 ? state.queue[state.currentIndex] : undefined;
+}
+
+/** Whether the queue already holds exactly these ids in this order. */
+function sameTrackIds(queue: Track[], ids: string[]): boolean {
+  if (queue.length !== ids.length) return false;
+  for (let i = 0; i < ids.length; i += 1) {
+    if (queue[i]?.id !== ids[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Load an explicit ordered track list into the queue under a non-set context
+ * (system playlist / derived entity / library / online playlist). No `contextSetId`
+ * → DJ auto-extend stays off. The single loader behind `playSystemPlaylist` and the
+ * non-set branch of `playTrackInContext` (set context goes through `setActiveSession`).
+ */
+async function activateExplicitQueue(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  tracks: Track[],
+  source: QueueSource,
+): Promise<void> {
+  get().init();
+  await get().rebuildEngine();
+  watchSetForAppend(null, [], true);
+
+  const trackIds = tracks.map((t) => t.id);
+  naturalOrderIds = trackIds; // remember natural order so "turn shuffle off" can restore it
+  loadedTrackId = null;
+  cancelPlaybackLoading(set);
+  await playQueueSet(trackIds, {
+    currentIndex: -1,
+    // Persist source + natural order so a relaunch restores the label + can un-shuffle
+    // this non-set context (Q3). QueueSource is structurally a PersistedQueueSource.
+    queueSource: source,
+    naturalOrderIds: trackIds,
+  });
+  consumedTrackIds = new Set(trackIds);
+  lastQueueSig = queueSig(tracks);
+  set({
+    activeSessionId: null,
+    queueSource: source,
+    queue: tracks,
+    currentIndex: -1,
+    wantPlay: false,
+    playbackLoading: null,
+    positionSec: 0,
+    durationSec: 0,
+    displayMode: "video",
+    djEnabled: false,
+  });
+}
+
+/** A fresh shuffled permutation of `ids`, pinning `anchorId` first when given (the
+ *  playing track stays put). Fisher–Yates via {@link buildShuffleOrder}. */
+function shuffledIdsPinning(ids: string[], anchorId: string | undefined): string[] {
+  if (ids.length <= 1) return [...ids];
+  const shuffled = buildShuffleOrder(ids.length, -1).map((i) => ids[i]);
+  if (!anchorId) return shuffled;
+  const rest = shuffled.filter((id) => id !== anchorId);
+  return rest.length === shuffled.length ? shuffled : [anchorId, ...rest];
+}
+
+/** Reorder the live queue to `ids` (a permutation of the current queue), keeping
+ *  `anchorId` current, and persist in one playQueueSet write. */
+async function applyQueueOrder(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  ids: string[],
+  anchorId: string | undefined,
+): Promise<void> {
+  const byId = new Map(get().queue.map((t) => [t.id, t] as const));
+  const nextQueue = ids.map((id) => byId.get(id)).filter((t): t is Track => Boolean(t));
+  if (nextQueue.length === 0) return;
+  const currentIndex = anchorId ? nextQueue.findIndex((t) => t.id === anchorId) : -1;
+  const contextSetId = get().activeSessionId ?? undefined;
+  await playQueueSet(
+    nextQueue.map((t) => t.id),
+    { contextSetId, currentIndex },
+  );
+  consumedTrackIds = new Set(nextQueue.map((t) => t.id));
+  lastQueueSig = queueSig(nextQueue);
+  set({ queue: nextQueue, currentIndex });
+}
+
+/** Stable key for the active context, so a shuffle snapshot is reused only within the
+ *  same playlist and re-rolled when switching (Q8). */
+function contextKey(source: QueueSource | undefined): string {
+  if (!source) return "";
+  switch (source.kind) {
+    case "set":
+      return `set:${source.setId}`;
+    case "system-playlist":
+      return `sys:${source.id}`;
+    case "entity":
+      return `ent:${source.entityKind}:${source.entityKey}`;
+    case "online-playlist":
+      return `online:${source.playlist.source}:${source.playlist.id}`;
+    default:
+      return source.kind;
+  }
+}
+
+/** Materialize a FRESH shuffle into the live queue (pin `anchorId` first) and remember it
+ *  as this context's stable snapshot for later reuse (Q8). */
+function materializeShuffle(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  anchorId: string | undefined,
+): Promise<void> {
+  const ids = shuffledIdsPinning(
+    get().queue.map((t) => t.id),
+    anchorId,
+  );
+  shuffleOrderIds = ids;
+  shuffleContextKey = contextKey(get().queueSource);
+  return applyQueueOrder(set, get, ids, anchorId);
+}
+
+/** Reuse this context's saved shuffle order (Q8 stable shuffle) — same order as before,
+ *  with `anchorId` becoming the cursor wherever it sits (NOT re-pinned, so the order is
+ *  unchanged). Falls back to a fresh materialize if the snapshot no longer fits the queue. */
+function reuseShuffle(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  anchorId: string | undefined,
+): Promise<void> {
+  const present = new Set(get().queue.map((t) => t.id));
+  const target = shuffleOrderIds.filter((id) => present.has(id));
+  for (const id of present) if (!target.includes(id)) target.push(id);
+  if (target.length !== present.size) return materializeShuffle(set, get, anchorId);
+  return applyQueueOrder(set, get, target, anchorId);
+}
+
+/** Restore the context's natural order into the live queue (anchor stays current). */
+function restoreNaturalOrder(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  anchorId: string | undefined,
+): Promise<void> {
+  const present = new Set(get().queue.map((t) => t.id));
+  const target = naturalOrderIds.filter((id) => present.has(id));
+  // Keep any queue ids missing from the natural list (e.g. DJ-appended) at the end.
+  for (const id of present) if (!target.includes(id)) target.push(id);
+  return applyQueueOrder(set, get, target.length ? target : [...present], anchorId);
 }
 
 function playableDurationSec(value: number | undefined): number {
@@ -856,7 +1054,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       previoustrack: () => void get().prev(),
       nexttrack: () => void get().next(),
     });
-    void hydratePlaybackSettings(set, get).catch((err: unknown) =>
+    void hydratePlaybackSettings(set).catch((err: unknown) =>
       log.warn("player", "failed to hydrate playback settings", err),
     );
     void get()
@@ -923,11 +1121,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const nextTrack = currentIndex >= 0 ? queue[currentIndex] : undefined;
       const nextTrackId = nextTrack?.id;
       const metadataDuration = playableDurationSec(nextTrack?.durationSec);
+      // Boot restore (Q3): seed the module natural-order snapshot from persistence the
+      // first time, so "turn shuffle off" can un-shuffle after a relaunch. Only when empty
+      // — a live context load owns it thereafter (never overwrite the in-memory order).
+      if (!naturalOrderIds.length && pq.naturalOrderIds?.length) {
+        naturalOrderIds = pq.naturalOrderIds;
+      }
       const queueSource: QueueSource | undefined = contextSetId
         ? state.queueSource?.kind === "set" && state.queueSource.setId === contextSetId
           ? state.queueSource
           : { kind: "set", setId: contextSetId }
-        : state.queueSource;
+        : // Non-set context: keep the in-memory source, or restore the persisted one on
+          // boot so the "playing from" label + jump-to-source survive a relaunch (Q3).
+          (state.queueSource ?? (pq.queueSource as QueueSource | undefined));
       const patch: Partial<PlayerState> = {
         activeSessionId: contextSetId,
         currentIndex,
@@ -1059,7 +1265,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     djEngine = createDjEngine({ db, brain, provider });
   },
 
-  async setActiveSession(sessionId) {
+  async setActiveSession(sessionId, opts) {
     const totalStartedAt = performance.now();
     log.debug("player", "setActiveSession start", { sessionId });
     get().init();
@@ -1075,7 +1281,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     notePerfWork("session.activate.getSession", performance.now() - sessionStartedAt, {
       sessionId,
     });
-    const trackIds = session?.trackIds ?? [];
+    // Queue order = exactly what the user sees. `opts.tracks` carries the displayed
+    // (possibly filtered/sorted) rows; otherwise fall back to the set's rank arbiter
+    // (NOT raw `trackIds`, which ignores drag-reorder — see set-order.ts).
+    const orderedTracks = opts?.tracks;
+    const trackIds = orderedTracks
+      ? orderedTracks.map((t) => t.id)
+      : orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks);
+    naturalOrderIds = trackIds; // remember natural order so "turn shuffle off" can restore it
     loadedTrackId = null;
     cancelPlaybackLoading(set);
 
@@ -1083,14 +1296,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // queue has consumed (high-water). Also seed `queue` synchronously so callers
     // that read it right after (e.g. playTrack) don't race the liveQuery.
     const playQueueSetStartedAt = performance.now();
-    await playQueueSet(trackIds, { contextSetId: sessionId, currentIndex: -1 });
+    await playQueueSet(trackIds, {
+      contextSetId: sessionId,
+      currentIndex: -1,
+      // Persist source + natural order in the SAME write (Q3) — un-shuffle + label survive
+      // a relaunch. A later reorder (materialize shuffle) preserves them via spread.
+      queueSource: { kind: "set", setId: sessionId },
+      naturalOrderIds: trackIds,
+    });
     notePerfWork("session.activate.playQueueSet", performance.now() - playQueueSetStartedAt, {
       sessionId,
       tracks: trackIds.length,
     });
     consumedTrackIds = new Set(trackIds);
     const fetchTracksStartedAt = performance.now();
-    const initialQueue = await getTracksByIds(trackIds);
+    const initialQueue = orderedTracks ?? (await getTracksByIds(trackIds));
     notePerfWork("session.activate.fetchTracks", performance.now() - fetchTracksStartedAt, {
       sessionId,
       tracks: trackIds.length,
@@ -1134,34 +1354,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       playlistId,
       trackCount: tracks.length,
     });
-    get().init();
-    await get().rebuildEngine();
-    watchSetForAppend(null, [], true);
-
-    const trackIds = tracks.map((track) => track.id);
-    loadedTrackId = null;
-    cancelPlaybackLoading(set);
-    await playQueueSet(trackIds, { currentIndex: -1 });
-    consumedTrackIds = new Set(trackIds);
-    lastQueueSig = queueSig(tracks);
-    set({
-      activeSessionId: null,
-      queueSource: { kind: "system-playlist", id: playlistId },
-      queue: tracks,
-      currentIndex: -1,
-      wantPlay: false,
-      playbackLoading: null,
-      positionSec: 0,
-      durationSec: 0,
-      displayMode: "video",
-      djEnabled: false,
-    });
+    await activateExplicitQueue(set, get, tracks, { kind: "system-playlist", id: playlistId });
   },
 
   async play() {
     set({ wantPlay: true });
-    const { currentIndex, queue } = get();
+    const { currentIndex, queue, shuffle } = get();
     if (currentIndex < 0 && queue.length > 0) {
+      // Fresh start (e.g. "play all"): in shuffle, randomize first so playback doesn't
+      // begin from the natural first track.
+      if (shuffle) await materializeShuffle(set, get, undefined);
       await get().playIndex(0);
       return;
     }
@@ -1250,9 +1452,69 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (idx >= 0) await get().playIndex(idx);
   },
 
+  async playTrackInContext(trackToPlay, ctx) {
+    const ids = ctx.tracks.map((t) => t.id);
+    const naturalIdx = ctx.tracks.findIndex((t) => t.id === trackToPlay.id);
+    const shuffle = get().shuffle;
+    log.debug("player", "playTrackInContext", {
+      trackId: trackToPlay.id,
+      sourceKind: ctx.source.kind,
+      index: naturalIdx,
+      count: ids.length,
+      shuffle,
+    });
+    // Defensive: the track must be in the provided context (the UI always passes the
+    // list it rendered, so this only guards against a programming error).
+    if (naturalIdx < 0) return;
+
+    if (ctx.source.kind === "set") {
+      const { setId } = ctx.source;
+      const st = get();
+      const sameContext =
+        st.activeSessionId === setId &&
+        st.queueSource?.kind === "set" &&
+        st.queueSource.setId === setId;
+      if (sameContext) {
+        if (shuffle) {
+          // Already in this (shuffled) set — play the clicked track where it sits;
+          // don't reshuffle on an in-set click.
+          const pos = st.queue.findIndex((t) => t.id === trackToPlay.id);
+          if (pos >= 0) {
+            await get().playIndex(pos);
+            return;
+          }
+        } else if (sameTrackIds(st.queue, ids)) {
+          // Same displayed order already loaded → cheap jump, no re-seed.
+          await get().playIndex(naturalIdx);
+          return;
+        }
+      }
+      // Load the VIEWED set in the exact displayed order. Context is the clicked
+      // surface (setId), never trackToPlay.sessionId (its home set).
+      await get().setActiveSession(setId, { tracks: ctx.tracks });
+    } else {
+      // Non-set context (system-playlist / entity / library / online-playlist): load
+      // the explicit ordered tracks. No contextSetId → DJ auto-extend stays off.
+      await activateExplicitQueue(set, get, ctx.tracks, ctx.source);
+    }
+
+    // Fresh context load: in shuffle, materialize a shuffle pinning the clicked track
+    // first (so it plays now and the rest is randomized), then play index 0.
+    if (shuffle) {
+      await materializeShuffle(set, get, trackToPlay.id);
+      await get().playIndex(0);
+    } else {
+      await get().playIndex(naturalIdx);
+    }
+  },
+
   async playNextTrack(track) {
     log.debug("player", "playNextTrack", { trackId: track.id });
-    await playQueuePlayNext([track.id]);
+    // Manual "play next" joins the Next-in-Queue FIFO block (marked `requested`),
+    // anchored to the store cursor (what's actually playing) so it lands right after
+    // the current track even while the persisted cursor lags — same as a live request.
+    // The queue panel surfaces this block as "Next in queue" (Q10 / Spotify parity).
+    await playQueueRequestNextAt(get().currentIndex, [track.id]);
   },
 
   async playRequestNow(track) {
@@ -1328,17 +1590,29 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  async playStreamedHits(hits) {
+  async playOnlinePlaylist(playlist, hits, startIndex) {
     if (hits.length === 0) return;
-    // Queue the tail into the online set first (in order, deduped), then play the head
-    // via the proven single-play path — which handles set creation/activation + the
-    // active-set watcher race exactly once, so order ends up [hit0, hit1, …, hitN].
-    if (hits.length > 1) {
-      const setId = await ensureOnlineSet();
-      await addHitsToSet(setId, hits.slice(1));
-      void cacheStreamPlaylistTrackCovers({ sessionId: setId, hits: hits.slice(1) });
-    }
-    await get().playStreamedHit(hits[0]);
+    log.debug("player", "playOnlinePlaylist", {
+      source: playlist.source,
+      playlistId: playlist.id,
+      count: hits.length,
+      startIndex,
+    });
+    // Materialize the WHOLE playlist's metadata into streamed Track rows (deduped,
+    // in hit order) — the queue is the playlist itself, not the shared online pool.
+    // The shared online set is only these rows' provenance / offline-cache home.
+    const setId = await ensureOnlineSet();
+    const tracks = await materializeHitsToTracks(setId, hits);
+    // Cache covers in the background so the queue renders art offline (best-effort).
+    void cacheStreamPlaylistTrackCovers({ sessionId: setId, hits });
+    const idx = clampIndex(tracks.length, startIndex);
+    if (idx < 0) return;
+    // Stream URLs stay lazy — playTrackInContext → playIndex → ensureLoadedAndPlay
+    // resolves the clicked track's stream on demand (others as playback advances).
+    await get().playTrackInContext(tracks[idx], {
+      source: { kind: "online-playlist", playlist },
+      tracks,
+    });
   },
 
   async importStreamedPlaylist(sourceId, playlistId, name, opts) {
@@ -1401,15 +1675,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async next() {
-    const { queue, currentIndex, repeat, shuffle } = get();
-    let ni: number | null;
-    if (shuffle) {
-      const r = shuffleManualNext(shuffleOrder, queue.length, currentIndex, repeat);
-      shuffleOrder = r.order;
-      ni = r.index;
-    } else {
-      ni = manualNextIndex(queue.length, currentIndex, repeat);
-    }
+    // Shuffle is materialized into the queue order itself (see materializeShuffle),
+    // so next is ALWAYS a linear step over the visible queue — the visible "next" IS
+    // the next track, and a 点歌/insert right after the cursor really plays next.
+    const { queue, currentIndex, repeat } = get();
+    const ni = manualNextIndex(queue.length, currentIndex, repeat);
     if (ni === null) {
       get().pause();
       set({ isPlaying: false });
@@ -1420,15 +1690,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async skipPrev() {
-    const { queue, currentIndex, repeat, shuffle } = get();
-    let pi: number | null;
-    if (shuffle) {
-      const r = shufflePrev(shuffleOrder, queue.length, currentIndex, repeat);
-      shuffleOrder = r.order;
-      pi = r.index;
-    } else {
-      pi = prevIndex(queue.length, currentIndex, repeat);
-    }
+    const { queue, currentIndex, repeat } = get();
+    const pi = prevIndex(queue.length, currentIndex, repeat);
     if (pi === null || pi === currentIndex) return;
     await get().playIndex(pi);
   },
@@ -1443,50 +1706,32 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   peekTrack(direction) {
-    const { queue, currentIndex, repeat, shuffle } = get();
+    // Linear over the visible queue (shuffle is baked into queue order).
+    const { queue, currentIndex, repeat } = get();
     if (queue.length === 0 || currentIndex < 0) return undefined;
-    let index: number | null;
-    if (direction === "next") {
-      if (shuffle) {
-        if (shuffleOrder.length !== queue.length) return undefined;
-        const r = shuffleManualNext(shuffleOrder, queue.length, currentIndex, repeat);
-        index = r.index;
-      } else {
-        index = manualNextIndex(queue.length, currentIndex, repeat);
-      }
-    } else if (shuffle) {
-      if (shuffleOrder.length !== queue.length) return undefined;
-      const r = shufflePrev(shuffleOrder, queue.length, currentIndex, repeat);
-      index = r.index;
-    } else {
-      index = prevIndex(queue.length, currentIndex, repeat);
-    }
+    const index =
+      direction === "next"
+        ? manualNextIndex(queue.length, currentIndex, repeat)
+        : prevIndex(queue.length, currentIndex, repeat);
     if (index === null || index === currentIndex) return undefined;
     return queue[index];
   },
 
   peekUpcomingTracks(count) {
-    const { queue, currentIndex, repeat, shuffle } = get();
-    return upcomingManualIndices({
-      count,
-      currentIndex,
-      length: queue.length,
-      repeat,
-      shuffleOrder: shuffle ? shuffleOrder : undefined,
-    })
+    const { queue, currentIndex, repeat } = get();
+    return upcomingManualIndices({ count, currentIndex, length: queue.length, repeat })
       .map((index) => queue[index])
       .filter((track): track is Track => Boolean(track));
   },
 
   peekWindowFrom(centerIndex, radius) {
-    const { queue, repeat, shuffle } = get();
+    const { queue, repeat } = get();
     const current = centerIndex >= 0 ? queue[centerIndex] : undefined;
     const { prev, next } = windowManualIndices({
       radius,
       currentIndex: centerIndex,
       length: queue.length,
       repeat,
-      shuffleOrder: shuffle ? shuffleOrder : undefined,
     });
     const toTracks = (indices: number[]) =>
       indices.map((index) => queue[index]).filter((track): track is Track => Boolean(track));
@@ -1494,14 +1739,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   stepCenter(centerIndex, dir) {
-    const { queue, repeat, shuffle } = get();
-    const stepped = manualStepIndex({
-      index: centerIndex,
-      length: queue.length,
-      repeat,
-      dir,
-      shuffleOrder: shuffle ? shuffleOrder : undefined,
-    });
+    const { queue, repeat } = get();
+    const stepped = manualStepIndex({ index: centerIndex, length: queue.length, repeat, dir });
     return stepped ?? centerIndex;
   },
 
@@ -1534,9 +1773,32 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     );
   },
 
-  setShuffle(on) {
+  async setShuffle(on) {
     set({ shuffle: on });
-    shuffleOrder = on ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];
+    // Materialize: shuffle reorders the queue itself (pinning the current track so it
+    // keeps playing); turning it off restores the context's natural order. The visible
+    // queue is the play order — no parallel permutation. See playback-queue-model PRD.
+    // AWAIT the reorder so a rapid follow-up action (next/playIndex) can't be clobbered
+    // by a late-landing materialize resetting the cursor to the anchor.
+    const { queue, currentIndex } = get();
+    const anchorId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
+    if (queue.length > 1) {
+      if (on) {
+        if (naturalOrderIds.length !== queue.length) naturalOrderIds = queue.map((t) => t.id);
+        // Q8: reuse this playlist's stable shuffle on toggle, unless the user opted into
+        // re-rolling every toggle, or there's no snapshot for the current context yet.
+        const reshuffleOnToggle = (await getSettings()).shuffleReshuffleOnToggle ?? false;
+        const hasSnapshot =
+          shuffleOrderIds.length > 0 && shuffleContextKey === contextKey(get().queueSource);
+        if (hasSnapshot && !reshuffleOnToggle) {
+          await reuseShuffle(set, get, anchorId);
+        } else {
+          await materializeShuffle(set, get, anchorId);
+        }
+      } else {
+        await restoreNaturalOrder(set, get, anchorId);
+      }
+    }
     void saveSettings({ playerShuffle: on }).catch((err: unknown) =>
       log.warn("player", "failed to persist shuffle mode", err),
     );
@@ -3894,10 +4156,7 @@ function flushDeferredSetAppends(): void {
   }
 }
 
-async function hydratePlaybackSettings(
-  set: (p: Partial<PlayerState>) => void,
-  get: () => PlayerState,
-): Promise<void> {
+async function hydratePlaybackSettings(set: (p: Partial<PlayerState>) => void): Promise<void> {
   if (playbackSettingsLoaded) return;
   playbackSettingsLoaded = true;
   const settings = await getSettings();
@@ -3906,7 +4165,9 @@ async function hydratePlaybackSettings(
   const volume = clampVolume(settings.playerVolume);
   set({ repeat, shuffle, volume });
   mediaEngine?.setVolume(volume);
-  shuffleOrder = shuffle ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];
+  // Shuffle is materialized into the persisted queue order (playQueue.entries), so the
+  // boot queue is already the last play order. The persisted natural order (for un-shuffle
+  // after a relaunch) is restored in the queue watcher, synchronously with the source.
 }
 
 function clampVolume(value: number | undefined): number {

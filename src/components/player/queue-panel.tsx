@@ -1,9 +1,12 @@
+import { useLiveQuery } from "dexie-react-hooks";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
+import { getPlayQueue } from "@/db/repositories";
 import { useSession } from "@/hooks/use-app-data";
 import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { cn } from "@/lib/utils";
+import type { QueueSource } from "@/stores/player-store";
 import { usePlayerStore } from "@/stores/player-store";
 
 type CommonT = TFunction<"common", undefined>;
@@ -21,10 +24,18 @@ export function QueuePanel({ className }: { className?: string }) {
   const activeSessionId = usePlayerStore((s) => s.activeSessionId);
   const queueSource = usePlayerStore((s) => s.queueSource);
   const session = useSession(activeSessionId);
-  const sourceLabel =
-    queueSource?.kind === "system-playlist"
-      ? t("systemPlaylists.sourceLabel", { name: systemPlaylistLabel(queueSource.id, t) })
-      : undefined;
+  const sourceLabel = resolveQueueSourceLabel(queueSource, t);
+  // The "Next in queue" block = manually queued / 点歌'd tracks (entries marked
+  // `requested`) right after the current one. Read straight from the play-queue row so
+  // it stays out of the perf-critical store subscription (rule 6). Spotify parity (Q10).
+  const nextInQueueCount = useLiveQuery(async () => {
+    const pq = await getPlayQueue();
+    let count = 0;
+    for (let i = pq.currentIndex + 1; i < pq.entries.length && pq.entries[i]?.requested; i += 1) {
+      count += 1;
+    }
+    return count;
+  }, []);
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
@@ -32,6 +43,11 @@ export function QueuePanel({ className }: { className?: string }) {
         <div className="shrink-0 px-4 pb-3">
           <div className="text-muted-foreground text-xs">{t("nowPlaying.playingFrom")}</div>
           <div className="truncate font-semibold text-sm">{session?.name ?? sourceLabel}</div>
+          {!!nextInQueueCount && nextInQueueCount > 0 && (
+            <div className="mt-1.5 text-primary text-xs font-medium">
+              {t("queue.nextInQueue", { count: nextInQueueCount })}
+            </div>
+          )}
         </div>
       )}
       <div className="min-h-0 flex-1 px-2">
@@ -44,6 +60,22 @@ export function QueuePanel({ className }: { className?: string }) {
       </div>
     </div>
   );
+}
+
+/** "Playing from" label for a non-set queue source (set context uses the set name). */
+function resolveQueueSourceLabel(source: QueueSource | undefined, t: CommonT): string | undefined {
+  switch (source?.kind) {
+    case "system-playlist":
+      return t("systemPlaylists.sourceLabel", { name: systemPlaylistLabel(source.id, t) });
+    case "entity":
+      return source.label;
+    case "online-playlist":
+      return source.playlist.name;
+    case "library":
+      return t("globalSearch.songs");
+    default:
+      return undefined; // set context: the header shows the set name instead
+  }
 }
 
 function systemPlaylistLabel(id: SystemPlaylistId, t: CommonT) {

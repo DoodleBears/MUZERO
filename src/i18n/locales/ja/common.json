@@ -59,7 +59,8 @@
     "title": "キュー",
     "ready": "{{ready}}/{{total}} 準備完了",
     "addFiles": "ファイルを追加",
-    "empty": "空のセット —— ファイルを追加するか、DJ にまかせましょう。"
+    "empty": "空のセット —— ファイルを追加するか、DJ にまかせましょう。",
+    "nextInQueue_other": "次に再生 · {{count}}"
   },
   "folderImport": {
     "cta": "フォルダを読み込む",
@@ -850,6 +851,8 @@
     "repeatOne": "1曲リピート",
     "repeatAll": "全曲リピート",
     "shuffleHint": "新しいキューをシャッフル順で開始します。",
+    "shuffleReshuffleLabel": "切り替えるたびにシャッフルし直す",
+    "shuffleReshuffleHint": "オン：シャッフルをオンにするたびに新しいランダム順を生成します。オフ（既定）：プレイリストを切り替えるまでシャッフル順は保持されます。",
     "storageTitle": "ストレージとキャッシュ",
     "storageUsageTitle": "デバイスストレージ",
     "storageUsageRatio": "{{usage}} / {{quota}} 使用中 · {{percent}}%",
