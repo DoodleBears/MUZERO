@@ -190,7 +190,12 @@ const DEFAULT_PLAYER_VOLUME = 0.9;
 export type QueueSource =
   | { kind: "set"; setId: string }
   | { kind: "system-playlist"; id: SystemPlaylistId }
-  | { kind: "online-playlist"; playlist: StreamPlaylist };
+  | { kind: "online-playlist"; playlist: StreamPlaylist }
+  // A derived library entity (one artist or one album); `entityKey` is the projection
+  // key from library-index.ts, `label` the display name. See playback-queue-model PRD.
+  | { kind: "entity"; entityKind: "artist" | "album"; entityKey: string; label: string }
+  // The whole library — the gallery 全部歌曲 (tracks) tab.
+  | { kind: "library" };
 
 /**
  * Where a play action gets its queue: the source label (drives autoExtend + the

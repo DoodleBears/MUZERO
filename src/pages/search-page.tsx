@@ -524,7 +524,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
   const play = usePlayerStore((s) => s.play);
-  const playTrack = usePlayerStore((s) => s.playTrack);
+  const playTrackInContext = usePlayerStore((s) => s.playTrackInContext);
   const deleteSession = usePlayerStore((s) => s.deleteSession);
   const setUploadTarget = useUploadTargetStore((s) => s.setTarget);
   const setCoverTarget = useCoverTargetStore((s) => s.setCoverTarget);
@@ -1477,7 +1477,12 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
     (track: Track) => transitionState(() => setSelectedLibraryTrackId(track.id)),
     [],
   );
-  const playLibraryTrack = useCallback((track: Track) => void playTrack(track), [playTrack]);
+  // 全部歌曲: play in the library context (the displayed list), not the track's home set.
+  const playLibraryTrack = useCallback(
+    (track: Track) =>
+      void playTrackInContext(track, { source: { kind: "library" }, tracks: shownTracks }),
+    [playTrackInContext, shownTracks],
+  );
 
   if (!searchContentMounted) return <div aria-hidden="true" className="h-full" />;
 

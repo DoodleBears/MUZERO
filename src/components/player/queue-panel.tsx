@@ -4,6 +4,7 @@ import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { useSession } from "@/hooks/use-app-data";
 import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { cn } from "@/lib/utils";
+import type { QueueSource } from "@/stores/player-store";
 import { usePlayerStore } from "@/stores/player-store";
 
 type CommonT = TFunction<"common", undefined>;
@@ -21,10 +22,7 @@ export function QueuePanel({ className }: { className?: string }) {
   const activeSessionId = usePlayerStore((s) => s.activeSessionId);
   const queueSource = usePlayerStore((s) => s.queueSource);
   const session = useSession(activeSessionId);
-  const sourceLabel =
-    queueSource?.kind === "system-playlist"
-      ? t("systemPlaylists.sourceLabel", { name: systemPlaylistLabel(queueSource.id, t) })
-      : undefined;
+  const sourceLabel = resolveQueueSourceLabel(queueSource, t);
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
@@ -44,6 +42,22 @@ export function QueuePanel({ className }: { className?: string }) {
       </div>
     </div>
   );
+}
+
+/** "Playing from" label for a non-set queue source (set context uses the set name). */
+function resolveQueueSourceLabel(source: QueueSource | undefined, t: CommonT): string | undefined {
+  switch (source?.kind) {
+    case "system-playlist":
+      return t("systemPlaylists.sourceLabel", { name: systemPlaylistLabel(source.id, t) });
+    case "entity":
+      return source.label;
+    case "online-playlist":
+      return source.playlist.name;
+    case "library":
+      return t("globalSearch.songs");
+    default:
+      return undefined; // set context: the header shows the set name instead
+  }
 }
 
 function systemPlaylistLabel(id: SystemPlaylistId, t: CommonT) {

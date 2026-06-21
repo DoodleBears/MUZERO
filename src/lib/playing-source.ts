@@ -31,5 +31,11 @@ export function resolvePlayingSource(input: {
         playlist: input.queueSource.playlist,
         anchorTrackId: track.id,
       };
+    // Derived entities / the whole library have no single set-detail to jump back to;
+    // "jump to source" is simply unavailable (the menu item disables). Reasonable
+    // fallback per the playback-queue-model PRD (Q-Phase 2).
+    case "entity":
+    case "library":
+      return null;
   }
 }

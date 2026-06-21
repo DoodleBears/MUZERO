@@ -16,7 +16,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Set 上下文 + 顺序对齐（修复主 bug） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 派生实体 / 系统歌单 / 全部歌曲上下文统一 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 派生实体 / 系统歌单 / 全部歌曲上下文统一 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Online 歌单（发现 tab 第 5 项）上下文 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）** | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | `sessionId` 语义收敛 + `playTrack` 清理 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -422,17 +422,17 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 **Goal:** 同类 bug 在艺人/专辑、红心/最多/最近、全部歌曲一并消除；来源标签/跳到来源正确。
 
 **Tasks:**
-- [ ] `QueueSource` additive 增加 `entity` / `library` 变体（§3.2.1）。
-- [ ] `playTrackInContext` 非 set 分支落地（镜像 `playSystemPlaylist`：显式 tracks、不设 `contextSetId`、`djEnabled=false`）。
-- [ ] `SystemPlaylistDetail` / `EntityDetailView` / 库「全部歌曲」迁移 onPlay。
-- [ ] [`resolvePlayingSource`](../../../../src/lib/playing-source.ts) + 来源标签 + jump-to-source 对新变体补 case。
+- [x] `QueueSource` additive 增加 `entity` / `library` 变体（[player-store.ts](../../../../src/stores/player-store.ts)）。
+- [x] `playTrackInContext` 非 set 分支**已在 Phase 1 落地**（`activateExplicitQueue`：显式 tracks、不设 `contextSetId`、`djEnabled=false`）。
+- [x] `SystemPlaylistDetail` / `EntityDetailView` / 库「全部歌曲」(`playLibraryTrack`) 迁移 onPlay → `playTrackInContext`（各传自己的 source + 显示 tracks；实体无 key 的伪桶回退 `library`）。
+- [x] `resolvePlayingSource` 对 entity/library 返回 null（jump-to-source 合理回退=禁用）；[queue-panel](../../../../src/components/player/queue-panel.tsx) 来源标签覆盖 entity(label)/online-playlist(name)/library(`globalSearch.songs`)。
 
 ### Phase 2 Checklist
 
-- [ ] 单测：从红心歌单点 A → `queueSource={system-playlist,liked}`、队列==红心列表、`contextSetId` 未设。
-- [ ] 单测：从专辑详情点 A → `queueSource={entity,album,…}`、队列==专辑有序列表。
-- [ ] 来源标签 / jump-to-source 在 entity/library 下显示正确（或合理回退）。
-- [ ] `make check` 通过。
+- [x] 单测：从系统歌单（红心）点 A → `queueSource={system-playlist,liked}`、队列==该列表、`activeSessionId=null`、`contextSetId` 未设、`djEnabled=false`。
+- [x] 单测：从专辑实体点 A → `queueSource={entity,album,key,label}`、队列==实体有序列表；另含 library 上下文单测。
+- [x] 来源标签：queue-panel 对 4 种非 set 来源显示正确；jump-to-source entity/library 禁用（合理回退）。`playing-source` + `queue-panel` + `track-identity-row` 测试通过。
+- [x] `make check` 等价：tsc 通过；affected 套件 367 passed（含 component 测试用 `pnpm exec vitest` 跑齐 jest-dom setup）。
 
 ### Phase 3: Online 歌单（发现 tab 第 5 项）上下文
 

@@ -60,7 +60,7 @@ export function SystemPlaylistDetail({
     anchorTrackId,
   );
   const play = usePlayerStore((s) => s.play);
-  const playTrack = usePlayerStore((s) => s.playTrack);
+  const playTrackInContext = usePlayerStore((s) => s.playTrackInContext);
   const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
   const isLiked = playlistId === "system:liked";
   const showPlaybackMetrics = !isLiked;
@@ -193,7 +193,12 @@ export function SystemPlaylistDetail({
             anchorTrackId={pendingAnchorTrackId}
             selectedTrackId={selectedTrack?.id}
             onView={(track) => setSelectedTrackId(track.id)}
-            onPlay={(track) => void playTrack(track)}
+            onPlay={(track) =>
+              void playTrackInContext(track, {
+                source: { kind: "system-playlist", id: playlistId },
+                tracks: localTracks,
+              })
+            }
             emptyHint={emptyHint(playlistId, t)}
             listClassName="chrome-fade no-scrollbar pt-2 pb-chrome-bottom [--chrome-fade-top:0.75rem]"
             className="min-h-0 flex-1"

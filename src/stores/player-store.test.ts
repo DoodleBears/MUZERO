@@ -1814,4 +1814,95 @@ describe("player-store context-aware play (playTrackInContext)", () => {
       expect(s.queue[s.currentIndex]?.id).toBe(t2.id);
     });
   });
+
+  // --- Phase 2: non-set contexts (system playlist / entity / library) ---------
+
+  it("plays from a system playlist as its own context (no contextSetId)", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const home = await repos.createSession({
+      name: "home",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const a = readyTrack("trk_a", home.id, "A", "blb_a");
+    const b = readyTrack("trk_b", home.id, "B", "blb_b");
+    await db.tracks.bulkAdd([a, b]);
+    await putMediaBlob(db, a.id, "blb_a");
+    await putMediaBlob(db, b.id, "blb_b");
+
+    usePlayerStore.getState().init();
+    const liked = await repos.getTracksByIds([a.id, b.id]);
+    await usePlayerStore.getState().playTrackInContext(liked[1], {
+      source: { kind: "system-playlist", id: "system:liked" },
+      tracks: liked,
+    });
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.activeSessionId).toBeNull();
+      expect(s.queueSource).toEqual({ kind: "system-playlist", id: "system:liked" });
+      expect(s.queue.map((t) => t.id)).toEqual([a.id, b.id]);
+      expect(s.queue[s.currentIndex]?.id).toBe(b.id);
+      expect(s.djEnabled).toBe(false);
+    });
+    await expect(repos.getPlayQueue()).resolves.toMatchObject({ contextSetId: undefined });
+  });
+
+  it("plays from a derived album entity as its own context", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const home = await repos.createSession({
+      name: "home",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const a = readyTrack("trk_a", home.id, "A", "blb_a");
+    await db.tracks.bulkAdd([a]);
+    await putMediaBlob(db, a.id, "blb_a");
+
+    usePlayerStore.getState().init();
+    const tracks = await repos.getTracksByIds([a.id]);
+    await usePlayerStore.getState().playTrackInContext(tracks[0], {
+      source: { kind: "entity", entityKind: "album", entityKey: "album:Mixtape", label: "Mixtape" },
+      tracks,
+    });
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queueSource).toEqual({
+        kind: "entity",
+        entityKind: "album",
+        entityKey: "album:Mixtape",
+        label: "Mixtape",
+      });
+      expect(s.queue.map((t) => t.id)).toEqual([a.id]);
+      expect(s.activeSessionId).toBeNull();
+    });
+  });
+
+  it("plays from the whole library (全部歌曲) as its own context", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const home = await repos.createSession({
+      name: "home",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const a = readyTrack("trk_a", home.id, "A", "blb_a");
+    const b = readyTrack("trk_b", home.id, "B", "blb_b");
+    await db.tracks.bulkAdd([a, b]);
+    await putMediaBlob(db, a.id, "blb_a");
+    await putMediaBlob(db, b.id, "blb_b");
+
+    usePlayerStore.getState().init();
+    const tracks = await repos.getTracksByIds([a.id, b.id]);
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[0], { source: { kind: "library" }, tracks });
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queueSource).toEqual({ kind: "library" });
+      expect(s.queue.map((t) => t.id)).toEqual([a.id, b.id]);
+      expect(s.currentIndex).toBe(0);
+    });
+  });
 });

@@ -79,7 +79,7 @@ export function EntityDetailView({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  const playTrack = usePlayerStore((s) => s.playTrack);
+  const playTrackInContext = usePlayerStore((s) => s.playTrackInContext);
   const coverUrl = useTrackCoverUrl(coverTrack);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   // Sort defaults to the entity's natural order (album track numbers) — null = no
@@ -275,7 +275,16 @@ export function EntityDetailView({
             tracks={shownTracks}
             selectedTrackId={selectedTrack?.id}
             onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
-            onPlay={(track) => void playTrack(track)}
+            onPlay={(track) =>
+              void playTrackInContext(track, {
+                // A derived entity with a stable projection key is its own context; a
+                // pseudo-bucket (no key, e.g. "Unknown artist") falls back to library.
+                source: entityKey
+                  ? { kind: "entity", entityKind: kind, entityKey, label: title }
+                  : { kind: "library" },
+                tracks: shownTracks,
+              })
+            }
             alphabetLetterOf={alphabetLetterOf}
             emptyHint={t("gallery.tracksEmpty")}
             listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
