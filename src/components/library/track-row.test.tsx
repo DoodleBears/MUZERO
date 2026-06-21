@@ -158,7 +158,8 @@ describe("TrackRow", () => {
     const { container } = renderRow({ isSelected: true });
     const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
 
-    fireEvent.click(row as HTMLElement);
+    // Play is the double-click gesture now (a single click only selects).
+    fireEvent.doubleClick(row as HTMLElement);
 
     expect(getTraceEntries()).toEqual([
       expect.objectContaining({
@@ -238,27 +239,35 @@ describe("TrackRow", () => {
     expect(props.onPlay).not.toHaveBeenCalled();
   });
 
-  it("plays an already-selected row when it is clicked again", () => {
+  it("plays a row on double-click, even when it was not selected", () => {
+    const { container, props } = renderRow({ isSelected: false });
+    const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
+
+    fireEvent.doubleClick(row as HTMLElement);
+
+    expect(props.onPlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not play an already-selected row on a single click (only selects)", () => {
     const { container, props } = renderRow({ isSelected: true });
     const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
 
     fireEvent.click(row as HTMLElement);
 
-    expect(props.onPlay).toHaveBeenCalledTimes(1);
-    expect(props.onView).not.toHaveBeenCalled();
+    expect(props.onView).toHaveBeenCalledTimes(1);
+    expect(props.onPlay).not.toHaveBeenCalled();
   });
 
-  it("plays the selected current row so a paused track can resume", () => {
+  it("plays the current row on double-click so a paused track can resume", () => {
     const { container, props } = renderRow({ isCurrent: true, isSelected: true });
     const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
 
-    fireEvent.click(row as HTMLElement);
+    fireEvent.doubleClick(row as HTMLElement);
 
     expect(props.onPlay).toHaveBeenCalledTimes(1);
-    expect(props.onView).not.toHaveBeenCalled();
   });
 
-  it("plays the selected focused row on Enter, but only selects an unselected one", () => {
+  it("plays the focused row on Enter regardless of selection state", () => {
     const selected = renderRow({ isSelected: true });
     fireEvent.keyDown(selected.container.querySelector("[data-muzero-track-row]") as HTMLElement, {
       key: "Enter",
@@ -271,8 +280,8 @@ describe("TrackRow", () => {
       unselected.container.querySelector("[data-muzero-track-row]") as HTMLElement,
       { key: "Enter" },
     );
-    expect(unselected.props.onView).toHaveBeenCalledTimes(1);
-    expect(unselected.props.onPlay).not.toHaveBeenCalled();
+    expect(unselected.props.onPlay).toHaveBeenCalledTimes(1);
+    expect(unselected.props.onView).not.toHaveBeenCalled();
   });
 
   it("plays the selected current row from the library drill-in key", () => {

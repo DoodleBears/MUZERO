@@ -48,6 +48,27 @@ describe("AudienceRequestRuntime direct search route", () => {
     });
   });
 
+  it("fires onRequestPlayed with the matched track + action after a successful route", async () => {
+    const { target } = await seedQueue();
+    const onRequestPlayed = vi.fn();
+    const runtime = createAudienceRequestRuntime({ db, onRequestPlayed });
+
+    await runtime.handle(request("点歌 晴天")); // default playbackAction = play-next
+
+    expect(onRequestPlayed).toHaveBeenCalledTimes(1);
+    expect(onRequestPlayed).toHaveBeenCalledWith({ track: target, action: "play-next" });
+  });
+
+  it("does not fire onRequestPlayed when nothing was played", async () => {
+    await seedQueue();
+    const onRequestPlayed = vi.fn();
+    const runtime = createAudienceRequestRuntime({ db, onRequestPlayed });
+
+    await runtime.handle(request("Plastic Love")); // no confident match → ignored
+
+    expect(onRequestPlayed).not.toHaveBeenCalled();
+  });
+
   it("can append a confident local match to the end of the play queue", async () => {
     const { current, target, tail } = await seedQueue();
     await saveSettings(

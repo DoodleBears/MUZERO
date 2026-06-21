@@ -450,7 +450,9 @@
     "uploadedVideo": "uploaded video",
     "deleteConfirmTitle": "Delete this song permanently?",
     "deleteConfirmBody": "This removes it from all sets and deletes its audio, cover, and memories. This can’t be undone.",
-    "deletedToast": "Song deleted"
+    "deletedToast": "Song deleted",
+    "removeOrDeleteTitle": "Remove “{{title}}”?",
+    "removeOrDeleteBody": "Remove it from this set only — you can undo that. Or permanently delete it from every set and your library (its audio, cover, and memories); permanent deletion can’t be undone."
   },
   "drop": {
     "addTitle": "Drop to add to your set",
@@ -1525,6 +1527,11 @@
     "copySuccess": "Copied to clipboard",
     "copyFail": "Couldn't copy — try again",
     "dismiss": "Dismiss"
+  },
+  "liveRequest": {
+    "playedNow": "Now playing: {{title}}",
+    "playedNext": "Up next: {{title}}",
+    "playedQueued": "Added to queue: {{title}}"
   },
   "errorPage": {
     "kicker": "Crash report",

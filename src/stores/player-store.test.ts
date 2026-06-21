@@ -201,7 +201,10 @@ describe("player-store playback resume", () => {
   it(
     "hydrates the last queue cursor and active set from IndexedDB",
     async () => {
-      const { session, first, second, usePlayerStore } = await seedQueue(1);
+      const { session, first, second, usePlayerStore, repos } = await seedQueue(1);
+      // Display mode is a global preference now (not per-set), persisted in settings
+      // and hydrated on init(). Switching/activating sets must not reset it.
+      await repos.saveSettings({ displayMode: "cover" });
 
       usePlayerStore.getState().init();
 

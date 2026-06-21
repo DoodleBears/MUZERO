@@ -438,7 +438,9 @@
     "uploadedVideo": "上传的视频",
     "deleteConfirmTitle": "永久删除这首歌？",
     "deleteConfirmBody": "将从所有歌单移除，并删除其音频、封面和记忆。此操作不可撤销。",
-    "deletedToast": "已删除歌曲"
+    "deletedToast": "已删除歌曲",
+    "removeOrDeleteTitle": "移除「{{title}}」？",
+    "removeOrDeleteBody": "仅从当前歌单移除（可撤销）；或从所有歌单和音乐库中彻底删除这首歌（含音频、封面和记忆），彻底删除无法撤销。"
   },
   "drop": {
     "addTitle": "拖放即可加入歌单",
@@ -1503,6 +1505,11 @@
     "copySuccess": "已复制到剪贴板",
     "copyFail": "复制失败 —— 请重试",
     "dismiss": "关闭"
+  },
+  "liveRequest": {
+    "playedNow": "正在播放：{{title}}",
+    "playedNext": "下一首：{{title}}",
+    "playedQueued": "已加入队列：{{title}}"
   },
   "errorPage": {
     "kicker": "崩溃报告",
