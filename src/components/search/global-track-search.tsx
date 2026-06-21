@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { DownloadQualityDialog } from "@/components/stream/download-quality-dialog";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
+import { CoverImage } from "@/components/ui/cover-image";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { db } from "@/db/muzero-db";
@@ -93,7 +94,6 @@ const MAX_SET_RESULTS = 5;
 const MAX_SONG_RESULTS = 8;
 const MAX_LYRIC_RESULTS = 8;
 const MAX_ENTITY_RESULTS = 5;
-const EAGER_COVER_RESULT_ROWS = 6;
 const GLOBAL_SEARCH_LIBRARY_INITIAL_DELAY_MS = 240;
 const GLOBAL_SEARCH_LOCAL_WORKER_QUERY_SETTLE_MS = 220;
 const SEARCH_THUMBNAIL_MISS_DELAY_MS = 240;
@@ -626,7 +626,6 @@ export function GlobalTrackSearch({
                         session.trackIds[0] ? setCoverTrackById.get(session.trackIds[0]) : undefined
                       }
                       index={i}
-                      loadCover={i < EAGER_COVER_RESULT_ROWS || selectedIndex === i}
                       selected={selectedIndex === i}
                       onMouseEnter={() => setSelectedIndex(i)}
                       onActivate={() => void activate({ type: "set", session }, false)}
@@ -645,9 +644,6 @@ export function GlobalTrackSearch({
                       key={track.id}
                       track={track}
                       index={trackStart + i}
-                      loadCover={
-                        trackStart + i < EAGER_COVER_RESULT_ROWS || selectedIndex === trackStart + i
-                      }
                       selected={selectedIndex === trackStart + i}
                       onMouseEnter={() => setSelectedIndex(trackStart + i)}
                       onPlay={() => void activate({ type: "track", track }, false)}
@@ -668,9 +664,6 @@ export function GlobalTrackSearch({
                       track={track}
                       match={match}
                       index={lyricStart + i}
-                      loadCover={
-                        lyricStart + i < EAGER_COVER_RESULT_ROWS || selectedIndex === lyricStart + i
-                      }
                       selected={selectedIndex === lyricStart + i}
                       onMouseEnter={() => setSelectedIndex(lyricStart + i)}
                       onPlay={() => void activate({ type: "lyric", track, match }, false)}
@@ -698,9 +691,6 @@ export function GlobalTrackSearch({
                           ? entityCoverTrackById.get(entry.coverTrackId)
                           : undefined
                       }
-                      loadCover={
-                        albumStart + i < EAGER_COVER_RESULT_ROWS || selectedIndex === albumStart + i
-                      }
                       onMouseEnter={() => setSelectedIndex(albumStart + i)}
                       onActivate={() => void activate({ type: "album", entry }, false)}
                     />
@@ -725,10 +715,6 @@ export function GlobalTrackSearch({
                         entry.coverTrackId
                           ? entityCoverTrackById.get(entry.coverTrackId)
                           : undefined
-                      }
-                      loadCover={
-                        artistStart + i < EAGER_COVER_RESULT_ROWS ||
-                        selectedIndex === artistStart + i
                       }
                       onMouseEnter={() => setSelectedIndex(artistStart + i)}
                       onActivate={() => void activate({ type: "artist", entry }, false)}
@@ -834,13 +820,9 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-function useSetResultCoverUrl(
-  session: DjSession,
-  fallbackTrack: Track | undefined,
-  loadCover: boolean,
-): string | null {
+function useSetResultCoverUrl(session: DjSession, fallbackTrack: Track | undefined): string | null {
   const setUrl = useTrackThumbnailUrl(
-    loadCover && (session.coverBlobId || session.remoteCoverUrl)
+    session.coverBlobId || session.remoteCoverUrl
       ? {
           coverBlobId: session.coverBlobId,
           coverCrop: session.coverCrop,
@@ -849,7 +831,7 @@ function useSetResultCoverUrl(
       : undefined,
     { missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS, traceSource: "global-search:set" },
   );
-  const fallbackUrl = useTrackThumbnailUrl(loadCover ? fallbackTrack : undefined, {
+  const fallbackUrl = useTrackThumbnailUrl(fallbackTrack, {
     missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS,
     traceSource: "global-search:set-fallback",
   });
@@ -860,7 +842,6 @@ function GlobalSetRow({
   session,
   coverTrack,
   index,
-  loadCover,
   selected,
   onMouseEnter,
   onActivate,
@@ -868,13 +849,15 @@ function GlobalSetRow({
   session: DjSession;
   coverTrack: Track | undefined;
   index: number;
-  loadCover: boolean;
   selected: boolean;
   onMouseEnter: () => void;
   onActivate: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useSetResultCoverUrl(session, coverTrack, loadCover);
+  const coverUrl = useSetResultCoverUrl(session, coverTrack);
+  // Mirror the cover URL resolution: the set's own cover wins, else the first track.
+  const usingSetCover = !!(session.coverBlobId || session.remoteCoverUrl);
+  const coverThumbhash = usingSetCover ? session.coverThumbhash : coverTrack?.coverThumbhash;
   return (
     <button
       type="button"
@@ -888,13 +871,12 @@ function GlobalSetRow({
         selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
       )}
     >
-      <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
-        {coverUrl ? (
-          <img src={coverUrl} alt="" className="size-full object-cover" />
-        ) : (
-          <ListMusic className="size-4" />
-        )}
-      </div>
+      <CoverImage
+        url={coverUrl}
+        thumbhash={coverThumbhash}
+        placeholder={<ListMusic className="size-4" />}
+        className="size-11 shrink-0 text-muted-foreground"
+      />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium text-sm">{session.name}</div>
         <div className="truncate text-muted-foreground text-xs">
@@ -1005,7 +987,6 @@ function FilterMenu({
 function GlobalTrackSearchRow({
   track,
   index,
-  loadCover,
   selected,
   onMouseEnter,
   onPlay,
@@ -1013,14 +994,13 @@ function GlobalTrackSearchRow({
 }: {
   track: Track;
   index: number;
-  loadCover: boolean;
   selected: boolean;
   onMouseEnter: () => void;
   onPlay: () => void;
   onPlayNext: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackThumbnailUrl(loadCover ? track : undefined, {
+  const coverUrl = useTrackThumbnailUrl(track, {
     missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS,
     traceSource: "global-search:track",
   });
@@ -1041,13 +1021,12 @@ function GlobalTrackSearchRow({
         onClick={onPlay}
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
-        <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
-          {coverUrl ? (
-            <img src={coverUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <Disc3Icon size={16} />
-          )}
-        </div>
+        <CoverImage
+          url={coverUrl}
+          thumbhash={track.coverThumbhash}
+          placeholder={<Disc3Icon size={16} />}
+          className="size-11 shrink-0 text-muted-foreground"
+        />
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium text-sm">{track.title}</div>
           <div className="truncate text-muted-foreground text-xs">{trackSubtitle(track)}</div>
@@ -1082,7 +1061,6 @@ function GlobalLyricSearchRow({
   track,
   match,
   index,
-  loadCover,
   selected,
   onMouseEnter,
   onPlay,
@@ -1091,14 +1069,13 @@ function GlobalLyricSearchRow({
   track: Track;
   match: LyricSearchMatch;
   index: number;
-  loadCover: boolean;
   selected: boolean;
   onMouseEnter: () => void;
   onPlay: () => void;
   onPlayNext: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackThumbnailUrl(loadCover ? track : undefined, {
+  const coverUrl = useTrackThumbnailUrl(track, {
     missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS,
     traceSource: "global-search:lyric",
   });
@@ -1120,16 +1097,16 @@ function GlobalLyricSearchRow({
         onClick={onPlay}
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
-        <div className="relative grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
-          {coverUrl ? (
-            <img src={coverUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <Disc3Icon size={16} />
-          )}
+        <CoverImage
+          url={coverUrl}
+          thumbhash={track.coverThumbhash}
+          placeholder={<Disc3Icon size={16} />}
+          className="size-11 shrink-0 text-muted-foreground"
+        >
           <span className="absolute bottom-0.5 right-0.5 grid size-4 place-items-center rounded bg-background/80 text-foreground shadow-sm">
             <Captions className="size-3" />
           </span>
-        </div>
+        </CoverImage>
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium text-sm">{track.title}</div>
           <div className="truncate text-muted-foreground text-xs">{match.text}</div>
@@ -1168,7 +1145,6 @@ function GlobalEntityRow({
   label,
   sublabel,
   coverTrack,
-  loadCover,
   onMouseEnter,
   onActivate,
 }: {
@@ -1178,11 +1154,10 @@ function GlobalEntityRow({
   label: string;
   sublabel: string;
   coverTrack: Track | undefined;
-  loadCover: boolean;
   onMouseEnter: () => void;
   onActivate: () => void;
 }) {
-  const coverUrl = useTrackThumbnailUrl(loadCover ? coverTrack : undefined, {
+  const coverUrl = useTrackThumbnailUrl(coverTrack, {
     missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS,
     traceSource: `global-search:${kind}`,
   });
@@ -1199,20 +1174,13 @@ function GlobalEntityRow({
         selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
       )}
     >
-      <div
-        className={cn(
-          "grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground",
-          kind === "artist" ? "rounded-full" : "album-cover-radius album-cover-shadow",
-        )}
-      >
-        {coverUrl ? (
-          <img src={coverUrl} alt="" className="size-full object-cover" />
-        ) : kind === "artist" ? (
-          <User className="size-4" />
-        ) : (
-          <Disc3Icon size={16} />
-        )}
-      </div>
+      <CoverImage
+        url={coverUrl}
+        thumbhash={coverTrack?.coverThumbhash}
+        rounded={kind === "artist"}
+        placeholder={kind === "artist" ? <User className="size-4" /> : <Disc3Icon size={16} />}
+        className="size-11 shrink-0 text-muted-foreground"
+      />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium text-sm">{label}</div>
         <div className="truncate text-muted-foreground text-xs">{sublabel}</div>
