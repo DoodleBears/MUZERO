@@ -19,7 +19,7 @@
 | 2 | 派生实体 / 系统歌单 / 全部歌曲上下文统一 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Online 歌单（发现 tab 第 5 项）上下文 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）** | 🔄 4a + Q8 稳定洗牌/Setting 完成（真机 E2E 8/8）；剩 Q10 面板分区 + 跨重启持久 | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | `sessionId` 语义收敛 + `playTrack` 清理 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | `sessionId` 语义收敛 + `playTrack` 清理 | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -490,15 +490,16 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 **Goal:** 把 `Track.sessionId` 正式收敛为「provenance only」（Q5：彻底内部化，UI 不再暴露「归属/出生地」），移除最后的「从 sessionId 猜上下文」代码（Q4：按 best practice 删除歧义入口）。
 
 **Tasks:**
-- [ ] 审计 `track.sessionId` 的所有读取点（`grep`），确认除 provenance/删除级联/sourcePath 外无人再用它做播放/上下文裁决。
-- [ ] 给 `Track.sessionId` 补注释（「origin/home set；播放上下文绝不从此解析」）；UI 不暴露该概念（Q5）。
-- [ ] **删除** `playTrack(track)` 薄壳（Q4：所有调用方已迁移到 `playTrackInContext`）；如个别遗留确需「在归属集播放」语义，显式改写为 `playTrackInContext(track, {source:{kind:"set",setId:track.sessionId}, …})`，不保留隐式入口。
+- [x] 审计 `track.sessionId` 读取点：除 provenance / 删除级联 / sourcePath 外，**所有列表详情页已迁移**到 `playTrackInContext`；剩余 `playTrack` 调用只剩 global-search + AI-DJ chat 工具（无列表上下文的单曲播放）。
+- [x] `Track.sessionId` 补注释（「origin/home set；播放上下文绝不从此解析」，[types.ts](../../../../src/db/types.ts)）。Q5：内部 provenance，UI 不暴露。
+- [x] **Q7/Q4 裁决**：`playTrack` **保留**但收紧语义为「无列表上下文的单曲播放」（global-search / chat tool），JSDoc 明确「任何渲染列表的视图必须用 `playTrackInContext`」。不删除（删了这两个合法入口没有等价替代——它们本就没有列表上下文）。
+- [x] **清理 4a 遗留死代码**：从 [`queue.ts`](../../../../src/player/queue.ts) 删除并行排列步进器 `shuffleNext`/`shuffleManualNext`/`shufflePrev`（materialized shuffle 后无人用）+ 对应 `queue.test` describe；`buildShuffleOrder` 保留（store 物化用）。
 
 ### Phase 5 Checklist
 
-- [ ] 审计结果记录在 PR 描述：列出 `sessionId` 剩余消费者及其用途。
-- [ ] 文档/注释更新（types.ts + 本 PRD「导航口径」对齐 CLAUDE.md 如需）。
-- [ ] `make check` 通过。
+- [x] 审计：`sessionId` 仅剩 provenance/级联/sourcePath；`playTrack` 仅剩 2 个无上下文单曲入口（已 JSDoc 收紧）。
+- [x] 文档：`Track.sessionId` + `playTrack` JSDoc 收敛。
+- [x] `make check` 等价：tsc 通过；queue（41）+ player-store（47）通过；死代码删除无回归。
 
 ---
 

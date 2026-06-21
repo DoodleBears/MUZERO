@@ -251,7 +251,13 @@ interface PlayerState {
   /** Load + show a track WITHOUT playing it (boot resume) — no gesture-blocked
    * play() / AudioContext. Playback waits for a real user gesture. */
   cueIndex: (index: number) => Promise<void>;
-  /** Play a specific track, switching sets if needed (search/library result). */
+  /**
+   * Play a single track in its HOME set (`track.sessionId`). Only for CONTEXTLESS
+   * single-track plays where there is no surrounding list — the global search box and
+   * the AI-DJ chat "play this" tool. Any view that renders a list (set/entity/system/
+   * library/online detail) MUST use {@link PlayerState.playTrackInContext} instead, so
+   * the queue comes from the viewed list, not the track's home set (Q7; see PRD Part A).
+   */
   playTrack: (track: Track) => Promise<void>;
   /**
    * Play a track in an EXPLICIT context (the歌单/列表 the user clicked in) — the

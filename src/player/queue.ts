@@ -106,58 +106,11 @@ export function buildShuffleOrder(
   return order;
 }
 
-/**
- * Step forward through a shuffled order. Returns the next queue index (or null to
- * stop) plus the order to keep (it reshuffles when a cycle wraps under "all", and
- * rebuilds if it's stale vs `length`). Pure + injectable rng for tests.
- */
-export function shuffleNext(
-  order: number[],
-  length: number,
-  currentIndex: number,
-  repeat: RepeatMode,
-  rng: () => number = Math.random,
-): { index: number | null; order: number[] } {
-  if (length <= 0) return { index: null, order: [] };
-  let ord = order.length === length ? order : buildShuffleOrder(length, currentIndex, rng);
-  if (repeat === "one") return { index: currentIndex, order: ord };
-  const pos = ord.indexOf(currentIndex);
-  if (pos + 1 < ord.length) return { index: ord[pos + 1], order: ord };
-  // Reached the end of this shuffle cycle.
-  if (repeat === "all") {
-    ord = buildShuffleOrder(length, -1, rng);
-    return { index: ord[0], order: ord };
-  }
-  return { index: null, order: ord };
-}
-
-/** Shuffled manual next, with the same repeat-one semantics as manualNextIndex. */
-export function shuffleManualNext(
-  order: number[],
-  length: number,
-  currentIndex: number,
-  repeat: RepeatMode,
-  rng: () => number = Math.random,
-): { index: number | null; order: number[] } {
-  return shuffleNext(order, length, currentIndex, repeat === "one" ? "all" : repeat, rng);
-}
-
-/** Step backward through a shuffled order. Symmetric with {@link shuffleNext}. */
-export function shufflePrev(
-  order: number[],
-  length: number,
-  currentIndex: number,
-  repeat: RepeatMode,
-  rng: () => number = Math.random,
-): { index: number | null; order: number[] } {
-  if (length <= 0) return { index: null, order: [] };
-  const ord = order.length === length ? order : buildShuffleOrder(length, currentIndex, rng);
-  const pos = ord.indexOf(currentIndex);
-  if (pos - 1 >= 0) return { index: ord[pos - 1], order: ord };
-  // repeat-one wraps for manual prev too, mirroring shuffleManualNext.
-  if (repeat !== "off") return { index: ord[ord.length - 1], order: ord };
-  return { index: currentIndex, order: ord };
-}
+// NOTE (playback-queue-model Phase 4/5): the old parallel-permutation steppers
+// (shuffleNext / shuffleManualNext / shufflePrev) were removed. Shuffle is now
+// MATERIALIZED into the queue order itself (player-store), so next/prev step
+// linearly via manualNextIndex / prevIndex. buildShuffleOrder above still produces
+// the one-time permutation the store materializes.
 
 /**
  * Preview the next manual-advance queue indices without mutating playback state.

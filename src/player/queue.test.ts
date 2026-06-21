@@ -8,9 +8,6 @@ import {
   nextStreamSkipIndex,
   prevIndex,
   shouldAutoExtend,
-  shuffleManualNext,
-  shuffleNext,
-  shufflePrev,
   upcomingCount,
   upcomingManualIndices,
   windowManualIndices,
@@ -128,49 +125,6 @@ describe("buildShuffleOrder", () => {
     expect(order).toHaveLength(5);
     expect([...order].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
     expect(order[0]).toBe(3);
-  });
-});
-
-describe("shuffleNext / shufflePrev", () => {
-  const order = [2, 0, 3, 1]; // a fixed shuffled order over length 4
-
-  it("steps forward through the order", () => {
-    expect(shuffleNext(order, 4, 2, "off").index).toBe(0);
-    expect(shuffleNext(order, 4, 0, "off").index).toBe(3);
-    expect(shuffleNext(order, 4, 1, "off").index).toBeNull(); // 1 is last → stop
-  });
-
-  it("repeat:one stays on the current track", () => {
-    expect(shuffleNext(order, 4, 0, "one").index).toBe(0);
-  });
-
-  it("manual shuffled next ignores repeat:one", () => {
-    expect(shuffleManualNext(order, 4, 0, "one").index).toBe(3);
-  });
-
-  it("manual shuffled next wraps at the cycle end under repeat:one", () => {
-    // 1 is last in `order` → repeat-one reshuffles and continues (never null/stuck).
-    const res = shuffleManualNext(order, 4, 1, "one");
-    expect(res.index).not.toBeNull();
-    expect([...res.order].sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
-  });
-
-  it("repeat:all reshuffles and continues at the wrap", () => {
-    const res = shuffleNext(order, 4, 1, "all"); // 1 is last in order
-    expect(res.index).not.toBeNull();
-    expect([...res.order].sort((a, b) => a - b)).toEqual([0, 1, 2, 3]); // fresh permutation
-  });
-
-  it("rebuilds a stale order (length mismatch)", () => {
-    const res = shuffleNext([0, 1], 4, 0, "off", () => 0);
-    expect(res.order).toHaveLength(4);
-  });
-
-  it("steps backward, wrapping under repeat:all", () => {
-    expect(shufflePrev(order, 4, 0, "off").index).toBe(2); // before 0 is 2
-    expect(shufflePrev(order, 4, 2, "off").index).toBe(2); // 2 is first → stay
-    expect(shufflePrev(order, 4, 2, "all").index).toBe(1); // wrap to last
-    expect(shufflePrev(order, 4, 2, "one").index).toBe(1); // repeat-one wraps too
   });
 });
 

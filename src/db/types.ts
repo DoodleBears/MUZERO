@@ -102,6 +102,13 @@ export interface TrackMediaMetadata {
  */
 export interface Track {
   id: string;
+  /**
+   * The track's ORIGIN / home set — where it was created (provenance + delete-cascade
+   * + sourcePath dedup). A track can belong to MANY sets (each `DjSession.trackIds`),
+   * so this is NOT "the set it's in". **Playback context is never resolved from this**
+   * field — it comes from the surface the user clicked (see `playTrackInContext` /
+   * `QueueSource`). Codename-stable id (rule 4). See the playback-queue-model PRD.
+   */
   sessionId: string;
   title: string;
   kind: TrackKind;
