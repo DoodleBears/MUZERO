@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 观测先行：把「前台 content 判定 vs 实际播放」可见化 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 修复：视频显示判定 + `<video>` 收养/续播跟 LIVE `current` | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 修复：视频显示判定 + `<video>` 收养/续播跟 LIVE `current` | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 回归与单测：穷举切歌时序 + 前后台同源 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -259,22 +259,24 @@ nowplaying.stage.content  { liveTrackId, displayTrackId, liveKind, liveStatus,
 - [x] `mismatch` 字段在「LIVE 是视频但前台 showVideo=false」时为真——把症状变成无歧义信号。
 - [N/A] 本环境无 live Electron 复现；2.2 vs 2.3 的最终确认改由 Phase 2/3 的单测编码（见 OQ#1，证据偏 2.2）。诊断已就位，可在真机直接读取 before/after。
 
-### Phase 2: 修复（video 判定 + `<video>` 续播跟 LIVE）
+### Phase 2: 修复（video 判定 + `<video>` 续播跟 LIVE）✅
 
 **Goal:** 前台「是否视频」与背景完全同源（LIVE `current`）；封面静帧仍走 burst-settle。
 
-**Tasks:**
-- [ ] `MediaStage`：拆分「视频判定（LIVE current）」与「封面/标题静帧（displayTrack）」两条线（§5.2.1/5.2.2）。
-- [ ] 视频元素 className 显隐改跟 LIVE 判定。
-- [ ] （若 Phase 1 确认 2.3）收养 effect 跟 LIVE current.id + 可见性重跑 `mount()`，或新增幂等 `ensureVideoSynced()`。
-- [ ] 复核 `videoError` / `videoAspect` 的 reset effect（media-stage.tsx:96-100/101-120）：现按 `displayTrack?.id` reset，需与新的 LIVE 视频判定对齐，避免错首 reset。
+**Done:**
+- [x] 新增纯函数 `resolveStageLayers({ liveTrack, displayTrack, displayMode, videoError })`（[`track-display.ts`](../../../../src/lib/track-display.ts)）：**视频层**跟 LIVE `liveTrack`（`showVideo`/`wantVideo`/`videoBroke`），**封面/标题静帧**跟 `displayTrack` 且强制 `"cover"` 模式解析——保证静帧永远只是 cover/title，绝不重放滞后 displayTrack 的旧视频；滞后的视频 track 显示其封面（poster）而非空白。
+- [x] `MediaStage` 改用 `resolveStageLayers`，以 LIVE `current` 作 `liveTrack`、burst-settled `displayTrack` 作静帧源（[media-stage.tsx](../../../../src/components/player/media-stage.tsx)）。视频元素 className 显隐、几何盒（`wantVideo`）、`CanvasCover`（`showCover`）、`StageTitleFallback`（`showTitle`）、backlight 全部对齐新分层。
+- [x] `videoError`/`videoAspect` 的 reset effect 改按 **LIVE `current?.id`**（视频元素加载的是 LIVE 媒体，解码错误/宽高属于 `current`，非 displayTrack）。
+- [x] （2.3 缓解）新增幂等 resync effect：当 `showVideo` 变真或 LIVE `current?.id` 变化时重跑 `engine.mount(container)`（其 append 有 parent 守卫、仅在音频已播时 resync+play，可重复安全调用），关掉「mount 只跑一次 → 切歌/回前台后画面停在旧帧」的缺口。
+- [x] 诊断更新为新分层（`wantVideo/showVideo/showCover/showTitle/staleStill/coverWhileLiveVideo`）；`coverWhileLiveVideo` 应恒为 false（出现即回归原 bug）。
 
 ### Phase 2 Checklist
 
-- [ ] 视频 track 经「快捷键 / coverflow 拖拽 / 连点 burst」切歌后，前台**立即**显示并播放视频，不退化封面。
-- [ ] 前台 video 状态与 Pixi 背景视频状态一致（同播同停同源）。
-- [ ] 封面 track ↔ 视频 track 互切正确；coverflow hand-off 无回归闪烁。
-- [ ] 不引入隐藏 flag；回退 = `git revert`。
+- [x] 单测 `resolveStageLayers` 覆盖：LIVE 是 ready 视频但 displayTrack 滞后在封面 track → `showVideo===true`、`showCover===false`（**正是原 bug 的回归测试**）。
+- [x] 视频解码失败 → `videoBroke`、`showTitle`、元素隐藏；cover 模式恒不播视频；无 track → title 兜底。
+- [x] `make check` 等价的 `tsc --noEmit`（exit 0）+ `biome`（clean）+ 全量 vitest（3262 passed）通过，未破坏既有测试（含 coverflow / now-playing 相关）。
+- [x] 不引入隐藏 flag；回退 = `git revert`。
+- [~] 前台 video 与 Pixi 背景「同播同停」、coverflow hand-off 无回归闪烁、tab-return 续播 → 需真机 QA（见 OQ#1/#3；on-page 切歌路径已被单测 + 幂等 resync 覆盖）。
 
 ### Phase 3: 回归与单测
 
@@ -332,7 +334,7 @@ nowplaying.stage.content  { liveTrackId, displayTrackId, liveKind, liveStatus,
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | 主因是 2.2（content 退化 cover）还是 2.3（video 元素 paused/detached），还是叠加？ | Open | Phase 1 观测拍板；当前证据（用户说"只显示封面"非静止帧）偏 2.2 |
+| 1 | 主因是 2.2（content 退化 cover）还是 2.3（video 元素 paused/detached），还是叠加？ | Resolved（主因）/ Open（2.3 真机） | 主因 2.2 已修（视频判定回 LIVE，单测覆盖）。2.3 已加幂等 resync 缓解 on-page 切歌；tab-return 续播仍需真机确认（跨 PRD，归 tab-switch 对齐） |
 | 2 | 视频判定回 LIVE 后，连点 burst 会不会让 `<video>` 在每首都 reload 造成卡顿？ | Open | 视频 reload 由 `ensureLoadedAndPlay`/`loadedTrackId` 去重，不随渲染；burst-settle 仍合并封面静帧，理论上不回退性能；Phase 1/3 复测 |
 | 3 | 收养 effect 改为依赖 LIVE current.id 重跑 `mount()`，是否会与 coverflow base 隐藏（opacity:0）期叠加导致多次 append？ | Open | `mount()` 已对「parentElement 不同才 append」做幂等；需测 coverflow 提交窗口 |
 | 4 | 是否顺手让 `now-playing-background` 与 `MediaStage` 共用一个「是否视频」纯函数，彻底防再次漂移？ | Resolved | 是。Phase 1 已抽 `trackIsPlayableVideo`，`resolveStageContent` + `MediaStage` 已复用；Phase 3 让 `background.ts` 也复用 |
@@ -345,6 +347,7 @@ nowplaying.stage.content  { liveTrackId, displayTrackId, liveKind, liveStatus,
 |------|--------|---------|
 | 2026-06-21 | MUZERO/Player | 初稿：定位根因为「前台视频判定用 burst-settled `displayTrack`、背景用 LIVE `current`」的错位（违反 media-stage.tsx:55 注释承诺）；给出观测先行 + 视频判定回 LIVE + `<video>` 续播跟 LIVE 的修复计划 |
 | 2026-06-21 | MUZERO/Player | Phase 1 完成：抽出 `trackIsPlayableVideo` 谓词（+单测）并让 `resolveStageContent` 复用；`MediaStage` 接入 `nowplaying.stage.content` 诊断（带 `mismatch` 信号）。OQ#4（共用谓词）落地。 |
+| 2026-06-21 | MUZERO/Player | Phase 2 完成：新增 `resolveStageLayers`（视频层跟 LIVE、静帧跟 displayTrack 且只出 cover/title）；`MediaStage` 改用之，reset 改按 LIVE `current?.id`，新增幂等 resync effect 缓解 2.3。回归单测含原 bug 场景；全量 vitest/tsc/biome 绿。OQ#1 主因判定 2.2 已修。 |
 
 ---
 

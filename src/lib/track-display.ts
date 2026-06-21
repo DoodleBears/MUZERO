@@ -37,6 +37,58 @@ export function resolveStageContent(opts: {
 }
 
 /**
+ * The now-playing stage's render layers, split by **which track each follows**:
+ *
+ *  - The VIDEO layer follows the LIVE `current` track (`liveTrack`) — so a moving
+ *    video shows/hides in lockstep with actual playback and the ambient Pixi
+ *    background (which also reads LIVE `current`). It must NOT follow a burst-settled
+ *    snapshot, or a video can play in the background while the foreground still
+ *    shows the previous track's cover (PRD 20260621-video-stage-shows-cover-after-switch).
+ *  - The STILL image (cover / title) follows the burst-settled `displayTrack` — so a
+ *    rapid next/prev burst coalesces cover decodes instead of reconciling per song
+ *    (PRD Phase 31). It is ONLY ever a cover or title, never "video": the video LAYER
+ *    owns moving pictures. Resolving the still layer in `"cover"` mode guarantees that
+ *    and lets a lagging *video* displayTrack show its poster instead of going blank.
+ *
+ * `wantVideo` = the live track is a playable video in the current display mode (the
+ * stage geometry / black box follow this even when the element failed to decode);
+ * `showVideo` = that, AND it decoded OK (the `<video>` element is actually shown);
+ * `videoBroke` = wanted a video but it failed → show the title backdrop + a note.
+ */
+export function resolveStageLayers(opts: {
+  liveTrack?: Track;
+  displayTrack?: Track;
+  displayMode: SetDisplayMode;
+  videoError: boolean;
+}): {
+  showVideo: boolean;
+  videoBroke: boolean;
+  wantVideo: boolean;
+  showCover: boolean;
+  showTitle: boolean;
+} {
+  const { liveTrack, displayTrack, displayMode, videoError } = opts;
+  const wantVideo =
+    resolveStageContent({
+      track: liveTrack,
+      displayMode,
+      hasCover: trackHasCover(liveTrack),
+    }) === "video";
+  const showVideo = wantVideo && !videoError;
+  const videoBroke = wantVideo && videoError;
+  // Force "cover" mode so the still layer is only ever cover/title — never the
+  // (stale) video of a lagging displayTrack.
+  const stillContent = resolveStageContent({
+    track: displayTrack,
+    displayMode: "cover",
+    hasCover: trackHasCover(displayTrack),
+  });
+  const showCover = !wantVideo && stillContent === "cover";
+  const showTitle = videoBroke || (!wantVideo && stillContent === "title");
+  return { showVideo, videoBroke, wantVideo, showCover, showTitle };
+}
+
+/**
  * Whether a track has any cover to render — a local cover blob OR a remote cover
  * URL. Streamed tracks (NetEase / Bilibili / …) keep their art as `remoteCoverUrl`
  * with no local blob, so a `coverBlobId`-only check wrongly reports "no cover" and

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Track } from "@/db/types";
 import {
   resolveStageContent,
+  resolveStageLayers,
   trackHasCover,
   trackIsPlayableVideo,
   trackSubtitle,
@@ -84,6 +85,127 @@ describe("resolveStageContent — video-first fallback", () => {
         hasCover: false,
       }),
     ).toBe("title");
+  });
+});
+
+describe("resolveStageLayers — video follows LIVE, still image follows displayTrack", () => {
+  const coverAudio = track({ kind: "audio", coverBlobId: "blb_cover" });
+  const coverVideo = track({ kind: "video", status: "ready", coverBlobId: "blb_poster" });
+
+  it("shows the video for a ready live video (display already settled to it)", () => {
+    expect(
+      resolveStageLayers({
+        liveTrack: videoTrack,
+        displayTrack: videoTrack,
+        displayMode: "video",
+        videoError: false,
+      }),
+    ).toEqual({
+      showVideo: true,
+      videoBroke: false,
+      wantVideo: true,
+      showCover: false,
+      showTitle: false,
+    });
+  });
+
+  it("REGRESSION: live is a ready video but displayTrack still lags on a cover track → shows the LIVE video, NOT the stale cover", () => {
+    const layers = resolveStageLayers({
+      liveTrack: videoTrack, // live current = ready video (background plays it)
+      displayTrack: coverAudio, // burst-settled snapshot still on the previous cover track
+      displayMode: "video",
+      videoError: false,
+    });
+    // The foreground must show the video — the exact bug was showing the cover here.
+    expect(layers.showVideo).toBe(true);
+    expect(layers.wantVideo).toBe(true);
+    // The lagging cover must be suppressed so it can't paint over the live video.
+    expect(layers.showCover).toBe(false);
+    expect(layers.showTitle).toBe(false);
+  });
+
+  it("a live video that failed to decode shows the title backdrop + broken flag, hides the element", () => {
+    expect(
+      resolveStageLayers({
+        liveTrack: videoTrack,
+        displayTrack: videoTrack,
+        displayMode: "video",
+        videoError: true,
+      }),
+    ).toEqual({
+      showVideo: false,
+      videoBroke: true,
+      wantVideo: true,
+      showCover: false,
+      showTitle: true,
+    });
+  });
+
+  it("non-video live track: still image follows displayTrack; a lagging video displayTrack shows its poster, never blank/never 'video'", () => {
+    // Switched FROM a video TO an audio-with-cover; displayTrack still lags on the video.
+    const layers = resolveStageLayers({
+      liveTrack: coverAudio,
+      displayTrack: coverVideo, // lagging video track that has a poster cover
+      displayMode: "video",
+      videoError: false,
+    });
+    expect(layers.showVideo).toBe(false);
+    expect(layers.wantVideo).toBe(false);
+    // The still layer is cover/title only — never re-plays the stale video; it shows
+    // the lagging track's poster instead of going blank.
+    expect(layers.showCover).toBe(true);
+    expect(layers.showTitle).toBe(false);
+  });
+
+  it("non-video live track with a settled cover displayTrack → cover", () => {
+    expect(
+      resolveStageLayers({
+        liveTrack: coverAudio,
+        displayTrack: coverAudio,
+        displayMode: "video",
+        videoError: false,
+      }),
+    ).toEqual({
+      showVideo: false,
+      videoBroke: false,
+      wantVideo: false,
+      showCover: true,
+      showTitle: false,
+    });
+  });
+
+  it("audio track with no cover → title fallback", () => {
+    expect(
+      resolveStageLayers({
+        liveTrack: audioTrack,
+        displayTrack: audioTrack,
+        displayMode: "video",
+        videoError: false,
+      }),
+    ).toMatchObject({ showVideo: false, showCover: false, showTitle: true });
+  });
+
+  it("cover display mode never shows video, even for a ready live video", () => {
+    const layers = resolveStageLayers({
+      liveTrack: coverVideo,
+      displayTrack: coverVideo,
+      displayMode: "cover",
+      videoError: false,
+    });
+    expect(layers.wantVideo).toBe(false);
+    expect(layers.showVideo).toBe(false);
+    expect(layers.showCover).toBe(true);
+  });
+
+  it("no track at all → title fallback", () => {
+    expect(
+      resolveStageLayers({
+        liveTrack: undefined,
+        displayTrack: undefined,
+        displayMode: "video",
+        videoError: false,
+      }),
+    ).toMatchObject({ showVideo: false, showCover: false, showTitle: true, wantVideo: false });
   });
 });
 

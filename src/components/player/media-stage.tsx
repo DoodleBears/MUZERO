@@ -10,7 +10,7 @@ import {
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
 import { createDiagnosticLogger } from "@/lib/logger";
-import { resolveStageContent, trackHasCover, trackIsPlayableVideo } from "@/lib/track-display";
+import { resolveStageLayers } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { CanvasCover } from "./canvas-cover";
@@ -73,41 +73,43 @@ export function MediaStage({
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
   const [videoError, setVideoError] = useState(false);
   const [videoAspect, setVideoAspect] = useState<number | null>(null);
-  const content = resolveStageContent({
-    track: displayTrack,
+  // The VIDEO decision follows the LIVE `current` (so the moving picture shows/hides
+  // in lockstep with playback + the ambient background, never lagging behind a
+  // burst-settled snapshot); the cover/title STILL image follows `displayTrack` (burst
+  // coalescing). Splitting the two is the fix for "切歌后前台只显示封面、背景却在放视频"
+  // (PRD 20260621-video-stage-shows-cover-after-switch).
+  const { showVideo, videoBroke, wantVideo, showCover, showTitle } = resolveStageLayers({
+    liveTrack: current,
+    displayTrack,
     displayMode,
-    // Whether a cover *exists* (sync) — not whether its URL has resolved yet — so
-    // the stage doesn't flip to the visualizer during a track change.
-    hasCover: trackHasCover(displayTrack),
+    videoError,
   });
-  const showVideo = content === "video";
-  // A video track the WebView accepted as "video" but failed to decode.
-  const videoBroke = showVideo && videoError;
 
-  // Observability (PRD 20260621-video-stage-shows-cover-after-switch, Phase 1):
-  // surface when the foreground stage's content decision (from the burst-settled
-  // `displayTrack`) DISAGREES with the LIVE `current` track — the exact split that
-  // makes the ambient background play a video while the stage falls back to a cover.
-  // One line per change (not per frame). No user content — only ids/kind/status +
-  // element booleans (CLAUDE.md rule 8 / telemetry whitelist).
-  const liveIsVideo = trackIsPlayableVideo(current);
-  const stageContentMismatch = liveIsVideo !== showVideo;
+  // Observability (PRD …video-stage-shows-cover-after-switch): one line per change
+  // (not per frame). `staleStill` = the burst-settled still layer is still lagging the
+  // live track at this commit; `coverWhileLiveVideo` must stay false post-fix (a stale
+  // cover painting over a live video would be the original bug). No user content — only
+  // ids/kind/status + element booleans (CLAUDE.md rule 8 / telemetry whitelist).
+  const staleStill = (displayTrack?.id ?? null) !== (current?.id ?? null);
+  const coverWhileLiveVideo = wantVideo && showCover;
   // biome-ignore lint/correctness/useExhaustiveDependencies: stage-state inputs are the deps; element booleans are read at log time
   useEffect(() => {
     const el = getMediaEngine()?.element;
     stageLog.debug("content", {
       category: "media",
-      phase: stageContentMismatch ? "retry" : "state",
+      phase: coverWhileLiveVideo ? "retry" : "state",
       liveTrackId: current?.id,
       displayTrackId: displayTrack?.id,
       liveKind: current?.kind,
       liveStatus: current?.status,
       displayKind: displayTrack?.kind,
       displayStatus: displayTrack?.status,
-      resolvedContent: content,
+      wantVideo,
       showVideo,
-      liveIsVideo,
-      mismatch: stageContentMismatch,
+      showCover,
+      showTitle,
+      staleStill,
+      coverWhileLiveVideo,
       videoError,
       videoPaused: el?.paused,
       videoInContainer: el ? el.parentElement === containerRef.current : undefined,
@@ -118,10 +120,12 @@ export function MediaStage({
     current?.kind,
     current?.status,
     displayTrack?.id,
-    content,
+    wantVideo,
     showVideo,
-    liveIsVideo,
-    stageContentMismatch,
+    showCover,
+    showTitle,
+    staleStill,
+    coverWhileLiveVideo,
     videoError,
   ]);
 
@@ -134,13 +138,30 @@ export function MediaStage({
     return () => getMediaEngine()?.unmount();
   }, []);
 
+  // Re-adopt + resync the shared <video> whenever it BECOMES the live visual or the
+  // live track changes. The element only resumes via the audio "play" event or a
+  // mount() resync, and mount() runs once — so a switch into a video track (incl. one
+  // made while this stage was off-screen) could otherwise leave the picture paused on
+  // a stale frame while audio + the ambient background play (PRD …video-stage §2.3).
+  // mount() is idempotent: it only re-appends when the parent differs, then resyncs to
+  // the audio clock + plays only if audio is already playing — safe to call repeatedly.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: current?.id is a resync trigger, not read in the body
+  useEffect(() => {
+    if (!showVideo) return;
+    const engine = getMediaEngine();
+    const container = containerRef.current;
+    if (engine && container) engine.mount(container);
+  }, [showVideo, current?.id]);
+
   // Reset per-track view state (decode failure + intrinsic aspect) on track change.
-  // Keyed to the displayed track so it stays in lockstep with the shown content.
+  // Keyed to the LIVE `current` id — the video element loads the live track's media,
+  // so its decode error / intrinsic aspect belong to `current`, not the burst-settled
+  // displayTrack (which only governs the cover/title still image).
   // biome-ignore lint/correctness/useExhaustiveDependencies: id is the reset trigger, not used in the body
   useEffect(() => {
     setVideoError(false);
     setVideoAspect(null);
-  }, [displayTrack?.id]);
+  }, [current?.id]);
   useEffect(() => {
     const el = getMediaEngine()?.element;
     if (!el) return;
@@ -162,20 +183,17 @@ export function MediaStage({
     };
   }, []);
 
-  // Show/hide the video element based on the resolved stage content. object-cover
-  // fills the box edge-to-edge — the box already matches the video's aspect, so
-  // nothing is cropped and there are no bars.
+  // Show/hide the video element based on the LIVE video decision (showVideo already
+  // excludes a decode error). object-cover fills the box edge-to-edge — the box
+  // already matches the video's aspect, so nothing is cropped and there are no bars.
   useEffect(() => {
     const el = getMediaEngine()?.element;
     if (!el) return;
-    el.className =
-      showVideo && !videoError
-        ? "absolute inset-0 z-10 h-full w-full bg-black object-cover"
-        : "pointer-events-none absolute h-0 w-0 opacity-0";
-  }, [showVideo, videoError]);
+    el.className = showVideo
+      ? "absolute inset-0 z-10 h-full w-full bg-black object-cover"
+      : "pointer-events-none absolute h-0 w-0 opacity-0";
+  }, [showVideo]);
 
-  const showCover = content === "cover";
-  const showGeneratedBackdrop = content === "title" || videoError;
   const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
   const useCoverShadow = coverEffectMode === "shadow";
   // The resting backlight blurs the SAME original cover the stage shows (via the CSS
@@ -193,8 +211,9 @@ export function MediaStage({
 
   // Video keeps its intrinsic ratio. Covers and title cards stay square like
   // album artwork, which keeps direct switches and swipe handoffs on one stable
-  // geometry instead of jumping when an uploaded cover is wide/tall.
-  const aspect = showVideo ? (videoAspect ?? DEFAULT_VIDEO_ASPECT) : showCover ? 1 : null;
+  // geometry instead of jumping when an uploaded cover is wide/tall. Geometry tracks
+  // `wantVideo` (the live video box) so a video that's loading/broke keeps its shape.
+  const aspect = wantVideo ? (videoAspect ?? DEFAULT_VIDEO_ASPECT) : showCover ? 1 : null;
 
   return (
     <div
@@ -202,7 +221,7 @@ export function MediaStage({
       style={aspect != null ? { aspectRatio: String(aspect) } : undefined}
       className={cn(
         "relative isolate shrink-0 overflow-visible",
-        showVideo ? "w-full" : showCover ? "mx-auto w-full" : "mx-auto aspect-square w-full",
+        wantVideo ? "w-full" : showCover ? "mx-auto w-full" : "mx-auto aspect-square w-full",
         className,
       )}
     >
@@ -218,16 +237,16 @@ export function MediaStage({
         ref={containerRef}
         className={cn(
           "relative z-10 size-full",
-          showVideo
+          wantVideo
             ? "overflow-hidden rounded-lg bg-black shadow-md"
             : "overflow-hidden bg-muted album-cover-radius",
-          !showVideo && useCoverShadow && "album-cover-shadow",
+          !wantVideo && useCoverShadow && "album-cover-shadow",
         )}
       >
-        {showGeneratedBackdrop && <StageTitleFallback track={displayTrack} dim={asBgActive} />}
+        {showTitle && <StageTitleFallback track={displayTrack} dim={asBgActive} />}
         {/* Rendered to a persistent canvas (decode-off-thread, hold-previous + crossfade)
             so a cover switch never re-decodes-on-paint = no flash, like the Pixi bg. */}
-        {content === "cover" && (
+        {showCover && (
           <CanvasCover
             coverUrl={coverUrl}
             className="z-10 album-cover-radius"
