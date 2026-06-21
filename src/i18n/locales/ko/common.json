@@ -123,6 +123,7 @@
     "downloadingPart": "다운로드 중 {{done}} / {{total}}…",
     "allVideos": "동영상으로 다운로드",
     "queuedVideos_other": "{{count}}개 영상을 다운로드 대기열에 추가함",
+    "queued": "다운로드에 추가됨",
     "queueTitle": "다운로드",
     "inProgress_other": "다운로드 중 {{count}}",
     "queueEmpty": "다운로드 없음",

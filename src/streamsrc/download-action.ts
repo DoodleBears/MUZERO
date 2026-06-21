@@ -170,82 +170,25 @@ export async function downloadStreamedHit(
   );
 }
 
-function stageDetail(stage: DownloadProgressStage): string {
-  return stage === "fetch"
-    ? i18n.t("download.stageFetch")
-    : stage === "mux"
-      ? i18n.t("download.stageMux")
-      : i18n.t("download.stageStore");
-}
-
-function notifyResult(notifId: string, result: DownloadStreamedVideoResult, title: string): void {
-  if (result.kind === "downloaded") {
-    notify.update(notifId, {
-      type: "success",
-      message: i18n.t("download.done"),
-      detail: title,
-      duration: 3000,
-    });
-  } else if (result.kind === "requires-login") {
-    notify.update(notifId, {
-      type: "error",
-      message: i18n.t("download.loginRequired"),
-      detail: title,
-    });
-  } else if (result.kind === "no-permission") {
-    notify.update(notifId, {
-      type: "error",
-      message: i18n.t("download.failed"),
-      detail: result.reason,
-    });
-  } else {
-    notify.update(notifId, {
-      type: "error",
-      message: i18n.t("download.failed"),
-      detail: result.message,
-    });
-  }
-}
-
-/** Download one hit with its OWN progress notification; resolves when it finishes. */
-async function downloadWithNotification(
-  hit: StreamSearchHit,
-  opts?: { quality?: string; audioOnly?: boolean },
-): Promise<DownloadStreamedVideoResult> {
-  const notifId = notify.loading(hit.title, { detail: stageDetail("fetch"), progress: 0 });
-  let lastPct = -1;
-  let result: DownloadStreamedVideoResult;
-  try {
-    result = await downloadStreamedHit(hit, {
-      quality: opts?.quality,
-      audioOnly: opts?.audioOnly,
-      onProgress: (stage, ratio) => {
-        if (stage === "fetch") {
-          const pct = Math.round(ratio * 100);
-          if (pct === lastPct) return; // throttle: ~100 updates max, not one per chunk
-          lastPct = pct;
-          notify.update(notifId, { progress: ratio, detail: `${pct}%` });
-        } else {
-          notify.update(notifId, { progress: 1, detail: stageDetail(stage) });
-        }
-      },
-    });
-  } catch (err) {
-    result = { kind: "error", message: err instanceof Error ? err.message : String(err) };
-  }
-  notifyResult(notifId, result, hit.title);
-  return result;
-}
-
 /**
- * Fire-and-forget download with a progress NOTIFICATION (no blocking modal). Returns
- * immediately; the user keeps using the app while it downloads in the background.
+ * Fire-and-forget single download → the persistent queue. Returns immediately; the user keeps
+ * using the app while it downloads. Going through the queue (not a bare fetch) gives automatic
+ * retry with backoff on transient CDN failures (Bilibili's `ERR_HTTP2_PROTOCOL_ERROR`, dropped
+ * connections) — each attempt re-resolves a fresh signed URL, so a flaky mirror is sidestepped —
+ * plus restart recovery and dedupe. Live progress shows in the floating badge + Downloads panel.
  */
 export function startBackgroundDownload(
   hit: StreamSearchHit,
   opts?: { quality?: string; audioOnly?: boolean },
 ): void {
-  void downloadWithNotification(hit, opts);
+  void enqueueDownload({
+    source: hit.source,
+    externalId: hit.externalId,
+    title: hit.title,
+    coverUrl: hit.coverUrl,
+    quality: opts?.quality,
+    audioOnly: opts?.audioOnly,
+  }).then(() => notify.success(i18n.t("download.queued"), { detail: hit.title }));
 }
 
 /**
