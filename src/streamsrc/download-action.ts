@@ -352,40 +352,33 @@ export async function clearFinishedDownloads(): Promise<number> {
   return clearFinishedDownloadJobs();
 }
 
-/** Fire-and-forget batch (分P) download at the default quality, with N/total progress. */
+/**
+ * Enqueue every 分P part for video download (default quality) through the persistent
+ * queue. Returns the count queued. Going through the queue (not a direct fetch loop) is
+ * what gives分P downloads the same retry / restart-recovery / dedupe as single + favlist
+ * downloads — and surfaces their progress in the unified download indicator. The
+ * `enqueue` dep is injected for tests.
+ */
+export async function enqueuePartsForDownload(
+  hit: StreamSearchHit,
+  parts: StreamPart[],
+  enqueue: (input: EnqueueInput) => Promise<unknown> = enqueueDownload,
+): Promise<number> {
+  for (const part of parts) {
+    await enqueue({
+      source: hit.source,
+      externalId: part.externalId,
+      title: part.title,
+      coverUrl: hit.coverUrl,
+    });
+  }
+  return parts.length;
+}
+
+/** Fire-and-forget batch (分P) download → the persistent queue (progress shows in the indicator). */
 export function startBackgroundBatchDownload(hit: StreamSearchHit, parts: StreamPart[]): void {
   if (parts.length === 0) return;
-  const notifId = notify.loading(hit.title, {
-    detail: i18n.t("download.downloadingPart", { done: 1, total: parts.length }),
-  });
-  void (async () => {
-    let ok = 0;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      notify.update(notifId, {
-        detail: i18n.t("download.downloadingPart", { done: i + 1, total: parts.length }),
-      });
-      const result = await downloadStreamedHit({
-        ...hit,
-        externalId: part.externalId,
-        title: part.title,
-        durationSec: part.durationSec ?? hit.durationSec,
-      });
-      if (result.kind === "downloaded") ok += 1;
-      else if (result.kind === "requires-login") {
-        notify.update(notifId, {
-          type: "error",
-          message: i18n.t("download.loginRequired"),
-          detail: hit.title,
-        });
-        return;
-      }
-    }
-    notify.update(notifId, {
-      type: "success",
-      message: i18n.t("download.doneCount", { count: ok }),
-      detail: hit.title,
-      duration: 3000,
-    });
-  })();
+  void enqueuePartsForDownload(hit, parts).then((count) =>
+    notify.success(i18n.t("download.queuedVideos", { count })),
+  );
 }
