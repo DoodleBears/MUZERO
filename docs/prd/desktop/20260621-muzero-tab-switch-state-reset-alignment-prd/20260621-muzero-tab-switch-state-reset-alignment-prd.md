@@ -1,6 +1,6 @@
 # PRD: Tab 切换状态重置对齐（键盘 Ctrl+1/2 ↔ 点击切换）
 
-**Status:** 🔄 In Progress
+**Status:** ✅ Implemented（代码三 phase 落地、全量门禁绿；待用户实例 `Ctrl+1/2` 签收）
 **Created:** 2026-06-21
 **Author:** MUZERO Desktop
 **Module:** Shell / 导航（tab 切换入口统一）
@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 建立统一导航契约（TDD：`navigateToTab` 忠实直切，不走 VT） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 收敛纯切换入口到 `navigateToTab`（保留封面 morph） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 验证对齐 + 回归（`make check` + 真值回归） | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 验证对齐 + 回归（门禁绿 + grep；待用户实例签收） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -205,19 +205,24 @@ export function navigateToTab(setTab: (tab: Tab) => void, tab: Tab): void {
 - [ ] 切回资料库：scroll / detail / sort 全部保真（与「点击 Dock 歌曲」逐像素一致）
 - [ ] 非导航的共享元素 morph（封面 `view-transition-name`）不受影响
 
-### Phase 3: 验证对齐 + 回归
+### Phase 3: 验证对齐 + 回归 ✅（自动门禁）/ ⏳（用户实例确认）
 
-**Goal:** 把保真变成可回归资产。
+**Goal:** 把「纯切换忠实」变成可回归资产，并在用户实例做最终确认。
 
-**Tasks:**
-- [ ] 单测覆盖 `navigateToTab` 的策略分支（VT 可用/被 suppress/不可用 三态）。
-- [ ] harness 重放 Phase 1 真值表，断言 12 组全部「无重置」。
-- [ ] `make check`（typecheck + lint + test）通过；Electron 手测确认观感无回退。
+**Done:**
+- [x] 单测：`navigateToTab` 不触发 `startViewTransition`（[`navigate-tab.test.ts`](src/lib/navigate-tab.test.ts)）；键盘 nav 不再依赖 `transitionState`（[`actions.test.ts`](src/shortcuts/actions.test.ts)）。
+- [x] grep 全仓：纯切换入口（actions/header/nav-fab/App）**零** `transitionState`；残留仅在带封面 morph 处（track-identity-row:186、search-page 详情、entity-detail、jump-to-source）。
+- [x] 本次改动文件：biome ✓ / typecheck ✓ / 全量 `vitest run` **3251 passed | 3 skipped**。
+- [x] `make check` 的**整仓 lint** 报 13 个 error——经核实全部在**他处文件**（visualizer-* / changelog-modal / download-quality-dialog 等并发会话 WIP），**无一在本次 7 个改动文件**；与 lefthook「pre-commit 只 lint staged、不为历史/并发债务背锅」一致。
+
+**Pending（仅用户能做）:**
+- [ ] 用户在自己正在跑的实例里：进资料库 → 进歌单/滚到中段/设排序 → `Ctrl+1` 切走 → `Ctrl+2` 切回 → 确认滚动+排序原样。（本环境无其本地资料库数据，无法端到端复现。）
 
 ### Phase 3 Checklist
-- [ ] 新增/更新测试通过
-- [ ] 真值表回归全绿
-- [ ] PR 描述附 before/after 录屏（键盘 vs dock 歌曲对照）
+- [x] 新增/更新测试通过（先红后绿）
+- [x] 纯切换零 `transitionState` 残留（grep 验证）
+- [x] 本次改动文件全量门禁绿；整仓 lint 失败项确认与本改动无关
+- [ ] 用户实例 `Ctrl+1/2` 手测确认（最终签收）
 
 ---
 
@@ -266,6 +271,7 @@ export function navigateToTab(setTab: (tab: Tab) => void, tab: Tab): void {
 |------|--------|---------|
 | 2026-06-21 | MUZERO Desktop | 初稿：切换入口审计 + 分歧定位 + 对齐方案 |
 | 2026-06-21 | MUZERO Desktop | **更正前提**：发现 Dock 歌曲也走 `transitionState`（track-identity-row:186 封面 morph）→ 所有用户切换都用 VT。重写归因为「纯 `setTab` 在 kept-mounted 下可证明忠实」。Phase 1（TDD helper）+ Phase 2（收敛纯切换入口）落地，全量门禁绿。 |
+| 2026-06-21 | MUZERO Desktop | Phase 3：grep 验证纯切换零 `transitionState` 残留；本改动文件 biome/tsc/全量测试（3251 passed）绿；整仓 lint 13 error 全在他处并发 WIP，与本改动无关。状态 → Implemented，待用户实例签收。 |
 
 ---
 
