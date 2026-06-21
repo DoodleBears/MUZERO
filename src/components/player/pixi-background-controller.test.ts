@@ -19,7 +19,10 @@ function fakeApp() {
     },
     canvas: document.createElement("canvas"),
     stage: { addChild: vi.fn(), removeChild: vi.fn() },
-    renderer: { resize: vi.fn() },
+    // Mirror Pixi's WebGPU renderer shape: `renderer.gpu.device` is the GPUDevice
+    // the controller must destroy itself (Pixi v8 leaks it). A WebGL renderer would
+    // have no `.gpu`; the controller's readGpuDevice tolerates either.
+    renderer: { resize: vi.fn(), gpu: { device: { destroy: vi.fn() } } },
     ticker: {
       started: false,
       start() {
@@ -173,6 +176,26 @@ describe("createPixiBackgroundController", () => {
     await controller.setSource("a.png", "image");
     controller.destroy();
     expect(module.apps[0].destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("explicitly destroys the leaked WebGPU device on destroy()", async () => {
+    // Pixi v8's GpuDeviceSystem.destroy() never calls device.destroy(), so the D3D12
+    // device/command queue leaks across mount/unmount cycles until requestDevice OOMs.
+    // The controller must release it itself. (Regression guard for the OOM report.)
+    const { module, controller } = makeController({ preference: "webgpu" });
+    await controller.setSource("a.png", "image");
+    controller.destroy();
+    expect(module.apps[0].renderer.gpu.device.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the old app's WebGPU device when recover() rebuilds", async () => {
+    // A GPU-loss recovery storm rebuilds the app; each rebuilt device must free the
+    // prior one, or recovery accelerates the very OOM it's recovering from.
+    const { module, controller } = makeController({ preference: "webgpu" });
+    await controller.setSource("a.png", "image");
+    await controller.recover();
+    expect(module.apps[0].renderer.gpu.device.destroy).toHaveBeenCalledTimes(1);
+    controller.destroy();
   });
 
   it("recover() rebuilds the app and re-applies the last source (device-lost path)", async () => {

@@ -705,57 +705,67 @@ export function createPixiBackgroundController(
     if (destroyed) return;
     pixi = module;
     const nextApp = new module.Application();
-    await nextApp.init({
-      antialias: false,
-      autoDensity: false,
-      // Static covers render on demand (resize/swap); the ticker only runs while
-      // a video progresses. attachVideo starts/stops it with playback.
-      autoStart: false,
-      backgroundAlpha: 0,
-      height: 1,
-      width: 1,
-      resolution: 1,
-      preference,
-      powerPreference,
-    });
-    if (destroyed) {
-      nextApp.destroy({ removeView: true }, { children: true, context: true });
-      return;
+    try {
+      await nextApp.init({
+        antialias: false,
+        autoDensity: false,
+        // Static covers render on demand (resize/swap); the ticker only runs while
+        // a video progresses. attachVideo starts/stops it with playback.
+        autoStart: false,
+        backgroundAlpha: 0,
+        height: 1,
+        width: 1,
+        resolution: 1,
+        preference,
+        powerPreference,
+      });
+      if (destroyed) {
+        teardownApp(nextApp, { full: false });
+        return;
+      }
+      const view = nextApp.canvas;
+      view.style.position = "absolute";
+      view.style.inset = "0";
+      view.style.width = "100%";
+      view.style.height = "100%";
+      view.style.imageRendering = effect === "pixel" ? "pixelated" : "auto";
+      // Keep the canvas BELOW the plain <img> reveal layer so a freshly-swapped
+      // texture is uncovered by fading the img out, not popped in (PRD Phase 2 / #3).
+      view.style.zIndex = "0";
+      filter = await deps.loadFilter(module, effect, effectOptions);
+      if (destroyed) {
+        teardownApp(nextApp, { full: false });
+        return;
+      }
+      app = nextApp;
+      // The resident "adjustment layer": filter applied ONCE here, cover sprites
+      // crossfade as its (unfiltered) children, so the effect never dissolves.
+      const root = new module.Container();
+      root.filters = filter ? [filter] : [];
+      nextApp.stage.addChild(root);
+      layerRoot = root;
+      stats.appInits += 1;
+      host.appendChild(view);
+      if (typeof ResizeObserver === "function") {
+        resizeObserver = new ResizeObserver(() => resize());
+        resizeObserver.observe(host);
+      }
+      wireContextLossRecovery(nextApp, view);
+      bgPixiLog.debug("appInit", {
+        backend: preference,
+        power: powerPreference,
+        effect,
+        ms: Math.round(nowMs() - startedAt),
+      });
+    } catch (error) {
+      // init()/loadFilter() failed (most often a WebGPU `requestDevice` OOM once the
+      // GPU is already exhausted): release the half-built app + its GPU device so a
+      // FAILED attempt doesn't itself leak a device and deepen the hole. `app` isn't
+      // assigned until after both awaits, so clear it only if we got that far.
+      if (app === nextApp) app = null;
+      teardownApp(nextApp, { full: false });
+      throw error;
     }
-    const view = nextApp.canvas;
-    view.style.position = "absolute";
-    view.style.inset = "0";
-    view.style.width = "100%";
-    view.style.height = "100%";
-    view.style.imageRendering = effect === "pixel" ? "pixelated" : "auto";
-    // Keep the canvas BELOW the plain <img> reveal layer so a freshly-swapped
-    // texture is uncovered by fading the img out, not popped in (PRD Phase 2 / #3).
-    view.style.zIndex = "0";
-    filter = await deps.loadFilter(module, effect, effectOptions);
-    if (destroyed) {
-      nextApp.destroy({ removeView: true }, { children: true, context: true });
-      return;
-    }
-    app = nextApp;
-    // The resident "adjustment layer": filter applied ONCE here, cover sprites
-    // crossfade as its (unfiltered) children, so the effect never dissolves.
-    const root = new module.Container();
-    root.filters = filter ? [filter] : [];
-    nextApp.stage.addChild(root);
-    layerRoot = root;
-    stats.appInits += 1;
-    host.appendChild(view);
-    if (typeof ResizeObserver === "function") {
-      resizeObserver = new ResizeObserver(() => resize());
-      resizeObserver.observe(host);
-    }
-    wireContextLossRecovery(nextApp, view);
-    bgPixiLog.debug("appInit", {
-      backend: preference,
-      power: powerPreference,
-      effect,
-      ms: Math.round(nowMs() - startedAt),
-    });
   }
 
   /**
@@ -1070,11 +1080,11 @@ export function createPixiBackgroundController(
       currentMedia = null;
     }
     if (app) {
-      try {
-        app.destroy({ removeView: true }, { children: true, context: true });
-      } catch {
-        // The context may already be gone; ignore teardown errors during recovery.
-      }
+      // teardownApp swallows destroy errors (the context may already be gone) AND
+      // explicitly releases the WebGPU device Pixi leaks — otherwise a GPU-loss
+      // recovery storm rebuilds devices that never free, hastening the OOM it's
+      // recovering from.
+      teardownApp(app, { full: false });
       app = null;
     }
     layerRoot = null;
@@ -1113,10 +1123,7 @@ export function createPixiBackgroundController(
       currentMedia = null;
     }
     if (app) {
-      app.destroy(
-        { removeView: true },
-        { children: true, context: true, texture: true, textureSource: true },
-      );
+      teardownApp(app, { full: true });
       app = null;
     }
     layerRoot = null;
@@ -1184,6 +1191,58 @@ function defaultRequestFrame(callback: (nowMs: number) => void): () => void {
 
 function createAbortError(): DOMException {
   return new DOMException("Background texture load aborted", "AbortError");
+}
+
+/**
+ * Read the renderer's live WebGPU device BEFORE `app.destroy()` runs — destroy()
+ * nulls `renderer.gpu`, so it's unreadable afterwards. WebGL renderers have no
+ * `.gpu`, so this returns undefined there (no-op). Defensive across Pixi
+ * backends/versions (the fake renderer in unit tests has neither field).
+ */
+function readGpuDevice(app: PixiAppLike): { destroy?: () => void } | undefined {
+  try {
+    const renderer = app.renderer as unknown as {
+      gpu?: { device?: { destroy?: () => void } };
+    };
+    return renderer?.gpu?.device;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Destroy a Pixi app AND explicitly release its WebGPU device.
+ *
+ * Pixi v8's `GpuDeviceSystem.destroy()` only NULLS its `GPUDevice` reference — it
+ * never calls `device.destroy()`. So the underlying D3D12 device + command queue
+ * outlive `app.destroy()` and leak until GC (which for `GPUDevice` is unreliable and
+ * deferred). Across enough Now Playing background mount/unmount + GPU-loss-recovery
+ * cycles the GPU runs out and the next `requestDevice()` fails with
+ * "D3D12 create command queue failed with E_OUTOFMEMORY". The WebGL path has no leak
+ * (`GlContextSystem.destroy()` calls `loseContext()`), so this only bites WebGPU —
+ * which is the auto-selected backend on Electron/Chromium. We grab the device first,
+ * let Pixi tear its objects down, then destroy the device ourselves.
+ */
+function teardownApp(target: PixiAppLike, options: { full: boolean }): void {
+  const device = readGpuDevice(target);
+  try {
+    target.destroy(
+      { removeView: true },
+      options.full
+        ? { children: true, context: true, texture: true, textureSource: true }
+        : { children: true, context: true },
+    );
+  } catch {
+    // The GPU context may already be gone (recovery path); ignore teardown errors.
+  }
+  try {
+    // Destroying an already-lost device is a no-op; `device.lost` then resolves with
+    // reason "destroyed", which wireContextLossRecovery deliberately ignores (no
+    // recovery loop). On WebGL `device` is undefined and this does nothing.
+    device?.destroy?.();
+  } catch {
+    // Some backends throw if the device is mid-teardown; the leak is already closed.
+  }
 }
 
 function coverSprite(
