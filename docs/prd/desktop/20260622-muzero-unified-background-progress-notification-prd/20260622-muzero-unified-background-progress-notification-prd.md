@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 下载队列指示器收敛到左上角通知栈（复活 `progress` 条 + indicator 订阅 `downloadJobs` + 下线右上角徽标） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 下载队列指示器收敛到左上角通知栈（复活 `progress` 条 + indicator 订阅 `downloadJobs` + 下线右上角徽标） | ✅ 完成（`download-indicator.ts` 纯聚合 + reconcile 生命周期 + 13 单测；App 启动 wiring；删徽标；i18n×4 `download.view`） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 切歌加载指示器进左上角通知栈（阈值门控 + 真字节进度 + 远程下载/本地加载文案 + 保留 Dock 封面 spinner） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 一致性收尾（分P 批量下载改走队列 → 进统一指示器 + 重试；i18n×4 校对/清理） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -260,12 +260,12 @@ usePlayerStore.subscribe(s => s.playbackLoading?.progress, (progress) => {
 
 ### Phase 1 Checklist
 
-- [ ] 入队单/批量下载 → 左上角出现一条持久 loading toast，进度条随字节推进。
-- [ ] 右上角不再有徽标。
-- [ ] 「查看」跳 Settings → Downloads。
-- [ ] 所有任务完成/清空 → toast 自动消失。
-- [ ] 单测：`reconcileDownloads` 给定 jobs 数组 → 正确的 message/detail/progress（含 0 任务 dismiss、无 totalBytes 不给 progress、多任务平均）。
-- [ ] `make check` 通过。
+- [x] 入队单/批量下载 → 左上角出现一条持久 loading toast，进度条随字节推进。（indicator 订阅 `downloadJobs` liveQuery，create→update→dismiss）
+- [x] 右上角不再有徽标。（删 [`download-progress-badge.tsx`](../../../../src/components/downloads/download-progress-badge.tsx) + App.tsx 挂载）
+- [x] 「查看」跳 Settings → Downloads。（toast action `keepOpen` → `useNavStore.setTab("settings")`）
+- [x] 所有任务完成/清空 → toast 自动消失。
+- [x] 单测：`summarizeDownloadJobs` + `createDownloadReconciler` → 正确的 message/detail/progress（含 0 任务 dismiss、无 totalBytes 不给 progress、多任务平均、re-create）。13 例。
+- [x] `make check` 通过。（typecheck + biome 干净；全量 vitest 445 文件 / 3293 例 通过）
 
 ### Phase 2: 切歌加载指示器进左上角通知栈（阈值门控 + 真字节进度）
 

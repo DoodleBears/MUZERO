@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
-import { DownloadProgressBadge } from "@/components/downloads/download-progress-badge";
 import type { Tab } from "@/components/nav/dock-nav";
 import { AlbumCoverAppearancePanel } from "@/components/player/album-cover-appearance-panel";
 import { ChangelogModal } from "@/components/player/changelog-modal";
@@ -54,6 +53,7 @@ import { SettingsPage } from "@/pages/settings-page";
 import { buildSystemShortcutRegistrations } from "@/shortcuts/system-global";
 import { startCloudAutoSyncScheduler } from "@/stores/cloud-auto-sync";
 import { useDesktopWindowStore } from "@/stores/desktop-window-store";
+import { startDownloadIndicator } from "@/stores/download-indicator";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { startPlaylistAutoSyncScheduler } from "@/stores/playlist-auto-sync";
@@ -137,6 +137,12 @@ export default function App() {
   // Surface background sync (folder import + R2) as a persistent, cancelable toast.
   useEffect(() => {
     startSyncIndicator();
+  }, []);
+
+  // Surface the persistent download queue as one aggregate progress toast (replaces
+  // the old floating badge — all background progress now lives in the notification stack).
+  useEffect(() => {
+    startDownloadIndicator();
   }, []);
 
   // Visible per-drive R2 auto-sync scheduler. It delegates to the same
@@ -445,9 +451,6 @@ export default function App() {
 
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
         <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && goToTab("queue")} />
-
-        {/* Floating download-queue progress chip (favlist/batch downloads); hidden when idle. */}
-        <DownloadProgressBadge />
 
         {/* Dev perf HUD, behind the same visible Settings switch as prod. */}
         {import.meta.env.DEV && settings.perfHudEnabled && <DevPerfPanel />}

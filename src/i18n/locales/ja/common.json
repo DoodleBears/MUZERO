@@ -126,6 +126,7 @@
     "queued": "ダウンロードに追加しました",
     "queueTitle": "ダウンロード",
     "inProgress_other": "ダウンロード中 {{count}}",
+    "view": "表示",
     "queueEmpty": "ダウンロードはまだありません",
     "queueClear": "完了分をクリア",
     "statusPending": "待機中",

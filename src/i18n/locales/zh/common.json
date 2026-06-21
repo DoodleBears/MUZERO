@@ -126,6 +126,7 @@
     "queued": "已加入下载",
     "queueTitle": "下载",
     "inProgress_other": "下载中 {{count}}",
+    "view": "查看",
     "queueEmpty": "暂无下载",
     "queueClear": "清除已完成",
     "statusPending": "排队中",

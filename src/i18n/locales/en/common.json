@@ -135,6 +135,7 @@
     "queueTitle": "Downloads",
     "inProgress_one": "Downloading {{count}}",
     "inProgress_other": "Downloading {{count}}",
+    "view": "View",
     "queueEmpty": "No downloads yet",
     "queueClear": "Clear finished",
     "statusPending": "Queued",

@@ -126,6 +126,7 @@
     "queued": "다운로드에 추가됨",
     "queueTitle": "다운로드",
     "inProgress_other": "다운로드 중 {{count}}",
+    "view": "보기",
     "queueEmpty": "다운로드 없음",
     "queueClear": "완료 항목 지우기",
     "statusPending": "대기 중",
