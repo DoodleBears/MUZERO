@@ -59,7 +59,8 @@
     "title": "キュー",
     "ready": "{{ready}}/{{total}} 準備完了",
     "addFiles": "ファイルを追加",
-    "empty": "空のセット —— ファイルを追加するか、DJ にまかせましょう。"
+    "empty": "空のセット —— ファイルを追加するか、DJ にまかせましょう。",
+    "nextInQueue_other": "次に再生 · {{count}}"
   },
   "folderImport": {
     "cta": "フォルダを読み込む",

@@ -59,7 +59,8 @@
     "title": "대기열",
     "ready": "{{ready}}/{{total}} 준비됨",
     "addFiles": "파일 추가",
-    "empty": "빈 세트 —— 파일을 추가하거나 DJ에게 맡기세요."
+    "empty": "빈 세트 —— 파일을 추가하거나 DJ에게 맡기세요.",
+    "nextInQueue_other": "다음 재생 · {{count}}"
   },
   "folderImport": {
     "cta": "폴더 가져오기",

@@ -59,7 +59,9 @@
     "title": "Queue",
     "ready": "{{ready}}/{{total}} ready",
     "addFiles": "Add files",
-    "empty": "Empty set — add files or let the DJ go."
+    "empty": "Empty set — add files or let the DJ go.",
+    "nextInQueue_one": "Next in queue · {{count}}",
+    "nextInQueue_other": "Next in queue · {{count}}"
   },
   "folderImport": {
     "cta": "Import folder",

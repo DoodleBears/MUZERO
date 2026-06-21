@@ -1489,7 +1489,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async playNextTrack(track) {
     log.debug("player", "playNextTrack", { trackId: track.id });
-    await playQueuePlayNext([track.id]);
+    // Manual "play next" joins the Next-in-Queue FIFO block (marked `requested`),
+    // anchored to the store cursor (what's actually playing) so it lands right after
+    // the current track even while the persisted cursor lags — same as a live request.
+    // The queue panel surfaces this block as "Next in queue" (Q10 / Spotify parity).
+    await playQueueRequestNextAt(get().currentIndex, [track.id]);
   },
 
   async playRequestNow(track) {

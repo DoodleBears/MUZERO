@@ -470,8 +470,8 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 - [x] **Q8 稳定复用 + Setting（完成）**：洗牌快照 `shuffleOrderIds` + `shuffleContextKey`（模块作用域，within-session）。`setShuffle(on)` 默认**复用**同 context 的快照（`reuseShuffle`，不重排顺序、当前曲作光标）；仅切歌单（contextKey 变）或开 Setting 才 `materializeShuffle` 重洗。新增 `AppSettings.shuffleReshuffleOnToggle`（默认关）+ Settings「播放」面板可见开关（i18n 四语，规则 3）。单测 2 个 + 真机 E2E 第 8 项通过。
 - [x] **续播（Q3，核心已满足）**：shuffle 物化进**已持久的 `playQueue.entries`** → 重启后队列就是上次的播放顺序 + 光标恢复，自然续播。（跨重启的「playing from 标签 / toggle-off 还自然序」需持久 `queueSource`/`naturalOrderIds` —— 见下「剩余」。）
 - [ ] **Q9 防接缝**：repeat-all 轮尾若重洗则新首曲 ≠ 刚播曲（4a 已对 toggle 钉当前首位，轮尾默认复用同排列 → 当前不重洗，无接缝问题）。
-- [ ] **点歌 FIFO 显式化（Q10）**：`playNextTrack` 走 `requested` 优先块 + **队列面板「接下来播放」分区**（UI，未做）。
-- [ ] 跨重启持久 `queueSource` + `naturalOrderIds`（label / 关随机还原）；DJ autoExtend 在 shuffle 下洗入未播段（4a 暂追加末尾）；大队列首播 perf 实测。
+- [x] **点歌 FIFO 显式化 + 面板提示（Q10，完成）**：`playNextTrack` 改走 `requested` 优先块（`playQueueRequestNextAt`，按 store 光标锚定）→ 手动点歌与直播请求统一进「接下来播放」FIFO。[`QueuePanel`](../../../../src/components/player/queue-panel.tsx) 头部显示「**接下来播放 · N**」（独立 `getPlayQueue` liveQuery 数 `requested` 块，不碰 perf-critical store 订阅；i18n 四语）。单测 1 个。（逐行分区因虚拟列表成本暂用计数提示替代——已传达 Spotify「Next in Queue」概念。）
+- [ ] 跨重启持久 `queueSource` + `naturalOrderIds`（label / 关随机还原）；DJ autoExtend 在 shuffle 下洗入未播段（4a 暂追加末尾，低优）；大队列首播 perf 实测。
 
 ### Phase 4 Checklist
 

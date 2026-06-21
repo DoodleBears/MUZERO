@@ -2117,4 +2117,25 @@ describe("player-store context-aware play (playTrackInContext)", () => {
       expect(ids[0]).toBe(tracks2[0].id); // clicked pinned first
     });
   });
+
+  it("a manual play-next joins the Next-in-Queue block (requested) right after current (Q10)", async () => {
+    const rt = await loadRuntime();
+    const { db, repos, usePlayerStore } = rt;
+    const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c"]);
+    const d = readyTrack("trk_d", set.id, "D", "blb_d");
+    await db.tracks.add(d);
+    await putMediaBlob(db, d.id, "blb_d");
+
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[0], { source: { kind: "set", setId: set.id }, tracks });
+    await waitFor(() => expect(usePlayerStore.getState().currentIndex).toBe(0));
+
+    await usePlayerStore.getState().playNextTrack(d);
+
+    await waitFor(() => expect(usePlayerStore.getState().queue[1]?.id).toBe("trk_d"));
+    const pq = await repos.getPlayQueue();
+    expect(pq.entries[pq.currentIndex + 1]?.trackId).toBe("trk_d");
+    expect(pq.entries[pq.currentIndex + 1]?.requested).toBe(true); // marked as Next-in-Queue
+  });
 });

@@ -59,7 +59,8 @@
     "title": "队列",
     "ready": "已就绪 {{ready}}/{{total}}",
     "addFiles": "添加文件",
-    "empty": "空歌单 —— 添加文件，或让 DJ 来填充。"
+    "empty": "空歌单 —— 添加文件，或让 DJ 来填充。",
+    "nextInQueue_other": "接下来播放 · {{count}}"
   },
   "folderImport": {
     "cta": "导入文件夹",
