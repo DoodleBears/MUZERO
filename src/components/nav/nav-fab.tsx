@@ -9,7 +9,6 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { isMac, modifierSymbol } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
-import { transitionState } from "@/lib/view-transition-react";
 
 function shortcutKeys(index: number, mac: boolean): string[] {
   return [modifierSymbol(mac), String(index + 1)];
@@ -117,7 +116,9 @@ export function NavFab({ value, onChange }: { value: Tab; onChange: (tab: Tab) =
 
   function pick(id: Tab) {
     if (closeTimer.current) clearTimeout(closeTimer.current);
-    transitionState(() => onChange(id));
+    // Plain tab switch — `onChange` routes through `navigateToTab` (App), faithful
+    // on kept-mounted tabs. No View Transition (it reset library scroll/sort).
+    onChange(id);
     setExpanded(false);
   }
 

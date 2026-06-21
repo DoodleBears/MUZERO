@@ -17,11 +17,12 @@ describe("navigateToTab", () => {
   });
 
   it("never wraps the switch in a view transition (kept-mounted tabs must stay faithful)", () => {
-    // The bug this helper fixes: routing a tab switch through `transitionState`
-    // (startViewTransition + flushSync) disturbed the kept-mounted library tab's
-    // scroll/detail/sort on the way back, while the plain-setTab dock-song open
-    // stayed faithful. navigateToTab is the faithful path — it must touch neither
-    // the View Transition API nor flushSync.
+    // The bug this helper fixes: routing a plain tab switch through
+    // `transitionState` (startViewTransition + flushSync) snapshots the whole
+    // kept-mounted tree and was the path that reset the library tab's
+    // scroll/detail/sort. A plain setTab on kept-mounted tabs is provably faithful.
+    // navigateToTab is that faithful path — it must touch neither the View
+    // Transition API nor flushSync.
     const startViewTransition = vi.fn();
     // biome-ignore lint/suspicious/noExplicitAny: install a spy where jsdom has none
     (document as any).startViewTransition = startViewTransition;

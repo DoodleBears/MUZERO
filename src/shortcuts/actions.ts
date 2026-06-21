@@ -2,8 +2,8 @@ import type { Tab } from "@/components/nav/dock-nav";
 import { getSettings, getTrack, saveSettings, setTrackLiked } from "@/db/repositories";
 import type { AppSettings } from "@/db/types";
 import { log } from "@/lib/logger";
+import { navigateToTab } from "@/lib/navigate-tab";
 import { tabForCycleShortcut } from "@/lib/shortcuts";
-import { transitionState } from "@/lib/view-transition-react";
 import type { RepeatMode } from "@/player/queue";
 import { nextRepeatMode } from "@/player/transport";
 import { useLyricsPanelStore } from "@/stores/lyrics-panel-store";
@@ -55,7 +55,6 @@ export interface ShortcutActionRunnerContext {
   getPlayerState: () => ShortcutPlayerActionState;
   getTab: () => Tab;
   setTab: (tab: Tab) => void;
-  transitionState: (fn: () => void) => void;
   toggleQueue: () => void;
   getSettings: () => Promise<ShortcutSettings>;
   saveSettings: (patch: Partial<AppSettings>) => Promise<unknown>;
@@ -75,7 +74,6 @@ export function createShortcutActionRunnerContext(
     getPlayerState: usePlayerStore.getState,
     getTab: () => useNavStore.getState().tab,
     setTab,
-    transitionState,
     toggleQueue: () => useUiStore.getState().toggleQueue(),
     getSettings,
     saveSettings,
@@ -191,13 +189,14 @@ const SHORTCUT_ACTION_HANDLERS: Record<string, ShortcutActionHandler> = {
   },
   "playback.like": (ctx) => void toggleCurrentTrackLike(ctx),
   "playback.toggleFullscreen": (ctx) => void ctx.toggleDocumentFullscreen(),
-  "nav.tabNow": (ctx) => ctx.transitionState(() => ctx.setTab("now")),
-  "nav.tabLibrary": (ctx) => ctx.transitionState(() => ctx.setTab("search")),
-  "nav.tabSettings": (ctx) => ctx.transitionState(() => ctx.setTab("settings")),
-  "nav.tabNext": (ctx) =>
-    ctx.transitionState(() => ctx.setTab(tabForCycleShortcut(ctx.getTab(), 1))),
-  "nav.tabPrev": (ctx) =>
-    ctx.transitionState(() => ctx.setTab(tabForCycleShortcut(ctx.getTab(), -1))),
+  // Tab nav is a plain, faithful switch on kept-mounted tabs — never a View
+  // Transition (which snapshots the whole tree and reset library scroll/sort).
+  // See navigate-tab + the tab-switch state-reset alignment PRD.
+  "nav.tabNow": (ctx) => navigateToTab(ctx.setTab, "now"),
+  "nav.tabLibrary": (ctx) => navigateToTab(ctx.setTab, "search"),
+  "nav.tabSettings": (ctx) => navigateToTab(ctx.setTab, "settings"),
+  "nav.tabNext": (ctx) => navigateToTab(ctx.setTab, tabForCycleShortcut(ctx.getTab(), 1)),
+  "nav.tabPrev": (ctx) => navigateToTab(ctx.setTab, tabForCycleShortcut(ctx.getTab(), -1)),
   "queue.toggle": (ctx) => ctx.toggleQueue(),
   "lyrics.toggleStage": (ctx) => void toggleLyricsVisible(ctx),
   "visualizer.cycleMode": (ctx) => void cycleVisualizerPlacement(ctx),
