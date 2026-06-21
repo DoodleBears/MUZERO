@@ -1,4 +1,4 @@
-import type { SetDisplayMode, Track } from "@/db/types";
+import type { SetDisplayMode, Track, TrackKind, TrackStatus } from "@/db/types";
 
 /** What the "stage" should render for the current track. */
 export type StageContent = "video" | "cover" | "title";
@@ -10,8 +10,13 @@ export type StageContent = "video" | "cover" | "title";
  * `video` kind that has finished landing (`status === "ready"`); a generating /
  * pending / failed video has no playable bytes yet, so the stage falls back to
  * cover/title and the background stays on the image path. Undefined → false.
+ *
+ * Accepts loose `kind`/`status` (both optional) so the ambient background can pass
+ * its already-destructured fields and reuse the EXACT same gate as the stage.
  */
-export function trackIsPlayableVideo(track: Pick<Track, "kind" | "status"> | undefined): boolean {
+export function trackIsPlayableVideo(
+  track: { kind?: TrackKind; status?: TrackStatus } | undefined,
+): boolean {
   return track?.kind === "video" && track.status === "ready";
 }
 

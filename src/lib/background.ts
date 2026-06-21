@@ -1,4 +1,5 @@
 import type { BackgroundMode, Track, TrackKind, TrackStatus } from "@/db/types";
+import { trackIsPlayableVideo } from "./track-display";
 
 /**
  * Trailing-debounce window for expensive cover-derived background work (Pixi
@@ -79,7 +80,12 @@ export function resolvePixiBackgroundMedia(opts: {
   hasTrackMedia: boolean;
 }): { source: BackgroundMediaSource; mediaType: BackgroundMediaType } {
   if (opts.mode === "none") return { source: "none", mediaType: "image" };
-  if (opts.trackKind === "video" && opts.trackStatus === "ready" && opts.hasTrackMedia) {
+  // Same "is this a playable video" gate as the foreground stage (single source of
+  // truth) — so the background and stage never disagree about playing a video.
+  if (
+    trackIsPlayableVideo({ kind: opts.trackKind, status: opts.trackStatus }) &&
+    opts.hasTrackMedia
+  ) {
     return { source: "track-video", mediaType: "video" };
   }
   return { source: opts.imageSource, mediaType: "image" };
@@ -94,9 +100,8 @@ export function trackHasBackgroundVideoMedia(
   track: Pick<Track, "blobId" | "kind" | "remoteMediaUrl" | "sourcePath" | "status"> | undefined,
 ): boolean {
   return (
-    track?.kind === "video" &&
-    track.status === "ready" &&
-    (Boolean(track.blobId) || Boolean(track.remoteMediaUrl) || Boolean(track.sourcePath))
+    trackIsPlayableVideo(track) &&
+    (Boolean(track?.blobId) || Boolean(track?.remoteMediaUrl) || Boolean(track?.sourcePath))
   );
 }
 

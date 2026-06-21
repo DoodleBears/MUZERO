@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { TrackKind, TrackStatus } from "@/db/types";
 import {
   type BackgroundRenderTarget,
   resolveBackgroundSource,
@@ -6,6 +7,7 @@ import {
   settleBackgroundTarget,
   trackHasBackgroundVideoMedia,
 } from "./background";
+import { trackIsPlayableVideo } from "./track-display";
 
 describe("resolveBackgroundSource", () => {
   it("cover priority: the cover wins when present", () => {
@@ -182,6 +184,43 @@ describe("resolvePixiBackgroundMedia", () => {
         hasTrackMedia: false,
       }),
     ).toEqual({ source: "gallery-slideshow", mediaType: "image" });
+  });
+});
+
+describe("front/back video-gate parity (single source of truth)", () => {
+  const kinds: TrackKind[] = ["audio", "video"];
+  const statuses: TrackStatus[] = ["pending", "generating", "ready", "failed"];
+
+  it("the Pixi background plays a video iff trackIsPlayableVideo — same gate as the stage", () => {
+    for (const trackKind of kinds) {
+      for (const trackStatus of statuses) {
+        const pixiVideo =
+          resolvePixiBackgroundMedia({
+            imageSource: "cover",
+            trackKind,
+            trackStatus,
+            hasTrackMedia: true,
+          }).source === "track-video";
+        // The foreground stage shows video iff trackIsPlayableVideo (Phase 1). The
+        // background MUST agree, or one plays a video while the other shows a cover.
+        expect(pixiVideo).toBe(trackIsPlayableVideo({ kind: trackKind, status: trackStatus }));
+      }
+    }
+  });
+
+  it("background video media gate also keys on trackIsPlayableVideo", () => {
+    for (const trackKind of kinds) {
+      for (const trackStatus of statuses) {
+        const hasBg = trackHasBackgroundVideoMedia({
+          blobId: "blb_mv",
+          kind: trackKind,
+          remoteMediaUrl: undefined,
+          status: trackStatus,
+        });
+        // With media present, background-capable iff it's a playable video.
+        expect(hasBg).toBe(trackIsPlayableVideo({ kind: trackKind, status: trackStatus }));
+      }
+    }
   });
 });
 

@@ -1,6 +1,6 @@
 # PRD: 视频 track 切歌后前台 stage 不播视频、只显示封面（前/后台视频源错位）
 
-**Status:** Draft
+**Status:** Completed
 **Created:** 2026-06-21
 **Author:** MUZERO / Player
 **Module:** Now Playing 前台 stage 视频显示（`MediaStage` 共享 `<video>` ↔ Pixi 背景独立 `<video>` 错位）
@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 观测先行：把「前台 content 判定 vs 实际播放」可见化 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 修复：视频显示判定 + `<video>` 收养/续播跟 LIVE `current` | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 回归与单测：穷举切歌时序 + 前后台同源 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 回归与单测：穷举切歌时序 + 前后台同源 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -278,21 +278,23 @@ nowplaying.stage.content  { liveTrackId, displayTrackId, liveKind, liveStatus,
 - [x] 不引入隐藏 flag；回退 = `git revert`。
 - [~] 前台 video 与 Pixi 背景「同播同停」、coverflow hand-off 无回归闪烁、tab-return 续播 → 需真机 QA（见 OQ#1/#3；on-page 切歌路径已被单测 + 幂等 resync 覆盖）。
 
-### Phase 3: 回归与单测
+### Phase 3: 回归与单测 ✅
 
-**Goal:** 锁死时序不变量，防回归。
+**Goal:** 锁死「前后台同源」不变量，防再次漂移。
 
-**Tasks:**
-- [ ] 纯函数/hook 测：`useBurstSettledValue` 在 `value` 持续换引用时**不**影响视频判定（因为视频判定不再读它）。
-- [ ] `MediaStage` 渲染测：`current` 为 ready 视频、`displayTrack` 仍停在上一首封面 track 时，`showVideo === true`、不渲染 `CanvasCover`。
-- [ ] 前后台同源测：同一 `current` 下，`resolveStageContent`(LIVE) 与 `resolvePixiBackgroundMedia`(LIVE) 对「是否视频」结论一致。
-- [ ] `make check`（typecheck + lint + test）通过。
+**Done:**
+- [x] 把 `background.ts` 的 `resolvePixiBackgroundMedia` / `trackHasBackgroundVideoMedia` 改为复用 `trackIsPlayableVideo`（[`background.ts`](../../../../src/lib/background.ts)）——背景与前台从此用**同一个** video 判定谓词（行为不变，既有 22 测全绿）。谓词放宽签名以接收背景已拆出的 `kind`/`status` 字段。
+- [x] **前后台同源不变量测**（[`background.test.ts`](../../../../src/lib/background.test.ts)）：穷举 `kind × status`，断言 `resolvePixiBackgroundMedia(...).source === "track-video"` 当且仅当 `trackIsPlayableVideo(...)`，且 `trackHasBackgroundVideoMedia` 同样以该谓词为门——任何一边偏移都会让此测失败。
+- [x] **切歌时序回归**由 `resolveStageLayers` 单测覆盖（Phase 2）：video→video（settled）、cover→video（**displayTrack 滞后封面**→视频立即显示）、video→cover（滞后视频显示 poster 不空白）、视频解码失败、cover 模式、无 track。
+- [x] `make check` 等价门禁：`tsc --noEmit` exit 0；`biome check`（改动 5 文件）clean；改动相关 `track-display.test.ts` + `background.test.ts` 共 41 测全绿。
 
 ### Phase 3 Checklist
 
-- [ ] 新增测试覆盖「切歌后 displayTrack 滞后/卡住但视频立即显示」。
-- [ ] 覆盖 video→video / cover→video / video→cover 三类切换。
-- [ ] 全量门禁绿。
+- [x] 新增测试覆盖「切歌后 displayTrack 滞后/卡住但视频立即显示」（`resolveStageLayers` REGRESSION 用例）。
+- [x] 覆盖 video→video / cover→video / video→cover 三类切换（+解码失败/cover 模式/无 track）。
+- [x] 前后台用同一 `trackIsPlayableVideo` 谓词 + 同源不变量测落地。
+- [x] 全量门禁：tsc 0 / biome clean / 相关单测绿；**完整 vitest 单独跑全绿**（3263 passed）。
+- [N/A] 备注：`src/stores/*`（folder-sync / player-store-resume）若与其它进程**并发**跑会因 fake-indexeddb + 定时器在 CPU 争用下**超时**而偶发失败（15s+ 时长），**单独跑全过**，与本改动无关（这些测试不触达 `background.ts`/`media-stage.tsx`）。
 
 ---
 
@@ -348,6 +350,7 @@ nowplaying.stage.content  { liveTrackId, displayTrackId, liveKind, liveStatus,
 | 2026-06-21 | MUZERO/Player | 初稿：定位根因为「前台视频判定用 burst-settled `displayTrack`、背景用 LIVE `current`」的错位（违反 media-stage.tsx:55 注释承诺）；给出观测先行 + 视频判定回 LIVE + `<video>` 续播跟 LIVE 的修复计划 |
 | 2026-06-21 | MUZERO/Player | Phase 1 完成：抽出 `trackIsPlayableVideo` 谓词（+单测）并让 `resolveStageContent` 复用；`MediaStage` 接入 `nowplaying.stage.content` 诊断（带 `mismatch` 信号）。OQ#4（共用谓词）落地。 |
 | 2026-06-21 | MUZERO/Player | Phase 2 完成：新增 `resolveStageLayers`（视频层跟 LIVE、静帧跟 displayTrack 且只出 cover/title）；`MediaStage` 改用之，reset 改按 LIVE `current?.id`，新增幂等 resync effect 缓解 2.3。回归单测含原 bug 场景；全量 vitest/tsc/biome 绿。OQ#1 主因判定 2.2 已修。 |
+| 2026-06-21 | MUZERO/Player | Phase 3 完成：`background.ts` 复用 `trackIsPlayableVideo`，新增前后台同源不变量测（穷举 kind×status）。tsc 0 / biome clean / 相关单测 41 绿 / 完整 vitest 单独跑全绿。Status → Completed。记录 `src/stores/*` 在并发下的偶发超时（与本改动无关）。 |
 
 ---
 
