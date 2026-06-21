@@ -7,6 +7,7 @@ import {
   nextIndex,
   nextStreamSkipIndex,
   prevIndex,
+  remapShuffleOrder,
   shouldAutoExtend,
   shuffleManualNext,
   shuffleNext,
@@ -341,5 +342,37 @@ describe("windowManualIndices (±radius cover window)", () => {
         shuffleOrder: [2, 0, 3, 1],
       }),
     ).toEqual({ prev: [2, 1], next: [3, 1] });
+  });
+});
+
+describe("remapShuffleOrder (repair across structural queue changes)", () => {
+  it("returns [] for an empty order (shuffle off / not built yet)", () => {
+    expect(remapShuffleOrder([], ["a", "b"], ["a", "b"])).toEqual([]);
+  });
+
+  it("is a no-op permutation when ids are unchanged", () => {
+    // Same ids → positions are unchanged, order preserved verbatim.
+    expect(remapShuffleOrder([2, 0, 1], ["a", "b", "c"], ["a", "b", "c"])).toEqual([2, 0, 1]);
+  });
+
+  it("remaps surviving positions and appends a play-now cut-in at the end", () => {
+    // Queue [a,b,c] order [0,2,1]; insert x after a → [a,x,b,c].
+    // a:0→0, c:2→3, b:1→2, then the brand-new x (pos 1) appends last.
+    const order = remapShuffleOrder([0, 2, 1], ["a", "b", "c"], ["a", "x", "b", "c"]);
+    expect(order).toEqual([0, 3, 2, 1]);
+    // Still a valid permutation of the NEW queue length.
+    expect([...order].sort((p, q) => p - q)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("drops removed tracks and stays a valid permutation", () => {
+    // Remove b from [a,b,c] → [a,c]; order [1,0,2] keeps a (0→0) and c (2→1).
+    const order = remapShuffleOrder([1, 0, 2], ["a", "b", "c"], ["a", "c"]);
+    expect(order).toEqual([0, 1]);
+    expect([...order].sort((p, q) => p - q)).toEqual([0, 1]);
+  });
+
+  it("always covers every new position exactly once (append on reorder)", () => {
+    const order = remapShuffleOrder([0, 1], ["a", "b"], ["b", "a", "c"]);
+    expect([...order].sort((p, q) => p - q)).toEqual([0, 1, 2]);
   });
 });

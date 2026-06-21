@@ -99,6 +99,7 @@ import {
   manualStepIndex,
   prevIndex,
   type RepeatMode,
+  remapShuffleOrder,
   shuffleManualNext,
   shufflePrev,
   upcomingManualIndices,
@@ -935,7 +936,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         // switching context sets must NOT reset it.
         djEnabled: session?.config.autoExtend ?? false,
       };
-      if (listChanged) patch.queue = queue;
+      if (listChanged) {
+        patch.queue = queue;
+        // The queue grew/shrank/reordered while shuffling — repair the (position-
+        // based) shuffle order so it stays a valid permutation of the new queue.
+        // Without this, a play-now cut-in (or DJ append) desyncs the order from the
+        // queue, killing "up next" and forcing a full reshuffle on the next advance.
+        if (state.shuffle && shuffleOrder.length > 0) {
+          shuffleOrder = remapShuffleOrder(
+            shuffleOrder,
+            state.queue.map((track) => track.id),
+            queue.map((track) => track.id),
+          );
+        }
+      }
       if (!nextTrackId) {
         patch.positionSec = 0;
         patch.durationSec = 0;

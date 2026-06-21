@@ -1622,3 +1622,146 @@ describe("player-store order/content decoupling (Axis B-1)", () => {
     });
   });
 });
+
+type PlayerStoreForTest = Awaited<ReturnType<typeof loadRuntime>>["usePlayerStore"];
+
+// --- Live-request "play now" (立即播放) cut-in, end to end ----------------------
+// The principle (per the live-request UX): insert the requested track as the NEXT
+// slot, then switch to it and start playing — so it cuts in over whatever is on now
+// WITHOUT losing the rest of the queue. This must hold in EVERY transport mode:
+// linear, shuffle, repeat-all and repeat-one. We drive the REAL `playRequestNow`
+// against the mocked MediaEngine and assert the requested track becomes current +
+// actually plays, and that the (position-based) shuffle order stays consistent so
+// the next advance / "up next" don't break after the cut-in.
+describe("player-store live request play-now (立即播放) cut-in", () => {
+  async function seedForRequest() {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const session = await repos.createSession({
+      seedPrompt: "",
+      config: { autoExtend: false },
+      displayMode: "cover",
+    });
+    const first = track("trk_first", session.id, "First");
+    const second = track("trk_second", session.id, "Second");
+    const third = track("trk_third", session.id, "Third");
+    // The requested track lives in the library but is NOT yet in the play queue.
+    const requested = track("trk_requested", session.id, "Requested Song");
+    await db.tracks.bulkAdd([first, second, third, requested]);
+    // Give every track a ready local blob so playback actually loads + play()s.
+    for (const t of [first, second, third, requested]) {
+      const blobId = `blb_${t.id}`;
+      await db.mediaBlobs.put({
+        id: blobId,
+        trackId: t.id,
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+      });
+      await db.tracks.update(t.id, { status: "ready", blobId });
+    }
+    await repos.prependTrackIds(session.id, [first.id, second.id, third.id]);
+    await repos.playQueueSet([first.id, second.id, third.id], {
+      contextSetId: session.id,
+      currentIndex: 0,
+    });
+    usePlayerStore.getState().init();
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(3));
+    return { db, repos, session, first, second, third, requested, usePlayerStore };
+  }
+
+  async function startPlayingFirst(usePlayerStore: PlayerStoreForTest) {
+    await usePlayerStore.getState().playIndex(0);
+    await waitFor(() => expect(usePlayerStore.getState().currentIndex).toBe(0));
+    mediaEngineMock.play.mockClear();
+  }
+
+  it("cuts the requested track in right after the current track and plays it (linear)", async () => {
+    const { first, requested, third, usePlayerStore } = await seedForRequest();
+    await startPlayingFirst(usePlayerStore);
+
+    await usePlayerStore.getState().playRequestNow(requested);
+
+    const s = usePlayerStore.getState();
+    // Inserted at cursor+1 and made current — the requested track is now playing.
+    expect(s.currentIndex).toBe(1);
+    expect(s.queue[s.currentIndex]?.id).toBe(requested.id);
+    // The rest of the queue is intact (nothing dropped): [first, requested, second?, third].
+    expect(s.queue.map((t) => t.id)).toEqual([first.id, requested.id, "trk_second", third.id]);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("plays the requested track immediately with shuffle ON", async () => {
+    const { requested, usePlayerStore } = await seedForRequest();
+    await startPlayingFirst(usePlayerStore);
+    usePlayerStore.getState().setShuffle(true);
+
+    await usePlayerStore.getState().playRequestNow(requested);
+
+    const s = usePlayerStore.getState();
+    expect(s.queue[s.currentIndex]?.id).toBe(requested.id);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("plays the requested track immediately with repeat-all", async () => {
+    const { requested, usePlayerStore } = await seedForRequest();
+    await startPlayingFirst(usePlayerStore);
+    usePlayerStore.getState().setRepeat("all");
+
+    await usePlayerStore.getState().playRequestNow(requested);
+
+    const s = usePlayerStore.getState();
+    expect(s.queue[s.currentIndex]?.id).toBe(requested.id);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("plays the requested track immediately with repeat-one (overriding the looped track)", async () => {
+    const { requested, usePlayerStore } = await seedForRequest();
+    await startPlayingFirst(usePlayerStore);
+    usePlayerStore.getState().setRepeat("one");
+
+    await usePlayerStore.getState().playRequestNow(requested);
+
+    const s = usePlayerStore.getState();
+    expect(s.queue[s.currentIndex]?.id).toBe(requested.id);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("keeps the shuffle order consistent with the queue after the cut-in (up-next still resolves)", async () => {
+    const { requested, usePlayerStore } = await seedForRequest();
+    await startPlayingFirst(usePlayerStore);
+    usePlayerStore.getState().setShuffle(true);
+
+    await usePlayerStore.getState().playRequestNow(requested);
+
+    // Before the shuffle-order repair, the position-based order was stale (length 3
+    // vs queue length 4), so peekTrack bailed to undefined and the next advance
+    // would throw the order away. After the repair it stays a valid permutation.
+    const upNext = usePlayerStore.getState().peekTrack("next");
+    expect(upNext).toBeDefined();
+  });
+
+  it("advances to a real distinct track when the requested song ends under shuffle", async () => {
+    const { requested, usePlayerStore } = await seedForRequest();
+    await startPlayingFirst(usePlayerStore);
+    usePlayerStore.getState().setShuffle(true);
+
+    await usePlayerStore.getState().playRequestNow(requested);
+    expect(usePlayerStore.getState().queue[usePlayerStore.getState().currentIndex]?.id).toBe(
+      requested.id,
+    );
+
+    // Simulate the requested track finishing — the engine fires onEnded → next().
+    const engine = mediaEngineMock.instances.at(-1);
+    if (!engine) throw new Error("expected a media engine instance");
+    (engine.callbacks as { onEnded?: () => void }).onEnded?.();
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      // It advanced to a different, valid track (not stuck / not undefined).
+      expect(s.currentIndex).toBeGreaterThanOrEqual(0);
+      expect(s.queue[s.currentIndex]).toBeDefined();
+      expect(s.queue[s.currentIndex]?.id).not.toBe(requested.id);
+    });
+  });
+});

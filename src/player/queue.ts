@@ -107,6 +107,53 @@ export function buildShuffleOrder(
 }
 
 /**
+ * Repair a shuffle order (queue POSITIONS) across a STRUCTURAL queue change
+ * (insert / append / remove / reorder) by remapping through track ids, so the
+ * order stays a valid permutation of the NEW queue WITHOUT reshuffling the
+ * already-decided upcoming sequence:
+ *  - surviving tracks keep their relative shuffle order, remapped to new positions
+ *  - removed tracks drop out
+ *  - brand-new tracks (a live-request cut-in, a DJ append) go to the END as future
+ *    shuffle picks — never a surprise full reshuffle
+ *
+ * Why this exists: `shuffleOrder` stores POSITIONS, but an insert shifts every
+ * position at/after the slot, so a play-now cut-in silently desyncs the order from
+ * the queue (length mismatch). Left unrepaired, `peekTrack`/`upcoming*` bail out
+ * (stale length ⇒ no "up next") and the next advance throws the whole order away
+ * and reshuffles. Returns `[]` when the order was empty (shuffle off / not yet
+ * built) so the caller keeps lazily building on demand.
+ */
+export function remapShuffleOrder(
+  order: readonly number[],
+  oldIds: readonly string[],
+  newIds: readonly string[],
+): number[] {
+  if (order.length === 0) return [];
+  const newPosById = new Map<string, number>();
+  newIds.forEach((id, i) => {
+    if (!newPosById.has(id)) newPosById.set(id, i); // first occurrence wins for dup ids
+  });
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const oldPos of order) {
+    const id = oldIds[oldPos];
+    if (id === undefined) continue;
+    const newPos = newPosById.get(id);
+    if (newPos === undefined || seen.has(newPos)) continue;
+    out.push(newPos);
+    seen.add(newPos);
+  }
+  // Append any positions not yet covered (brand-new tracks / unmapped dup slots).
+  for (let i = 0; i < newIds.length; i += 1) {
+    if (!seen.has(i)) {
+      out.push(i);
+      seen.add(i);
+    }
+  }
+  return out;
+}
+
+/**
  * Step forward through a shuffled order. Returns the next queue index (or null to
  * stop) plus the order to keep (it reshuffles when a cycle wraps under "all", and
  * rebuilds if it's stale vs `length`). Pure + injectable rng for tests.
