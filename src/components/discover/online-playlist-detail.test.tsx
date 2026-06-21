@@ -11,8 +11,7 @@ const mocks = vi.hoisted(() => ({
     getDailyRecommendedTracks: vi.fn(),
     importPlaylist: vi.fn(),
   },
-  playStreamedHit: vi.fn(),
-  playStreamedHits: vi.fn(),
+  playOnlinePlaylist: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-virtual", () => ({
@@ -66,8 +65,7 @@ vi.mock("@/stores/player-store", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: selector stand-in
   usePlayerStore: (sel: any) =>
     sel({
-      playStreamedHit: mocks.playStreamedHit,
-      playStreamedHits: mocks.playStreamedHits,
+      playOnlinePlaylist: mocks.playOnlinePlaylist,
     }),
 }));
 
@@ -147,5 +145,27 @@ describe("OnlinePlaylistDetail", () => {
     );
     expect(mocks.provider.getDailyRecommendedTracks).not.toHaveBeenCalled();
     expect(screen.getByText("streamSources.import")).toBeInTheDocument();
+  });
+
+  it("plays a clicked row + 'play all' in the online-playlist context", async () => {
+    const playlist = { id: "p1", name: "Playlist", source: "netease", trackCount: 1 } as const;
+    render(<OnlinePlaylistDetail playlist={playlist} onBack={vi.fn()} />);
+
+    const row = await screen.findByText("Playlist Song");
+    fireEvent.click(row);
+    // The whole playlist (its hits) becomes the context; the clicked hit is index 0.
+    expect(mocks.playOnlinePlaylist).toHaveBeenCalledWith(
+      playlist,
+      [expect.objectContaining({ externalId: "track-1", title: "Playlist Song" })],
+      0,
+    );
+
+    mocks.playOnlinePlaylist.mockClear();
+    fireEvent.click(screen.getByText("gallery.playAll"));
+    expect(mocks.playOnlinePlaylist).toHaveBeenCalledWith(
+      playlist,
+      [expect.objectContaining({ externalId: "track-1" })],
+      0,
+    );
   });
 });

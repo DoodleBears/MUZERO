@@ -1905,4 +1905,34 @@ describe("player-store context-aware play (playTrackInContext)", () => {
       expect(s.currentIndex).toBe(0);
     });
   });
+
+  it("plays from an online playlist as its own context (not the shared online pool)", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const home = await repos.createSession({
+      name: "online-cache",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const a = readyTrack("trk_a", home.id, "A", "blb_a");
+    const b = readyTrack("trk_b", home.id, "B", "blb_b");
+    await db.tracks.bulkAdd([a, b]);
+    await putMediaBlob(db, a.id, "blb_a");
+    await putMediaBlob(db, b.id, "blb_b");
+    const playlist = { id: "pl_1", name: "My Playlist", source: "netease", trackCount: 2 } as const;
+
+    usePlayerStore.getState().init();
+    const tracks = await repos.getTracksByIds([a.id, b.id]);
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[1], { source: { kind: "online-playlist", playlist }, tracks });
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queueSource).toEqual({ kind: "online-playlist", playlist });
+      expect(s.queue.map((t) => t.id)).toEqual([a.id, b.id]);
+      expect(s.queue[s.currentIndex]?.id).toBe(b.id);
+      expect(s.activeSessionId).toBeNull();
+    });
+    await expect(repos.getPlayQueue()).resolves.toMatchObject({ contextSetId: undefined });
+  });
 });

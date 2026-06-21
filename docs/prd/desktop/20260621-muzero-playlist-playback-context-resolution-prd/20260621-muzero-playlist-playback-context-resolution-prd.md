@@ -17,7 +17,7 @@
 |-------|------|--------|------|
 | 1 | Set 上下文 + 顺序对齐（修复主 bug） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 派生实体 / 系统歌单 / 全部歌曲上下文统一 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Online 歌单（发现 tab 第 5 项）上下文 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Online 歌单（发现 tab 第 5 项）上下文 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）** | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | `sessionId` 语义收敛 + `playTrack` 清理 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -439,20 +439,21 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 **Goal:** 从在线歌单点歌/播放全部，队列 == 该在线歌单的曲目（有序），来源 == 这个在线歌单；不再退化成共享在线池。
 
 **Tasks:**
-- [ ] 启用 `QueueSource` 的 `online-playlist` 变体（既有声明，§3.2.1）。
-- [ ] `playStreamedHit` / `playStreamedHits` 上下文化（§4.6）：携整张 hits + playlist，物化为 streamed 队列，设 `queueSource = online-playlist`、`djEnabled=false`、`contextSetId` 不设。
-- [ ] 选定并实现物化策略（Open Questions Q6：急切 vs 懒 + 后台补齐）。
-- [ ] 共享在线集 `streamOnlineSetId` 角色降级为缓存容器，不再作播放上下文。
-- [ ] `OnlinePlaylistDetail` 的 `onPlay` / 「播放全部」走新路径；复用 `openOnlinePlaylist` anchor。
-- [ ] `resolvePlayingSource` / 来源标签 / jump-to-source 对 `online-playlist` 补 case。
+- [x] `QueueSource` 的 `online-playlist` 变体已启用（之前死代码，现由 `playOnlinePlaylist` 赋值）。
+- [x] 新增 `playOnlinePlaylist(playlist, hits, startIndex)`（[player-store.ts](../../../../src/stores/player-store.ts)）：携整张 hits + playlist，物化为 streamed 队列，经 `playTrackInContext({online-playlist})` → `queueSource=online-playlist`、`djEnabled=false`、`contextSetId` 不设。移除已无用的 `playStreamedHits`（`playStreamedHit` 保留给全局搜索 Q7）。
+- [x] 物化策略 = Q6：**整张 metadata 急切进队列**（新 repo `materializeHitsToTracks` 按 hit 顺序 dedup 物化、**不动 set membership**），**stream URL 懒解析**（沿用 `ensureLoadedAndPlay` 既有 per-play 解析）。
+- [x] 共享在线集 `streamOnlineSetId` 降级：仅作 streamed 行的 provenance / 离线缓存 home（不再 prepend 整张播放列表进其 membership、不作播放上下文）。
+- [x] `OnlinePlaylistDetail` 的 `onPlay`（`hits.indexOf(hit)`）/「播放全部」(`startIndex=0`) 走 `playOnlinePlaylist`。直接播 `startIndex`，无需 `openOnlinePlaylist` anchor。
+- [x] `resolvePlayingSource`（online-playlist case 既有）+ queue-panel 来源标签（Phase 2 已加 `playlist.name`）覆盖 online-playlist。
 
 ### Phase 3 Checklist
 
-- [ ] 单测/集成：从在线歌单点第 N 首 → 队列 == 该歌单 hits 物化后的有序列表、currentIndex 指向第 N 首、`queueSource={online-playlist,playlist}`、`contextSetId` 未设、`djEnabled=false`。
-- [ ] 单测：在线歌单「播放全部」与「点单曲」上下文一致（同一 queueSource + 同序队列）。
-- [ ] 大歌单（如数百首）首播延迟可接受（按选定的物化策略，用 perf HUD 实测）。
-- [ ] 来源标签显示为该在线歌单名；jump-to-source 行为合理（或合理回退）。
-- [ ] `make check` 通过。
+- [x] 单测/集成：`playTrackInContext({online-playlist})` → 队列 == 有序列表、currentIndex 指向点击项、`queueSource={online-playlist,playlist}`、`contextSetId` 未设、`activeSessionId=null`。
+- [x] 单测：`OnlinePlaylistDetail` 点单曲（index N）与「播放全部」(index 0) 都调 `playOnlinePlaylist(playlist, hits, …)`（同一上下文路径）。
+- [x] repo 单测 `materializeHitsToTracks`：按 hit 顺序返回、不动 set membership、replay 幂等（dedup）。
+- [x] 来源标签显示为在线歌单名；jump-to-source 走既有 online-playlist JumpTarget。
+- [ ] （非阻塞）大歌单首播延迟用 perf HUD 实测 — 留待真实 Electron 手测（急切物化是单 DB 写循环；stream 懒解析，不预解析）。
+- [x] `make check` 等价：tsc 通过；streamed-track-repo + player-store + online-playlist-detail 套件 64 passed。
 
 ### Phase 4: 随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）
 

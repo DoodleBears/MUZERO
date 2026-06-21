@@ -140,6 +140,7 @@ import {
   cacheStreamedTrackBlob,
   createStreamedTrack,
   hitToStreamedInput,
+  materializeHitsToTracks,
 } from "@/streamsrc/streamed-track-repo";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getOrCreateLocalDevice } from "@/sync/device-repo";
@@ -278,9 +279,18 @@ interface PlayerState {
   playRequestNext: (track: Track) => Promise<void>;
   /** Play a song from an online source (global search): import it into the online set, then play. */
   playStreamedHit: (hit: StreamSearchHit) => Promise<void>;
-  /** Play a batch of online hits in order (Discover "play all"): queue the tail into the
-   *  online set, then play the head via the same single-play path. */
-  playStreamedHits: (hits: StreamSearchHit[]) => Promise<void>;
+  /**
+   * Play an online playlist (发现 tab) as its OWN context: materialize the whole
+   * playlist's track metadata into the queue (in hit order, deduped) and play from
+   * `startIndex`, with `queueSource = { online-playlist }`. Stream URLs resolve
+   * lazily per play. The shared online set is only the rows' cache/provenance home —
+   * it is NOT the play context. See the playback-queue-model PRD (Part B / §4.6).
+   */
+  playOnlinePlaylist: (
+    playlist: StreamPlaylist,
+    hits: StreamSearchHit[],
+    startIndex: number,
+  ) => Promise<void>;
   /**
    * Import a source playlist into a NEW set of streamed tracks (tagged with the
    * playlist ref for later incremental re-sync); returns how many were added.
@@ -1426,17 +1436,29 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  async playStreamedHits(hits) {
+  async playOnlinePlaylist(playlist, hits, startIndex) {
     if (hits.length === 0) return;
-    // Queue the tail into the online set first (in order, deduped), then play the head
-    // via the proven single-play path — which handles set creation/activation + the
-    // active-set watcher race exactly once, so order ends up [hit0, hit1, …, hitN].
-    if (hits.length > 1) {
-      const setId = await ensureOnlineSet();
-      await addHitsToSet(setId, hits.slice(1));
-      void cacheStreamPlaylistTrackCovers({ sessionId: setId, hits: hits.slice(1) });
-    }
-    await get().playStreamedHit(hits[0]);
+    log.debug("player", "playOnlinePlaylist", {
+      source: playlist.source,
+      playlistId: playlist.id,
+      count: hits.length,
+      startIndex,
+    });
+    // Materialize the WHOLE playlist's metadata into streamed Track rows (deduped,
+    // in hit order) — the queue is the playlist itself, not the shared online pool.
+    // The shared online set is only these rows' provenance / offline-cache home.
+    const setId = await ensureOnlineSet();
+    const tracks = await materializeHitsToTracks(setId, hits);
+    // Cache covers in the background so the queue renders art offline (best-effort).
+    void cacheStreamPlaylistTrackCovers({ sessionId: setId, hits });
+    const idx = clampIndex(tracks.length, startIndex);
+    if (idx < 0) return;
+    // Stream URLs stay lazy — playTrackInContext → playIndex → ensureLoadedAndPlay
+    // resolves the clicked track's stream on demand (others as playback advances).
+    await get().playTrackInContext(tracks[idx], {
+      source: { kind: "online-playlist", playlist },
+      tracks,
+    });
   },
 
   async importStreamedPlaylist(sourceId, playlistId, name, opts) {

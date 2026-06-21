@@ -26,8 +26,7 @@ export function OnlinePlaylistDetail({
 }) {
   const { t } = useTranslation();
   const settings = useSettings();
-  const playStreamedHit = usePlayerStore((s) => s.playStreamedHit);
-  const playStreamedHits = usePlayerStore((s) => s.playStreamedHits);
+  const playOnlinePlaylist = usePlayerStore((s) => s.playOnlinePlaylist);
   const isDaily = isNeteaseDailyPlaylist(playlist);
   const [hits, setHits] = useState<StreamSearchHit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +123,7 @@ export function OnlinePlaylistDetail({
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button
               size="sm"
-              onClick={() => void playStreamedHits(hits)}
+              onClick={() => void playOnlinePlaylist(playlist, hits, 0)}
               disabled={hits.length === 0}
             >
               <Play className="size-4" />
@@ -170,7 +169,7 @@ export function OnlinePlaylistDetail({
           <OnlineTrackList
             hits={hits}
             emptyHint={t("streamSources.playlistEmpty")}
-            onPlay={(hit) => void playStreamedHit(hit)}
+            onPlay={(hit) => void playOnlinePlaylist(playlist, hits, hits.indexOf(hit))}
           />
         )}
       </div>
