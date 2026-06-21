@@ -339,6 +339,28 @@ export interface PlayQueueEntry {
   requested?: boolean;
 }
 
+/**
+ * Serializable snapshot of the play context's source — persisted so a relaunch can
+ * restore the "playing from" label + jump-to-source for NON-set contexts (set context
+ * uses {@link PlayQueue.contextSetId} + the session name). Structurally mirrors the
+ * store's `QueueSource`; kept here (not imported from the store) to avoid a cycle.
+ */
+export type PersistedQueueSource =
+  | { kind: "set"; setId: string }
+  | { kind: "system-playlist"; id: string }
+  | { kind: "entity"; entityKind: "artist" | "album"; entityKey: string; label: string }
+  | {
+      kind: "online-playlist";
+      playlist: {
+        id: string;
+        name: string;
+        coverUrl?: string;
+        trackCount: number;
+        source: StreamSourceId;
+      };
+    }
+  | { kind: "library" };
+
 export interface PlayQueue {
   id: "main"; // singleton
   entries: PlayQueueEntry[];
@@ -346,6 +368,18 @@ export interface PlayQueue {
   repeat: "off" | "one" | "all";
   /** Which 歌单 we're "playing from" — drives autoExtend continuation + UI. */
   contextSetId?: string;
+  /**
+   * Persisted "playing from" source (incl. non-set contexts) — restores the label +
+   * jump-to-source on relaunch. Additive, non-indexed (no Dexie bump). See the
+   * playback-queue-model PRD (Q3).
+   */
+  queueSource?: PersistedQueueSource;
+  /**
+   * The active context's NATURAL (pre-shuffle) order, persisted so "turn shuffle off"
+   * restores the curated order even after a relaunch (the materialized shuffle lives in
+   * `entries`). Additive, non-indexed. See the playback-queue-model PRD (Q3/Q8).
+   */
+  naturalOrderIds?: string[];
   updatedAt: number;
 }
 

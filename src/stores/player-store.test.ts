@@ -2138,4 +2138,38 @@ describe("player-store context-aware play (playTrackInContext)", () => {
     expect(pq.entries[pq.currentIndex + 1]?.trackId).toBe("trk_d");
     expect(pq.entries[pq.currentIndex + 1]?.requested).toBe(true); // marked as Next-in-Queue
   });
+
+  it("restores the queueSource + natural order from the persisted queue on boot (Q3)", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const home = await repos.createSession({
+      name: "home",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const a = readyTrack("trk_a", home.id, "A", "blb_a");
+    const b = readyTrack("trk_b", home.id, "B", "blb_b");
+    const c = readyTrack("trk_c", home.id, "C", "blb_c");
+    await db.tracks.bulkAdd([a, b, c]);
+    for (const it of [a, b, c]) await putMediaBlob(db, it.id, it.blobId as string);
+
+    // Simulate a prior session: playing the whole library, shuffled to [b,a,c], with the
+    // natural order [a,b,c] and the library source persisted on the play-queue row.
+    await repos.playQueueSet([b.id, a.id, c.id], { currentIndex: 0 });
+    await repos.playQueuePersistContextMeta({ kind: "library" }, [a.id, b.id, c.id]);
+    await repos.saveSettings({ playerShuffle: true });
+
+    usePlayerStore.getState().init();
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queueSource).toEqual({ kind: "library" }); // label restored from persistence
+      expect(s.queue.map((t) => t.id)).toEqual([b.id, a.id, c.id]); // persisted shuffled order
+    });
+
+    // "Turn shuffle off" restores the persisted natural order even after the relaunch.
+    await usePlayerStore.getState().setShuffle(false);
+    await waitFor(() =>
+      expect(usePlayerStore.getState().queue.map((t) => t.id)).toEqual([a.id, b.id, c.id]),
+    );
+  });
 });

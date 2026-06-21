@@ -589,7 +589,13 @@ async function activateExplicitQueue(
   naturalOrderIds = trackIds; // remember natural order so "turn shuffle off" can restore it
   loadedTrackId = null;
   cancelPlaybackLoading(set);
-  await playQueueSet(trackIds, { currentIndex: -1 });
+  await playQueueSet(trackIds, {
+    currentIndex: -1,
+    // Persist source + natural order so a relaunch restores the label + can un-shuffle
+    // this non-set context (Q3). QueueSource is structurally a PersistedQueueSource.
+    queueSource: source,
+    naturalOrderIds: trackIds,
+  });
   consumedTrackIds = new Set(trackIds);
   lastQueueSig = queueSig(tracks);
   set({
@@ -1115,11 +1121,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const nextTrack = currentIndex >= 0 ? queue[currentIndex] : undefined;
       const nextTrackId = nextTrack?.id;
       const metadataDuration = playableDurationSec(nextTrack?.durationSec);
+      // Boot restore (Q3): seed the module natural-order snapshot from persistence the
+      // first time, so "turn shuffle off" can un-shuffle after a relaunch. Only when empty
+      // — a live context load owns it thereafter (never overwrite the in-memory order).
+      if (!naturalOrderIds.length && pq.naturalOrderIds?.length) {
+        naturalOrderIds = pq.naturalOrderIds;
+      }
       const queueSource: QueueSource | undefined = contextSetId
         ? state.queueSource?.kind === "set" && state.queueSource.setId === contextSetId
           ? state.queueSource
           : { kind: "set", setId: contextSetId }
-        : state.queueSource;
+        : // Non-set context: keep the in-memory source, or restore the persisted one on
+          // boot so the "playing from" label + jump-to-source survive a relaunch (Q3).
+          (state.queueSource ?? (pq.queueSource as QueueSource | undefined));
       const patch: Partial<PlayerState> = {
         activeSessionId: contextSetId,
         currentIndex,
@@ -1282,7 +1296,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // queue has consumed (high-water). Also seed `queue` synchronously so callers
     // that read it right after (e.g. playTrack) don't race the liveQuery.
     const playQueueSetStartedAt = performance.now();
-    await playQueueSet(trackIds, { contextSetId: sessionId, currentIndex: -1 });
+    await playQueueSet(trackIds, {
+      contextSetId: sessionId,
+      currentIndex: -1,
+      // Persist source + natural order in the SAME write (Q3) — un-shuffle + label survive
+      // a relaunch. A later reorder (materialize shuffle) preserves them via spread.
+      queueSource: { kind: "set", setId: sessionId },
+      naturalOrderIds: trackIds,
+    });
     notePerfWork("session.activate.playQueueSet", performance.now() - playQueueSetStartedAt, {
       sessionId,
       tracks: trackIds.length,
@@ -4145,8 +4166,8 @@ async function hydratePlaybackSettings(set: (p: Partial<PlayerState>) => void): 
   set({ repeat, shuffle, volume });
   mediaEngine?.setVolume(volume);
   // Shuffle is materialized into the persisted queue order (playQueue.entries), so the
-  // boot queue is already the last play order — nothing to rebuild here. Persisting the
-  // natural-order snapshot for un-shuffle across reloads is Phase 4b (Q3/Q8).
+  // boot queue is already the last play order. The persisted natural order (for un-shuffle
+  // after a relaunch) is restored in the queue watcher, synchronously with the source.
 }
 
 function clampVolume(value: number | undefined): number {

@@ -56,6 +56,7 @@ import {
   type MediaBlob,
   type Memory,
   type MemoryAuthorRef,
+  type PersistedQueueSource,
   type PlayQueue,
   type PlayQueueEntry,
   type SetDisplayMode,
@@ -2606,10 +2607,17 @@ async function mutatePlayQueue(
   return writePlayQueue({ ...pq, entries: next.entries, currentIndex: next.currentIndex }, db);
 }
 
-/** Load a set's tracks into the queue (replace), optionally pinning index + context. */
+/** Load a set's tracks into the queue (replace), optionally pinning index + context.
+ *  `queueSource`/`naturalOrderIds` are set only when provided (a fresh context load);
+ *  a reorder (e.g. materialize shuffle) omits them and they're preserved via the spread. */
 export async function playQueueSet(
   trackIds: string[],
-  opts: { currentIndex?: number; contextSetId?: string } = {},
+  opts: {
+    currentIndex?: number;
+    contextSetId?: string;
+    queueSource?: PersistedQueueSource;
+    naturalOrderIds?: string[];
+  } = {},
   db: MuzeroDB = defaultDb,
 ): Promise<PlayQueue> {
   const pq = await getPlayQueue(db);
@@ -2623,6 +2631,8 @@ export async function playQueueSet(
       entries: next.entries,
       currentIndex: next.currentIndex,
       contextSetId: opts.contextSetId,
+      ...("queueSource" in opts ? { queueSource: opts.queueSource } : {}),
+      ...(opts.naturalOrderIds ? { naturalOrderIds: opts.naturalOrderIds } : {}),
     },
     db,
   );
@@ -2717,4 +2727,18 @@ export async function playQueueSetContext(
 ): Promise<PlayQueue> {
   const pq = await getPlayQueue(db);
   return writePlayQueue({ ...pq, contextSetId }, db);
+}
+
+/**
+ * Persist the play context's source + natural order (playback-queue-model Q3). Written
+ * once per context load (separate from {@link playQueueSet}, which preserves these via
+ * spread on reorders). Restores the "playing from" label + un-shuffle order on relaunch.
+ */
+export async function playQueuePersistContextMeta(
+  queueSource: PersistedQueueSource | undefined,
+  naturalOrderIds: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  const pq = await getPlayQueue(db);
+  return writePlayQueue({ ...pq, queueSource, naturalOrderIds }, db);
 }

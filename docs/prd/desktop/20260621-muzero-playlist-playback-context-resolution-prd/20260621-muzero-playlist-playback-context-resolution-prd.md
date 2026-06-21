@@ -18,7 +18,7 @@
 | 1 | Set 上下文 + 顺序对齐（修复主 bug） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 派生实体 / 系统歌单 / 全部歌曲上下文统一 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Online 歌单（发现 tab 第 5 项）上下文 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | **随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）** | 🔄 4a + Q8 稳定洗牌/Setting 完成（真机 E2E 8/8）；剩 Q10 面板分区 + 跨重启持久 | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | **随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）** | ✅ 4a + Q8 稳定洗牌/Setting + Q10 点歌块 + Q3 跨重启持久（真机 E2E 8/8）；仅剩 DJ-tail 低优 | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | `sessionId` 语义收敛 + `playTrack` 清理 | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -468,10 +468,10 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 
 **Phase 4b — 进行中:**
 - [x] **Q8 稳定复用 + Setting（完成）**：洗牌快照 `shuffleOrderIds` + `shuffleContextKey`（模块作用域，within-session）。`setShuffle(on)` 默认**复用**同 context 的快照（`reuseShuffle`，不重排顺序、当前曲作光标）；仅切歌单（contextKey 变）或开 Setting 才 `materializeShuffle` 重洗。新增 `AppSettings.shuffleReshuffleOnToggle`（默认关）+ Settings「播放」面板可见开关（i18n 四语，规则 3）。单测 2 个 + 真机 E2E 第 8 项通过。
-- [x] **续播（Q3，核心已满足）**：shuffle 物化进**已持久的 `playQueue.entries`** → 重启后队列就是上次的播放顺序 + 光标恢复，自然续播。（跨重启的「playing from 标签 / toggle-off 还自然序」需持久 `queueSource`/`naturalOrderIds` —— 见下「剩余」。）
+- [x] **续播（Q3，完成）**：shuffle 物化进**已持久的 `playQueue.entries`** → 重启后队列就是上次的播放顺序 + 光标恢复。**外加跨重启持久 `queueSource` + `naturalOrderIds`**（additive 加到 `PlayQueue` 行 + 新 `PersistedQueueSource` 类型；在 `playQueueSet` 同一次写入落地、reorder 经 spread 保留；watcher 在 boot 同步恢复二者）→ 重启后「playing from」标签 + jump-to-source 还在,且**关随机能还原自然序**。单测 1 个(seed 持久行 → init → 恢复)。
 - [ ] **Q9 防接缝**：repeat-all 轮尾若重洗则新首曲 ≠ 刚播曲（4a 已对 toggle 钉当前首位，轮尾默认复用同排列 → 当前不重洗，无接缝问题）。
 - [x] **点歌 FIFO 显式化 + 面板提示（Q10，完成）**：`playNextTrack` 改走 `requested` 优先块（`playQueueRequestNextAt`，按 store 光标锚定）→ 手动点歌与直播请求统一进「接下来播放」FIFO。[`QueuePanel`](../../../../src/components/player/queue-panel.tsx) 头部显示「**接下来播放 · N**」（独立 `getPlayQueue` liveQuery 数 `requested` 块，不碰 perf-critical store 订阅；i18n 四语）。单测 1 个。（逐行分区因虚拟列表成本暂用计数提示替代——已传达 Spotify「Next in Queue」概念。）
-- [ ] 跨重启持久 `queueSource` + `naturalOrderIds`（label / 关随机还原）；DJ autoExtend 在 shuffle 下洗入未播段（4a 暂追加末尾，低优）；大队列首播 perf 实测。
+- [ ] **仅剩（低优,建议不做）**：DJ autoExtend 在 shuffle 下洗入未播段（4a 暂追加末尾,只命中 DJ 集+随机）；大队列首播 perf 实测。
 
 ### Phase 4 Checklist
 
@@ -482,8 +482,8 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 - [x] 4a `make check` 等价：tsc 通过；player-store 45 + player 组件 353 通过。
 - [x] **真机 E2E（control endpoint harness）**：扩展 [`perf-control-bridge`](../../../../src/dev/perf-control-bridge.ts)（snapshot 加 `queueSource`/`shuffle`/`queueTrackIds`；player 白名单加 `setShuffle`/`setRepeat`；新 `playbackContext` seed/playInSet）+ 驱动脚本 [`scripts/playback-context-drive.mjs`](../../../../scripts/playback-context-drive.mjs)。在隔离 userData 的真实 Electron 实例上 **7/7 通过**：Part A 跨集上下文（从 Y 点共享曲 A → queue=Y 非 X）、Part B shuffle 物化钉当前/线性 next/关闭还原自然序。
 - [x] **E2E 抓到并修复真实竞态**：`setShuffle` 原 fire-and-forget 的物化在紧接的 `next()` 后落地会把 cursor 重置回锚点 → 改为 **`async setShuffle` await 物化/还原**（`Promise<void>`，所有调用方都是 fire-and-forget，兼容）。
-- [x] （4b）单测 Q8 稳定复用（toggle off→on 同序）+ 切歌单重洗（player-store 47 通过）；真机 E2E **8/8**（含 Q8：toggle 回开复用同一洗牌序）。
-- [ ] （4b 剩余）Q10 面板分区 / 跨重启持久 queueSource+naturalOrderIds / DJ 洗入未播段。
+- [x] （4b）单测 Q8 稳定复用（toggle off→on 同序）+ 切歌单重洗；Q10 点歌进 `requested` 块；Q3 跨重启恢复 queueSource+自然序。player-store **49** 通过；真机 E2E **8/8**。
+- [ ] （4b 仅剩低优）DJ 续歌洗入未播段 / 大队列首播 perf 实测（建议不做）。
 
 ### Phase 5: `sessionId` 语义收敛 + `playTrack` 清理
 
