@@ -1,6 +1,6 @@
 # PRD: MUZERO 统一后台进度通知（下载队列 + 切歌加载 收敛到左上角通知栈）
 
-**Status:** Draft
+**Status:** Completed
 **Created:** 2026-06-22
 **Author:** DoodleBear
 **Module:** `src/stores/notification-store.ts`（progress 字段复活）· `src/components/shell/notification-stack.tsx`（左上角栈）· 新增 `src/stores/download-indicator.ts` + `src/stores/playback-indicator.ts`（liveQuery/store → 通知）· `src/streamsrc/download-action.ts`（分P 入队修正）· `src/components/downloads/download-progress-badge.tsx`（下线）· `src/components/player/track-identity-row.tsx`（Dock 封面 spinner 保留）
@@ -13,9 +13,9 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 下载队列指示器收敛到左上角通知栈（复活 `progress` 条 + indicator 订阅 `downloadJobs` + 下线右上角徽标） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 切歌加载指示器进左上角通知栈（阈值门控 + 真字节进度 + 远程下载/本地加载文案 + 保留 Dock 封面 spinner） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 一致性收尾（分P 批量下载改走队列 → 进统一指示器 + 重试；i18n×4 校对/清理） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 1 | 下载队列指示器收敛到左上角通知栈（复活 `progress` 条 + indicator 订阅 `downloadJobs` + 下线右上角徽标） | ✅ 完成（`download-indicator.ts` 纯聚合 + reconcile 生命周期 + 13 单测；App 启动 wiring；删徽标；i18n×4 `download.view`） | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | 切歌加载指示器进左上角通知栈（阈值门控 + 真字节进度 + 远程下载/本地加载文案 + 保留 Dock 封面 spinner） | ✅ 完成（`playback-indicator.ts` 阈值门控 reconciler + 8 单测；`stream-to-blob.ts` 流式读 + 4 单测；`PlaybackLoadingState.progress` + remote/stream 两条 download-before-play 路径都接 onProgress；App 启动 wiring） | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | 一致性收尾（分P 批量下载改走队列 → 进统一指示器 + 重试；i18n×4 校对/清理） | ✅ 完成（`enqueuePartsForDownload` 改走队列 + 2 单测；删死键 downloadingPart/doneCount/loginRequired/stage* ×4 locale） | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -260,12 +260,12 @@ usePlayerStore.subscribe(s => s.playbackLoading?.progress, (progress) => {
 
 ### Phase 1 Checklist
 
-- [ ] 入队单/批量下载 → 左上角出现一条持久 loading toast，进度条随字节推进。
-- [ ] 右上角不再有徽标。
-- [ ] 「查看」跳 Settings → Downloads。
-- [ ] 所有任务完成/清空 → toast 自动消失。
-- [ ] 单测：`reconcileDownloads` 给定 jobs 数组 → 正确的 message/detail/progress（含 0 任务 dismiss、无 totalBytes 不给 progress、多任务平均）。
-- [ ] `make check` 通过。
+- [x] 入队单/批量下载 → 左上角出现一条持久 loading toast，进度条随字节推进。（indicator 订阅 `downloadJobs` liveQuery，create→update→dismiss）
+- [x] 右上角不再有徽标。（删 [`download-progress-badge.tsx`](../../../../src/components/downloads/download-progress-badge.tsx) + App.tsx 挂载）
+- [x] 「查看」跳 Settings → Downloads。（toast action `keepOpen` → `useNavStore.setTab("settings")`）
+- [x] 所有任务完成/清空 → toast 自动消失。
+- [x] 单测：`summarizeDownloadJobs` + `createDownloadReconciler` → 正确的 message/detail/progress（含 0 任务 dismiss、无 totalBytes 不给 progress、多任务平均、re-create）。13 例。
+- [x] `make check` 通过。（typecheck + biome 干净；全量 vitest 445 文件 / 3293 例 通过）
 
 ### Phase 2: 切歌加载指示器进左上角通知栈（阈值门控 + 真字节进度）
 
@@ -283,13 +283,13 @@ usePlayerStore.subscribe(s => s.playbackLoading?.progress, (progress) => {
 
 ### Phase 2 Checklist
 
-- [ ] 切到需多秒下载的流媒体歌 → ~800ms 后左上角出现「正在下载《歌名》」loading toast，**进度条随字节推进**；歌开始播 → 消失。
-- [ ] 切本地/缓存歌（瞬时）→ **不弹**任何通知（封面 spinner 可能一闪）。
-- [ ] 连续快速切 3 首本地歌 → 0 通知。
-- [ ] Dock 封面 spinner 行为不变。
-- [ ] 单测（store）：`fetchStreamMediaBytes` 流式上报 `onProgress`；download-before-play 更新 `playbackLoading.progress`；stale 请求不更新。
-- [ ] 单测（indicator）：阈值前完成不弹、阈值后弹、progress 原地更新、切歌清理、remote/非 remote 文案分流（注入 fake timer + 模拟 `playbackLoading` 序列）。
-- [ ] `make check` 通过。
+- [x] 切到需多秒下载的流媒体歌 → ~800ms 后左上角出现「正在下载《歌名》」loading toast，**进度条随字节推进**；歌开始播 → 消失。（阈值门控 + `playbackLoading.progress`）
+- [x] 切本地/缓存歌（瞬时）→ **不弹**任何通知（封面 spinner 可能一闪）。（阈值前 loading 清空 → 计时器取消，永不弹）
+- [x] 连续快速切 3 首本地歌 → 0 通知。（每次 loading 变化先清计时器/旧 toast）
+- [x] Dock 封面 spinner 行为不变。（`track-identity-row.tsx` 未改）
+- [x] 单测（helper/store）：`streamResponseToBlob` 流式上报 `onProgress`（4 例）；download-before-play（remote + stream 两路）更新 `playbackLoading.progress`，stale 请求不更新（store 集成测试 + `setPlaybackLoadingProgress` 守卫）。
+- [x] 单测（indicator）：阈值前完成不弹、阈值后弹、progress 原地更新、切歌清理、re-arm、remote/非 remote 文案分流（注入 fake timer + 模拟序列）。8 例。
+- [x] `make check` 通过。（typecheck + biome 干净；全量 vitest 447 文件 / 3306 例 通过）
 
 ### Phase 3: 一致性收尾（分P 批量下载改走队列）
 
@@ -302,10 +302,10 @@ usePlayerStore.subscribe(s => s.playbackLoading?.progress, (progress) => {
 
 ### Phase 3 Checklist
 
-- [ ] 分P「下载全部」→ 进度显示在统一指示器（与单/批量一致），且失败会重试。
-- [ ] 无残留的「唯一不走队列」下载路径。
-- [ ] 无死 i18n key / 死代码。
-- [ ] `make check` 通过。
+- [x] 分P「下载全部」→ 进度显示在统一指示器（与单/批量一致），且失败会重试。（`startBackgroundBatchDownload` → `enqueuePartsForDownload` → `enqueueDownload`）
+- [x] 无残留的「唯一不走队列」下载路径。（分P 是最后一条直连 `downloadStreamedHit` 的路径，已并入队列）
+- [x] 无死 i18n key / 死代码。（删 `downloadingPart`/`doneCount`/`loginRequired`/`stageFetch`/`stageMux`/`stageStore` ×4 locale；`done` 仍被 downloads-panel 使用故保留）
+- [x] `make check` 通过。（typecheck + biome 干净；全量 vitest 448 文件 / 3308 例 通过）
 
 ---
 
@@ -359,3 +359,4 @@ usePlayerStore.subscribe(s => s.playbackLoading?.progress, (progress) => {
 |------|--------|---------|
 | 2026-06-22 | DoodleBear | Initial draft（合并两需求：下载进度统一 + 切歌加载通知；左上角通知栈 + 阈值门控 已定） |
 | 2026-06-22 | DoodleBear | Resolve Open Q3-Q6：切歌显示真字节进度（升 Phase 2 核心）、多 toast 堆叠按现状、阈值 800ms 采纳、徽标直接删除 |
+| 2026-06-22 | DoodleBear | Phase 1-3 全部实现完成（TDD，原子提交），Status → Completed |

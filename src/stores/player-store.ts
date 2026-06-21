@@ -21,6 +21,7 @@ import {
   playQueueAppend,
   playQueueInsertAt,
   playQueuePlayNext,
+  playQueueReorder,
   playQueueRequestNextAt,
   playQueueSet,
   playQueueSetContext,
@@ -1538,6 +1539,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         return;
       }
       await get().playIndex(landed);
+      return;
+    }
+    // De-dupe: if the requested track is ALREADY in the queue, reuse that entry instead
+    // of inserting a second copy (which would replay the song later at its old spot).
+    const existingIdx = get().queue.findIndex((t) => t.id === track.id);
+    if (existingIdx === cur) {
+      // It IS the track playing right now — restart it from the top.
+      await get().playIndex(cur);
+      return;
+    }
+    if (existingIdx >= 0) {
+      // Already queued elsewhere → MOVE that exact entry to the cut-in slot. Removing an
+      // entry BEFORE the cursor shifts the playing slot down one, so the post-move target
+      // is `cur` (behind) vs `cur + 1` (ahead). moveEntry keeps the cursor pinned to the
+      // playing track by id; we then play the moved slot.
+      const to = existingIdx < cur ? cur : cur + 1;
+      await playQueueReorder(existingIdx, to);
+      const moved = await waitForQueueSlot(get, to, track.id);
+      if (moved) {
+        await get().playIndex(to);
+        return;
+      }
+      const idx = await ensureTrackInCurrentPlayQueue(set, get, track.id);
+      if (idx >= 0) await get().playIndex(idx);
       return;
     }
     const slot = cur + 1;

@@ -2176,3 +2176,80 @@ describe("player-store context-aware play (playTrackInContext)", () => {
     );
   });
 });
+
+// --- Live-request "play now" (立即播放) de-dupe -------------------------------
+// playRequestNow cuts the requested track in right after the playing slot. When
+// that track is ALREADY in the queue it must REUSE the existing entry (move it),
+// not insert a duplicate that would replay the song later at its old spot.
+describe("player-store live request play-now de-dupe", () => {
+  async function seedThree(currentIndex = 0) {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const session = await repos.createSession({
+      seedPrompt: "",
+      config: { autoExtend: false },
+      displayMode: "cover",
+    });
+    const first = track("trk_first", session.id, "First");
+    const second = track("trk_second", session.id, "Second");
+    const third = track("trk_third", session.id, "Third");
+    await db.tracks.bulkAdd([first, second, third]);
+    for (const t of [first, second, third]) {
+      const blobId = `blb_${t.id}`;
+      await db.mediaBlobs.put({
+        id: blobId,
+        trackId: t.id,
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+      });
+      await db.tracks.update(t.id, { status: "ready", blobId });
+    }
+    await repos.prependTrackIds(session.id, [first.id, second.id, third.id]);
+    await repos.playQueueSet([first.id, second.id, third.id], {
+      contextSetId: session.id,
+      currentIndex,
+    });
+    usePlayerStore.getState().init();
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(3));
+    await usePlayerStore.getState().playIndex(currentIndex);
+    await waitFor(() => expect(usePlayerStore.getState().currentIndex).toBe(currentIndex));
+    mediaEngineMock.play.mockClear();
+    return { db, repos, session, first, second, third, usePlayerStore };
+  }
+
+  it("MOVES an already-queued track (ahead of cursor) to the cut-in slot instead of duplicating", async () => {
+    const { first, second, third, usePlayerStore } = await seedThree(0); // playing `first`
+
+    await usePlayerStore.getState().playRequestNow(third); // already at index 2
+
+    const s = usePlayerStore.getState();
+    expect(s.queue.map((t) => t.id)).toEqual([first.id, third.id, second.id]);
+    expect(s.queue.filter((t) => t.id === third.id)).toHaveLength(1); // no duplicate
+    expect(s.queue[s.currentIndex]?.id).toBe(third.id);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("MOVES an already-queued track (behind cursor) forward without duplicating", async () => {
+    const { first, second, third, usePlayerStore } = await seedThree(2); // playing `third`
+
+    await usePlayerStore.getState().playRequestNow(first); // behind the cursor
+
+    const s = usePlayerStore.getState();
+    expect(s.queue.map((t) => t.id)).toEqual([second.id, third.id, first.id]);
+    expect(s.queue.filter((t) => t.id === first.id)).toHaveLength(1);
+    expect(s.queue[s.currentIndex]?.id).toBe(first.id);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("restarts the currently-playing track when it is itself the request", async () => {
+    const { first, second, third, usePlayerStore } = await seedThree(0); // playing `first`
+
+    await usePlayerStore.getState().playRequestNow(first);
+
+    const s = usePlayerStore.getState();
+    expect(s.queue.map((t) => t.id)).toEqual([first.id, second.id, third.id]); // unchanged
+    expect(s.currentIndex).toBe(0);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+});
