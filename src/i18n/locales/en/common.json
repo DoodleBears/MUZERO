@@ -868,6 +868,8 @@
     "repeatOne": "Repeat one",
     "repeatAll": "Repeat all",
     "shuffleHint": "Start new queues in shuffled order.",
+    "shuffleReshuffleLabel": "Re-shuffle on each toggle",
+    "shuffleReshuffleHint": "On: turning shuffle on always makes a new random order. Off (default): a playlist keeps its shuffle until you switch playlists.",
     "storageTitle": "Storage & cache",
     "storageUsageTitle": "Device storage",
     "storageUsageRatio": "{{usage}} of {{quota}} used · {{percent}}%",

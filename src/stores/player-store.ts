@@ -450,6 +450,11 @@ let playbackSettingsLoaded = false;
 // user curated/saw, since shuffle is materialized into the queue itself (no parallel
 // permutation). Persistence of this across reloads is Phase 4b (Q3/Q8).
 let naturalOrderIds: string[] = [];
+// The stable materialized shuffle for the current context + which context it belongs to
+// (Q8): toggling the shuffle switch off→on within the SAME playlist reuses this order;
+// only switching playlist (different key) re-rolls. Module scope (rule 6); within-session.
+let shuffleOrderIds: string[] = [];
+let shuffleContextKey = "";
 // True while a cover-pager drag window is open. Non-reactive (module scope, rule 6):
 // the gesture owns the visual window, so DJ auto-extend is held off until it settles
 // (no queue mutation under the user's finger). Flipped by `setCoverGestureActive`.
@@ -627,21 +632,53 @@ async function applyQueueOrder(
   set({ queue: nextQueue, currentIndex });
 }
 
-/** Materialize a shuffle into the live queue, pinning `anchorId` (the current track) first. */
+/** Stable key for the active context, so a shuffle snapshot is reused only within the
+ *  same playlist and re-rolled when switching (Q8). */
+function contextKey(source: QueueSource | undefined): string {
+  if (!source) return "";
+  switch (source.kind) {
+    case "set":
+      return `set:${source.setId}`;
+    case "system-playlist":
+      return `sys:${source.id}`;
+    case "entity":
+      return `ent:${source.entityKind}:${source.entityKey}`;
+    case "online-playlist":
+      return `online:${source.playlist.source}:${source.playlist.id}`;
+    default:
+      return source.kind;
+  }
+}
+
+/** Materialize a FRESH shuffle into the live queue (pin `anchorId` first) and remember it
+ *  as this context's stable snapshot for later reuse (Q8). */
 function materializeShuffle(
   set: (partial: Partial<PlayerState>) => void,
   get: () => PlayerState,
   anchorId: string | undefined,
 ): Promise<void> {
-  return applyQueueOrder(
-    set,
-    get,
-    shuffledIdsPinning(
-      get().queue.map((t) => t.id),
-      anchorId,
-    ),
+  const ids = shuffledIdsPinning(
+    get().queue.map((t) => t.id),
     anchorId,
   );
+  shuffleOrderIds = ids;
+  shuffleContextKey = contextKey(get().queueSource);
+  return applyQueueOrder(set, get, ids, anchorId);
+}
+
+/** Reuse this context's saved shuffle order (Q8 stable shuffle) — same order as before,
+ *  with `anchorId` becoming the cursor wherever it sits (NOT re-pinned, so the order is
+ *  unchanged). Falls back to a fresh materialize if the snapshot no longer fits the queue. */
+function reuseShuffle(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  anchorId: string | undefined,
+): Promise<void> {
+  const present = new Set(get().queue.map((t) => t.id));
+  const target = shuffleOrderIds.filter((id) => present.has(id));
+  for (const id of present) if (!target.includes(id)) target.push(id);
+  if (target.length !== present.size) return materializeShuffle(set, get, anchorId);
+  return applyQueueOrder(set, get, target, anchorId);
 }
 
 /** Restore the context's natural order into the live queue (anchor stays current). */
@@ -1717,7 +1754,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (queue.length > 1) {
       if (on) {
         if (naturalOrderIds.length !== queue.length) naturalOrderIds = queue.map((t) => t.id);
-        await materializeShuffle(set, get, anchorId);
+        // Q8: reuse this playlist's stable shuffle on toggle, unless the user opted into
+        // re-rolling every toggle, or there's no snapshot for the current context yet.
+        const reshuffleOnToggle = (await getSettings()).shuffleReshuffleOnToggle ?? false;
+        const hasSnapshot =
+          shuffleOrderIds.length > 0 && shuffleContextKey === contextKey(get().queueSource);
+        if (hasSnapshot && !reshuffleOnToggle) {
+          await reuseShuffle(set, get, anchorId);
+        } else {
+          await materializeShuffle(set, get, anchorId);
+        }
       } else {
         await restoreNaturalOrder(set, get, anchorId);
       }

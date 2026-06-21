@@ -822,6 +822,26 @@ export function SettingsPage({ pageActive }: { pageActive?: boolean } = {}) {
                       </span>
                     </span>
                   </label>
+                  <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.shuffleReshuffleOnToggle ?? false}
+                      onChange={(event) =>
+                        void saveSettings({
+                          shuffleReshuffleOnToggle: event.currentTarget.checked,
+                        })
+                      }
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">
+                        {t("settings.shuffleReshuffleLabel")}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.shuffleReshuffleHint")}
+                      </span>
+                    </span>
+                  </label>
                 </CardContent>
               </Card>
             )}

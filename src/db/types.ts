@@ -1004,6 +1004,13 @@ export interface AppSettings {
   /** Persisted global transport toggles. */
   playerRepeatMode?: "off" | "one" | "all";
   playerShuffle?: boolean;
+  /**
+   * Re-roll the shuffle every time the shuffle switch is toggled on. Default false:
+   * a playlist's shuffle is stable — generated once when you start shuffling it and
+   * reused when toggling off/on (only switching playlist re-rolls), mirroring NetEase.
+   * On: toggling shuffle on always produces a fresh order. See playback-queue-model PRD (Q8).
+   */
+  shuffleReshuffleOnToggle?: boolean;
   /** Persisted playback volume (0–1). */
   playerVolume?: number;
   /** Persisted resume pointer for the AI DJ chat runtime. */

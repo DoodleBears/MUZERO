@@ -850,6 +850,8 @@
     "repeatOne": "한 곡 반복",
     "repeatAll": "전체 반복",
     "shuffleHint": "새 대기열을 셔플 순서로 시작합니다.",
+    "shuffleReshuffleLabel": "토글할 때마다 다시 셔플",
+    "shuffleReshuffleHint": "켜기: 셔플을 켤 때마다 새로운 무작위 순서를 만듭니다. 끄기(기본값): 재생목록을 바꾸기 전까지 셔플 순서가 유지됩니다.",
     "storageTitle": "저장 공간 및 캐시",
     "storageUsageTitle": "기기 저장 공간",
     "storageUsageRatio": "{{usage}} / {{quota}} 사용 중 · {{percent}}%",

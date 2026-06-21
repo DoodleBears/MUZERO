@@ -2057,4 +2057,64 @@ describe("player-store context-aware play (playTrackInContext)", () => {
       expect(s.queue[s.currentIndex]?.id).toBe(expectedNextId); // linear: visible next played
     });
   });
+
+  it("reuses the same shuffle when toggled off then on within a playlist (Q8)", async () => {
+    const rt = await loadRuntime();
+    const { usePlayerStore } = rt;
+    const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c", "d", "e"]);
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[0], { source: { kind: "set", setId: set.id }, tracks });
+
+    await usePlayerStore.getState().setShuffle(true);
+    const firstOrder = usePlayerStore.getState().queue.map((t) => t.id);
+
+    await usePlayerStore.getState().setShuffle(false);
+    await waitFor(() =>
+      expect(usePlayerStore.getState().queue.map((t) => t.id)).toEqual(
+        tracks.map((t) => t.id), // natural order restored
+      ),
+    );
+
+    // Toggle back on (default: reuse, NOT re-roll) → identical order.
+    await usePlayerStore.getState().setShuffle(true);
+    expect(usePlayerStore.getState().queue.map((t) => t.id)).toEqual(firstOrder);
+  });
+
+  it("re-rolls the shuffle after switching to a different playlist (Q8)", async () => {
+    const rt = await loadRuntime();
+    const { repos, usePlayerStore } = rt;
+    const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c", "d", "e"]);
+    // A second set with its own tracks.
+    const set2 = await repos.createSession({
+      name: "S2",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const t2 = ["p", "q", "r", "s", "t"].map((n) => readyTrack(`trk_${n}`, set2.id, n, `blb_${n}`));
+    await rt.db.tracks.bulkAdd(t2);
+    for (const it of t2) await putMediaBlob(rt.db, it.id, it.blobId as string);
+    await repos.prependTrackIds(
+      set2.id,
+      t2.map((i) => i.id),
+    );
+
+    await usePlayerStore.getState().setShuffle(true);
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[0], { source: { kind: "set", setId: set.id }, tracks });
+    await waitFor(() => expect(usePlayerStore.getState().queueSource).toBeTruthy());
+
+    // Switch to set2 (shuffle stays on) → a fresh shuffle for the NEW context's tracks.
+    const tracks2 = await repos.getTracksByIds(t2.map((i) => i.id));
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks2[0], { source: { kind: "set", setId: set2.id }, tracks: tracks2 });
+
+    await waitFor(() => {
+      const ids = usePlayerStore.getState().queue.map((t) => t.id);
+      expect(new Set(ids)).toEqual(new Set(t2.map((i) => i.id))); // queue is set2's tracks
+      expect(ids[0]).toBe(tracks2[0].id); // clicked pinned first
+    });
+  });
 });

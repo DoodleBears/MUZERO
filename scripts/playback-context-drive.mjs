@@ -126,6 +126,15 @@ async function main() {
     `queue=${JSON.stringify(s.queueTrackIds)}`,
   );
 
+  // 6. Part B (Q8) — toggle shuffle on again → SAME order reused (stable per playlist).
+  await post("/player/setShuffle", { on: true });
+  s = await settle((x) => x.shuffle === true && x.queueTrackIds.length === 4);
+  check(
+    "Part B (Q8): toggling shuffle back on reuses the same order (not re-rolled)",
+    JSON.stringify(s.queueTrackIds) === JSON.stringify(shuffledOrder),
+    `now=${JSON.stringify(s.queueTrackIds)} prev=${JSON.stringify(shuffledOrder)}`,
+  );
+
   console.log(`\n[e2e] ${failures === 0 ? "ALL PASSED" : `${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
 }
