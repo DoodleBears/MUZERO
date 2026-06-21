@@ -1717,8 +1717,15 @@ describe("player-store live request play-now (立即播放) cut-in", () => {
       contextSetId: session.id,
       currentIndex: 0,
     });
+    // A distinctive persisted volume acts as a hydration barrier below: init()'s
+    // settings hydration (hydratePlaybackSettings) is async and ALSO writes
+    // shuffle/repeat/shuffleOrder, so a test that toggles shuffle right after init
+    // can be clobbered by a late-arriving hydrate. Waiting for this value proves
+    // hydration finished, making the mode toggles deterministic.
+    await repos.saveSettings({ playerVolume: 0.5 });
     usePlayerStore.getState().init();
     await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(3));
+    await waitFor(() => expect(usePlayerStore.getState().volume).toBe(0.5));
     return { db, repos, session, first, second, third, requested, usePlayerStore };
   }
 
@@ -1793,9 +1800,60 @@ describe("player-store live request play-now (立即播放) cut-in", () => {
     expect(upNext).toBeDefined();
   });
 
-  it("advances to a real distinct track when the requested song ends under shuffle", async () => {
+  it("MOVES an already-queued track to the cut-in slot instead of duplicating it", async () => {
+    const { first, second, third, usePlayerStore } = await seedForRequest();
+    await startPlayingFirst(usePlayerStore); // playing `first` at index 0
+    // `third` is already in the queue at index 2.
+
+    await usePlayerStore.getState().playRequestNow(third);
+
+    const s = usePlayerStore.getState();
+    // No duplicate: the queue is still length 3, with `third` relocated to cursor+1.
+    expect(s.queue.map((t) => t.id)).toEqual([first.id, third.id, second.id]);
+    expect(s.queue.filter((t) => t.id === third.id)).toHaveLength(1);
+    expect(s.currentIndex).toBe(1);
+    expect(s.queue[s.currentIndex]?.id).toBe(third.id);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("moves a behind-the-cursor queued track forward without duplicating it", async () => {
+    const { first, second, third, usePlayerStore } = await seedForRequest();
+    await usePlayerStore.getState().playIndex(2); // playing `third` at index 2
+    await waitFor(() => expect(usePlayerStore.getState().currentIndex).toBe(2));
+    mediaEngineMock.play.mockClear();
+
+    await usePlayerStore.getState().playRequestNow(first); // `first` is behind the cursor
+
+    const s = usePlayerStore.getState();
+    // first removed from the head, re-inserted right after the playing `third`.
+    expect(s.queue.map((t) => t.id)).toEqual([second.id, third.id, first.id]);
+    expect(s.queue.filter((t) => t.id === first.id)).toHaveLength(1);
+    expect(s.queue[s.currentIndex]?.id).toBe(first.id);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("restarts the currently-playing track when it is itself the request", async () => {
+    const { first, second, third, usePlayerStore } = await seedForRequest();
+    await startPlayingFirst(usePlayerStore); // playing `first` at index 0
+
+    await usePlayerStore.getState().playRequestNow(first);
+
+    const s = usePlayerStore.getState();
+    // Unchanged queue (no duplicate, no move) — just replays the current track.
+    expect(s.queue.map((t) => t.id)).toEqual([first.id, second.id, third.id]);
+    expect(s.currentIndex).toBe(0);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("does NOT replay the requested song when it ends under shuffle + repeat-all", async () => {
+    // Regression: with the newcomer appended at the END of the shuffle order, the
+    // cycle wrapped the instant the requested track finished → a reshuffle whose
+    // first pick could be the requested track itself (immediate replay) or blank.
+    // Pinning the order to the now-current request makes the next advance a real,
+    // distinct track.
     const { requested, usePlayerStore } = await seedForRequest();
     await startPlayingFirst(usePlayerStore);
+    usePlayerStore.getState().setRepeat("all");
     usePlayerStore.getState().setShuffle(true);
 
     await usePlayerStore.getState().playRequestNow(requested);

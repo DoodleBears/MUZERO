@@ -21,6 +21,7 @@ import {
   playQueueAppend,
   playQueueInsertAt,
   playQueuePlayNext,
+  playQueueReorder,
   playQueueRequestNextAt,
   playQueueSet,
   playQueueSetContext,
@@ -1298,17 +1299,54 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // cursor) and then playing `currentIndex + 1`. The store cursor and the debounced DB
     // cursor can diverge by one, which made the cut-in land one slot off — silently playing
     // the NEXT track and skipping the requested one.
+    // Play the cut-in slot, then (under shuffle) re-pin the shuffle order to the
+    // now-current track. Without this, the generic queue-watcher repair appends the
+    // newcomer at the END of the shuffle cycle, so when the requested song finishes
+    // the cycle has wrapped → a fresh reshuffle that can immediately replay the very
+    // track just requested (or blank out "up next"). Pinning makes the request the
+    // current cycle position, so playback continues into the rest of the shuffle.
+    const playCutIn = async (index: number) => {
+      await get().playIndex(index);
+      if (get().shuffle) shuffleOrder = buildShuffleOrder(get().queue.length, get().currentIndex);
+    };
+
     const cur = get().currentIndex;
     if (cur < 0) {
-      // Idle: nothing playing — append and play wherever it lands.
+      // Idle: the queue is empty — append and play wherever it lands.
       await playQueuePlayNext([track.id]);
       const landed = await waitForQueueIndex(get, track.id);
       if (landed == null) {
         const idx = await ensureTrackInCurrentPlayQueue(set, get, track.id);
-        if (idx >= 0) await get().playIndex(idx);
+        if (idx >= 0) await playCutIn(idx);
         return;
       }
-      await get().playIndex(landed);
+      await playCutIn(landed);
+      return;
+    }
+    // De-dupe: if the requested track is ALREADY in the queue, MOVE that exact entry to
+    // the cut-in slot instead of inserting a second copy (which would replay the song
+    // later at its old spot). "立即播放 = 去重·移到下一首".
+    const existingIdx = get().queue.findIndex((t) => t.id === track.id);
+    if (existingIdx === cur) {
+      // It IS the track playing right now — restart it from the top.
+      await playCutIn(cur);
+      return;
+    }
+    if (existingIdx >= 0) {
+      // Move the existing entry to right after the playing slot. Removing an entry that
+      // sits BEFORE the cursor shifts the playing slot down by one, so the post-move
+      // target is `cur` (behind) vs `cur + 1` (ahead). moveEntry keeps the cursor pinned
+      // to the playing track by id; we then play the moved slot explicitly.
+      const to = existingIdx < cur ? cur : cur + 1;
+      await playQueueReorder(existingIdx, to);
+      const moved = await waitForQueueSlot(get, to, track.id);
+      if (moved) {
+        await playCutIn(to);
+        return;
+      }
+      // Reorder didn't land where expected — fall back to ensure-in-queue + play.
+      const idx = await ensureTrackInCurrentPlayQueue(set, get, track.id);
+      if (idx >= 0) await playCutIn(idx);
       return;
     }
     const slot = cur + 1;
@@ -1318,10 +1356,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const ok = await waitForQueueSlot(get, slot, track.id);
     if (!ok) {
       const idx = await ensureTrackInCurrentPlayQueue(set, get, track.id);
-      if (idx >= 0) await get().playIndex(idx);
+      if (idx >= 0) await playCutIn(idx);
       return;
     }
-    await get().playIndex(slot);
+    await playCutIn(slot);
   },
 
   async playRequestNext(track) {
