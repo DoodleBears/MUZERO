@@ -107,6 +107,13 @@ export interface AudienceRequestRuntimeDeps {
   /** Player-aware "play next" — anchors the FIFO insert to the live (store) cursor.
    *  Falls back to a DB-cursor-relative insert when not injected (e.g. unit tests). */
   playNext?: (track: Track) => Promise<void>;
+  /**
+   * Fired after a request's matched track is successfully played / queued
+   * (any of play-now / play-next / append-queue). The production controller
+   * uses it to surface a "request landed" notification; left unset in unit
+   * tests so the search/route engine carries no UI dependency.
+   */
+  onRequestPlayed?: (input: { track: Track; action: AudienceRequestPlaybackAction }) => void;
 }
 
 /** Per-call routing overrides — a multi-source intake sets these from the source config. */
@@ -397,20 +404,15 @@ export function createAudienceRequestRuntime(
   async function executePlayback(action: AudienceRequestPlaybackAction, track: Track) {
     if (action === "append-queue") {
       await playQueueAppend([track.id], db);
-      return;
-    }
-    if (action === "play-next") {
-      if (deps.playNext) {
-        await deps.playNext(track);
-        return;
-      }
-      await playQueueRequestNext([track.id], db);
-      return;
-    }
-    if (action === "play-now") {
+    } else if (action === "play-next") {
+      if (deps.playNext) await deps.playNext(track);
+      else await playQueueRequestNext([track.id], db);
+    } else if (action === "play-now") {
       if (!deps.playNow) throw new Error("play-now requires a player dependency");
       await deps.playNow(track);
     }
+    // Only reached once the action above resolved (a throwing play-now skips this).
+    deps.onRequestPlayed?.({ track, action });
   }
 
   async function getRequiredTrack(trackId: string): Promise<Track> {

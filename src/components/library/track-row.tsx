@@ -213,11 +213,11 @@ export const TrackRow = memo(function TrackRow({
   const [addToSetOpen, setAddToSetOpen] = useState(false);
   const showActionToolbar = showActions || addToSetOpen;
 
-  // Two-tap activation: the first interaction selects the row (revealing its
-  // info in the inspector); interacting again with an already-selected row
-  // starts or resumes playback. Lists without a selection model (queue / Now
-  // Playing) leave `isSelected` undefined, so `onView` is the play handler there
-  // and a single click plays straight away.
+  // Master-detail activation: a single click / tap (and keyboard row nav) SELECTS the
+  // row, revealing it in the inspector WITHOUT interrupting playback; PLAY is its own
+  // explicit gesture — double-click, the hover play button, or Enter/Space/D/→. Lists
+  // with NO selection model (queue / Now Playing) pass `onView` === the play handler,
+  // so a single click there still plays straight away.
   function requestPlay(actionKind: "click" | "keyboard") {
     recordUserAction("play.click", {
       message: "track play clicked",
@@ -230,27 +230,37 @@ export const TrackRow = memo(function TrackRow({
     onPlay();
   }
 
-  function activate(shiftKey = false, actionKind: "click" | "keyboard" = "click") {
+  // Single click / tap: toggle in select mode, otherwise select (→ inspector).
+  function selectRow(shiftKey = false) {
     if (selectable) {
       onToggleSelect?.(shiftKey);
-      return;
-    }
-    if (isSelected && !disabled) {
-      requestPlay(actionKind);
       return;
     }
     onView();
   }
 
+  // Explicit play gesture (double-click / Enter / Space / D / →); no-op while the
+  // track isn't ready. Select mode is handled by the callers (a tap toggles there).
+  function activatePlay(actionKind: "click" | "keyboard" = "click") {
+    if (disabled) return;
+    requestPlay(actionKind);
+  }
+
   function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
-    // Activate on Enter/Space and on D/→ (the WASD library "drill in" keys).
+    // Play on Enter/Space and on D/→ (the WASD library "drill in" keys). Row nav
+    // (W/S/↑/↓) already moved the selection, so Enter activates = play it. In select
+    // mode the same keys toggle the row's checkbox instead.
     const k = event.key.toLowerCase();
     if (k !== "enter" && k !== " " && k !== "d" && k !== "arrowright") return;
     event.preventDefault();
     event.stopPropagation();
-    activate(event.shiftKey, "keyboard");
+    if (selectable) {
+      onToggleSelect?.(event.shiftKey);
+      return;
+    }
+    activatePlay("keyboard");
   }
 
   function eventStartedInActions(event: MouseEvent<HTMLDivElement>) {
@@ -261,15 +271,17 @@ export const TrackRow = memo(function TrackRow({
 
   function handleRowClick(event: MouseEvent<HTMLDivElement>) {
     if (eventStartedInActions(event)) return;
-    activate(event.shiftKey);
+    selectRow(event.shiftKey);
   }
 
-  // The two single clicks of a double-click already run select-then-play (the
-  // selection update is flushed synchronously, so the second click sees it);
-  // this only stops the double-click from selecting the row's text.
+  // Double-click plays (the preceding single clicks already selected the row). The
+  // preventDefault also stops the double-click from selecting the row's text. In
+  // select mode the clicks toggle the checkbox, so a double-click must not play.
   function handleRowDoubleClick(event: MouseEvent<HTMLDivElement>) {
     if (eventStartedInActions(event)) return;
     event.preventDefault();
+    if (selectable) return;
+    activatePlay("click");
   }
 
   return (

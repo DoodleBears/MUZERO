@@ -166,8 +166,7 @@ function SessionsPageActive({
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{session.name}</div>
                   <div className="truncate text-xs text-muted-foreground">
-                    {isDj ? session.seedPrompt : t("sessions.uploadSet")} ·{" "}
-                    {t("nowPlaying.modeTitle", { mode: t(`displayMode.${session.displayMode}`) })}
+                    {isDj ? session.seedPrompt : t("sessions.uploadSet")}
                   </div>
                 </div>
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">

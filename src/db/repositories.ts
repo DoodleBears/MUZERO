@@ -676,14 +676,6 @@ export async function updateSession(
   await db.sessions.update(id, { ...patch, updatedAt: Date.now() });
 }
 
-export async function setSessionDisplayMode(
-  id: string,
-  displayMode: SetDisplayMode,
-  db: MuzeroDB = defaultDb,
-): Promise<void> {
-  await db.sessions.update(id, { displayMode, updatedAt: Date.now() });
-}
-
 /**
  * Add tracks to a 歌单 at the FRONT (newest on top — the topmost track is the
  * set's default cover). All adds (uploads + DJ continuation) prepend; the play

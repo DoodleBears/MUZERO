@@ -24,7 +24,6 @@ function createContext(
     getPlayerState: () => player,
     getTab: () => "now",
     setTab: vi.fn(),
-    transitionState: (fn) => fn(),
     toggleQueue: vi.fn(),
     getSettings: vi.fn(async () => ({})),
     saveSettings: vi.fn(async () => ({})),
@@ -71,8 +70,14 @@ describe("runShortcutAction", () => {
   it("runs shared navigation and queue actions without exposing them to system globals", () => {
     const ctx = createContext();
 
+    // Tab nav is a plain setTab (faithful on kept-mounted tabs) — the context no
+    // longer carries a `transitionState`, so a nav action that tried to wrap the
+    // switch in a View Transition would throw here instead of silently passing.
     expect(runShortcutAction("nav.tabLibrary", ctx)).toBe(true);
     expect(ctx.setTab).toHaveBeenCalledWith("search");
+
+    expect(runShortcutAction("nav.tabNow", ctx)).toBe(true);
+    expect(ctx.setTab).toHaveBeenCalledWith("now");
 
     expect(runShortcutAction("queue.toggle", ctx)).toBe(true);
     expect(ctx.toggleQueue).toHaveBeenCalledOnce();

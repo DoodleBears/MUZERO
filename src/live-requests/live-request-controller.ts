@@ -21,6 +21,7 @@ import {
   normalizeAudienceRequest,
 } from "./audience-request-schema";
 import { findSource, resolveSourceMapping, resolveSources } from "./audience-request-sources";
+import { notifyAudienceRequestPlayed } from "./live-request-notification";
 import { applyMapping } from "./request-mapping-presets";
 import { DEFAULT_SSN_RELAY_URL } from "./social-stream-relay";
 
@@ -58,6 +59,8 @@ export interface LiveRequestControllerDeps {
   runtime?: AudienceRequestRuntime;
   playNow?: (track: Track) => Promise<void>;
   playNext?: (track: Track) => Promise<void>;
+  /** Notified after a matched track is played / queued (production: a toast). */
+  onRequestPlayed?: (input: { track: Track; action: AudienceRequestPlaybackAction }) => void;
   now?: () => number;
   /** Inject the intake controls (tests); otherwise resolved from the desktop bridge. */
   controls?: DesktopLiveRequestIntakeControls;
@@ -127,7 +130,12 @@ export function createLiveRequestController(
   const now = deps.now ?? (() => Date.now());
   const runtime =
     deps.runtime ??
-    createAudienceRequestRuntime({ db, playNow: deps.playNow, playNext: deps.playNext });
+    createAudienceRequestRuntime({
+      db,
+      playNow: deps.playNow,
+      playNext: deps.playNext,
+      onRequestPlayed: deps.onRequestPlayed,
+    });
   const captures = new Map<string, CapturedPayload[]>();
   let unsubscribe: (() => void) | null = null;
 
@@ -259,6 +267,8 @@ function ensureSingleton(): LiveRequestController {
       // Queue after the playing track (store-cursor-relative) — keep the host's playlist.
       await usePlayerStore.getState().playRequestNext(track);
     },
+    // Confirm the request landed with a top-left toast (title + artist · album).
+    onRequestPlayed: ({ track, action }) => notifyAudienceRequestPlayed(track, action),
   });
   return singleton;
 }

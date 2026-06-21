@@ -843,6 +843,13 @@ export interface AppSettings {
   nowPlayingRightRailCollapsed?: boolean;
   /** Persisted scroll anchor for the collapsed Now-Playing memory timeline rail. Default 0. */
   nowPlayingMemoryRailScrollTop?: number;
+  /**
+   * Global stage display mode (video ↔ cover) — app-wide, NOT per-set. This is the
+   * single source the player reads to render the stage. `DjSession.displayMode` is
+   * retained only to keep the R2 sync manifest contract stable; it no longer drives
+   * what the stage shows. Default "video".
+   */
+  displayMode?: SetDisplayMode;
   /** Now-Playing visualizer style. Defaults to "bars". */
   visualizerStyle?: VisualizerStyleId;
   /** Per-style visualizer tuning. Missing style entries fall back to legacy top-level visualizer tuning fields. */
@@ -1253,6 +1260,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundSlideshowShuffle: true,
   nowPlayingRightRailCollapsed: false,
   nowPlayingMemoryRailScrollTop: 0,
+  displayMode: "video",
   visualizerStyle: "bars",
   visualizerAsBackground: true,
   visualizerBackgroundDim: 30,

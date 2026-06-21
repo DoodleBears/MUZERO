@@ -1,0 +1,23 @@
+import { readFileSync, writeFileSync } from "node:fs"; import path from "node:path";
+import { connectCdp, pickPageTarget } from "./lib/cdp-client.mjs";
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+const conn=JSON.parse(readFileSync(path.join(process.cwd(),".logs","perf-control.json"),"utf8"));
+const H={"content-type":"application/json","x-muzero-perf-token":conn.token};
+const ctl=async(m,p,b)=>{const r=await fetch(`${conn.url}${p}`,{method:m,headers:H,body:b?JSON.stringify(b):undefined});return (await r.json()).data;};
+const port=Number(process.env.MUZERO_REMOTE_DEBUG_PORT||39222);
+const t=await pickPageTarget(port,"localhost");const c=await connectCdp(t.webSocketDebuggerUrl);
+await c.send("Runtime.enable"); await c.send("Page.enable");
+const ev=async(e)=>{const r=await c.send("Runtime.evaluate",{expression:e,returnByValue:true});return r.result.value;};
+await ctl("POST","/player/setActiveSession",{sessionId:"ses_e28095d8-7995-4485-b206-39761eb92e73"});await sleep(500);
+await ctl("POST","/player/setDisplayMode",{mode:"cover"});await ctl("POST","/player/playIndex",{index:50});await sleep(1200);
+const geom=await ev(`(()=>{const s=document.querySelector('.app-shell');const b=s.getBoundingClientRect();const cs=getComputedStyle(s);const a=getComputedStyle(s,'::after');return JSON.stringify({dpr:devicePixelRatio,win:[innerWidth,innerHeight],shell:[b.x,b.y,b.width,b.height],pos:cs.position,overflow:cs.overflow,clip:cs.clipPath,radius:cs.borderRadius,afterBorder:[a.borderTopWidth,a.borderRightWidth,a.borderBottomWidth,a.borderLeftWidth],afterRadius:a.borderRadius,maximized:document.documentElement.dataset.windowMaximized})})()`);
+console.log("GEOM:", geom);
+const g=JSON.parse(geom);
+// screenshot bottom-right corner (device px)
+const W=g.win[0], Hh=g.win[1];
+const shot=async(name,x,y,w,h)=>{const r=await c.send("Page.captureScreenshot",{format:"png",clip:{x,y,width:w,height:h,scale:1}});writeFileSync(`.logs/${name}.png`,Buffer.from(r.data,"base64"));console.log("wrote",name);};
+await shot("corner-br", W-60, Hh-60, 60, 60);
+await shot("corner-tr", W-60, 0, 60, 60);
+await shot("edge-right", W-20, Math.floor(Hh/2)-30, 20, 60);
+await shot("edge-bottom", Math.floor(W/2)-30, Hh-20, 60, 20);
+c.close();

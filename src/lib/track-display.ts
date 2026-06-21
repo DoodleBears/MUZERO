@@ -1,7 +1,24 @@
-import type { SetDisplayMode, Track } from "@/db/types";
+import type { SetDisplayMode, Track, TrackKind, TrackStatus } from "@/db/types";
 
 /** What the "stage" should render for the current track. */
 export type StageContent = "video" | "cover" | "title";
+
+/**
+ * Whether a track can play its own moving video right now — the single predicate
+ * both the foreground stage and the ambient Pixi background key on so they never
+ * disagree about "is this a video". A track is a playable video iff it's a
+ * `video` kind that has finished landing (`status === "ready"`); a generating /
+ * pending / failed video has no playable bytes yet, so the stage falls back to
+ * cover/title and the background stays on the image path. Undefined → false.
+ *
+ * Accepts loose `kind`/`status` (both optional) so the ambient background can pass
+ * its already-destructured fields and reuse the EXACT same gate as the stage.
+ */
+export function trackIsPlayableVideo(
+  track: { kind?: TrackKind; status?: TrackStatus } | undefined,
+): boolean {
+  return track?.kind === "video" && track.status === "ready";
+}
 
 /**
  * Resolve what to show on the now-playing stage, honoring the set's display mode
@@ -19,9 +36,61 @@ export function resolveStageContent(opts: {
   if (!track) return "title";
   if (displayMode === "cover") return hasCover ? "cover" : "title";
   // displayMode === "video"
-  if (track.kind === "video" && track.status === "ready") return "video";
+  if (trackIsPlayableVideo(track)) return "video";
   if (hasCover) return "cover";
   return "title";
+}
+
+/**
+ * The now-playing stage's render layers, split by **which track each follows**:
+ *
+ *  - The VIDEO layer follows the LIVE `current` track (`liveTrack`) — so a moving
+ *    video shows/hides in lockstep with actual playback and the ambient Pixi
+ *    background (which also reads LIVE `current`). It must NOT follow a burst-settled
+ *    snapshot, or a video can play in the background while the foreground still
+ *    shows the previous track's cover (PRD 20260621-video-stage-shows-cover-after-switch).
+ *  - The STILL image (cover / title) follows the burst-settled `displayTrack` — so a
+ *    rapid next/prev burst coalesces cover decodes instead of reconciling per song
+ *    (PRD Phase 31). It is ONLY ever a cover or title, never "video": the video LAYER
+ *    owns moving pictures. Resolving the still layer in `"cover"` mode guarantees that
+ *    and lets a lagging *video* displayTrack show its poster instead of going blank.
+ *
+ * `wantVideo` = the live track is a playable video in the current display mode (the
+ * stage geometry / black box follow this even when the element failed to decode);
+ * `showVideo` = that, AND it decoded OK (the `<video>` element is actually shown);
+ * `videoBroke` = wanted a video but it failed → show the title backdrop + a note.
+ */
+export function resolveStageLayers(opts: {
+  liveTrack?: Track;
+  displayTrack?: Track;
+  displayMode: SetDisplayMode;
+  videoError: boolean;
+}): {
+  showVideo: boolean;
+  videoBroke: boolean;
+  wantVideo: boolean;
+  showCover: boolean;
+  showTitle: boolean;
+} {
+  const { liveTrack, displayTrack, displayMode, videoError } = opts;
+  const wantVideo =
+    resolveStageContent({
+      track: liveTrack,
+      displayMode,
+      hasCover: trackHasCover(liveTrack),
+    }) === "video";
+  const showVideo = wantVideo && !videoError;
+  const videoBroke = wantVideo && videoError;
+  // Force "cover" mode so the still layer is only ever cover/title — never the
+  // (stale) video of a lagging displayTrack.
+  const stillContent = resolveStageContent({
+    track: displayTrack,
+    displayMode: "cover",
+    hasCover: trackHasCover(displayTrack),
+  });
+  const showCover = !wantVideo && stillContent === "cover";
+  const showTitle = videoBroke || (!wantVideo && stillContent === "title");
+  return { showVideo, videoBroke, wantVideo, showCover, showTitle };
 }
 
 /**

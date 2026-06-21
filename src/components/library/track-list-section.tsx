@@ -24,10 +24,10 @@ import { useListScrollPreservation } from "./use-list-scroll-preservation";
 
 /**
  * A track list with a "Select" toggle, checkbox multi-select, a batch action bar,
- * and context-aware delete. With `setId` (a set view): row trash = remove-from-set
- * (reversible, with Undo); batch offers remove-from-set + permanent delete. Without
- * it (the global 所有歌曲 list): delete is always permanent (with confirmation).
- * Wraps `TrackListMenu` so right-click upload still works.
+ * and context-aware delete. With `setId` (a set view): row trash opens a dialog to
+ * choose remove-from-set (reversible, with Undo) vs delete-everywhere (permanent);
+ * batch offers the same two. Without it (the global 所有歌曲 list): delete is always
+ * permanent (with confirmation). Wraps `TrackListMenu` so right-click upload still works.
  */
 export const TrackListSection = memo(function TrackListSection({
   tracks,
@@ -88,6 +88,9 @@ export const TrackListSection = memo(function TrackListSection({
   const sel = useTrackSelection(trackIds);
   // Track ids awaiting a permanent-delete confirmation (null = dialog closed).
   const [pendingPermanent, setPendingPermanent] = useState<string[] | null>(null);
+  // A single row's trash inside a SET asks the user to choose: remove from THIS set
+  // (reversible) or delete the song everywhere. Held as the pending track (null = closed).
+  const [pendingSetRowDelete, setPendingSetRowDelete] = useState<Track | null>(null);
   // True while a reorder drag is in progress — disables the batch action bar so a
   // stray click can't delete/remove mid-drag.
   const [dragActive, setDragActive] = useState(false);
@@ -142,7 +145,10 @@ export const TrackListSection = memo(function TrackListSection({
   }
 
   function onDeleteTrack(track: Track) {
-    if (setId) removeFromSet([track.id]);
+    // In a set: let the user pick remove-from-set vs delete-everywhere (the batch bar
+    // already offers both; the row trash used to silently remove-from-set). In the
+    // global 全部歌曲 list there's no set to remove from → straight to permanent confirm.
+    if (setId) setPendingSetRowDelete(track);
     else setPendingPermanent([track.id]);
   }
 
@@ -152,6 +158,13 @@ export const TrackListSection = memo(function TrackListSection({
     await deleteTracks(ids);
     notify.success(t("select.deleted", { count: ids.length }));
     sel.exit();
+  }
+
+  // The "delete everywhere" choice of the set row dialog: permanently delete the song
+  // (its bytes, cover, memories) and unlink it from every set. Not reversible.
+  async function deleteSetRowEverywhere(track: Track) {
+    await deleteTracks([track.id]);
+    notify.success(t("select.deleted", { count: 1 }));
   }
 
   const batchActions: BatchAction[] = setId
@@ -267,6 +280,29 @@ export const TrackListSection = memo(function TrackListSection({
         title={t("track.deleteConfirmTitle")}
         description={t("track.deleteConfirmBody")}
         confirm={{ label: t("select.deletePermanently"), onConfirm: confirmPermanent }}
+      />
+      {/* Per-row trash inside a set: remove-from-set (reversible, primary) vs delete
+          everywhere (irreversible, destructive). */}
+      <ConfirmDialog
+        open={pendingSetRowDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingSetRowDelete(null);
+        }}
+        title={t("track.removeOrDeleteTitle", { title: pendingSetRowDelete?.title ?? "" })}
+        description={t("track.removeOrDeleteBody")}
+        confirm={{
+          label: t("select.removeFromSet"),
+          variant: "default",
+          onConfirm: () => {
+            if (pendingSetRowDelete) removeFromSet([pendingSetRowDelete.id]);
+          },
+        }}
+        secondary={{
+          label: t("select.deletePermanently"),
+          variant: "destructive",
+          onConfirm: () =>
+            pendingSetRowDelete ? deleteSetRowEverywhere(pendingSetRowDelete) : undefined,
+        }}
       />
     </div>
   );

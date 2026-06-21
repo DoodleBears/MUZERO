@@ -439,7 +439,9 @@
     "uploadedVideo": "アップロード動画",
     "deleteConfirmTitle": "この曲を完全に削除しますか？",
     "deleteConfirmBody": "すべてのセットから削除し、音声・カバー・メモリーも削除します。元に戻せません。",
-    "deletedToast": "曲を削除しました"
+    "deletedToast": "曲を削除しました",
+    "removeOrDeleteTitle": "「{{title}}」を削除しますか？",
+    "removeOrDeleteBody": "このセットからのみ削除します（取り消し可能）。または、すべてのセットとライブラリから完全に削除します（音声・カバー・メモリーを含む）。完全な削除は取り消せません。"
   },
   "drop": {
     "addTitle": "ドロップしてセットに追加",
@@ -1506,6 +1508,11 @@
     "copySuccess": "クリップボードにコピーしました",
     "copyFail": "コピーできませんでした —— もう一度お試しください",
     "dismiss": "閉じる"
+  },
+  "liveRequest": {
+    "playedNow": "再生中：{{title}}",
+    "playedNext": "次に再生：{{title}}",
+    "playedQueued": "キューに追加：{{title}}"
   },
   "errorPage": {
     "kicker": "クラッシュレポート",

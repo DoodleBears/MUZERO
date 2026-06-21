@@ -10,7 +10,6 @@ import { Tabs, TabsIndicator, TabsList, TabsTab } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { isMac, modifierSymbol } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
-import { transitionState } from "@/lib/view-transition-react";
 
 type HeaderNavTab = (typeof NAV_ITEMS)[number]["id"];
 
@@ -112,7 +111,10 @@ export function HeaderNavTabs({
 
   function pick(next: HeaderNavTab) {
     clearCloseTimer();
-    transitionState(() => onChange(next));
+    // Plain tab switch — `onChange` routes through `navigateToTab` (App), which is
+    // faithful on kept-mounted tabs. Do NOT wrap in a View Transition: that reset
+    // the library tab's scroll/sort (tab-switch state-reset alignment PRD).
+    onChange(next);
   }
 
   useEffect(

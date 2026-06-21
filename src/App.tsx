@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { DownloadProgressBadge } from "@/components/downloads/download-progress-badge";
+import type { Tab } from "@/components/nav/dock-nav";
 import { AlbumCoverAppearancePanel } from "@/components/player/album-cover-appearance-panel";
 import { ChangelogModal } from "@/components/player/changelog-modal";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
@@ -35,6 +36,7 @@ import {
   electronWindowAppearanceCssVars,
   resolveBorderColorMode,
 } from "@/lib/electron-window-appearance";
+import { navigateToTab } from "@/lib/navigate-tab";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { cn } from "@/lib/utils";
 import { setViewTransitionSuppressed } from "@/lib/view-transition";
@@ -286,7 +288,13 @@ export default function App() {
   // no longer cascades a full reconcile into every hidden tab on each song switch
   // (the dominant switch cost; PRD 20260617-dock-swipe-switch-jank #2). Each page
   // still re-renders from its OWN store/liveQuery subscriptions.
-  const onSessionsStarted = useCallback(() => setTab("now"), [setTab]);
+  // Plain tab switches (header tabs, dock nav FAB, chat/upload jumps) route
+  // through navigateToTab — a faithful setTab on kept-mounted tabs, never a root
+  // View Transition (which reset the library tab's scroll/sort). The dock song
+  // open keeps its own cover-morph transition (TrackIdentityRow), so it stays on
+  // the plain `setTab` below. See the tab-switch state-reset alignment PRD.
+  const goToTab = useCallback((next: Tab) => navigateToTab(setTab, next), [setTab]);
+  const onSessionsStarted = useCallback(() => goToTab("now"), [goToTab]);
   const onOpenNowPlaying = useCallback(() => setTab("now"), [setTab]);
   const queueActive = tab === "queue";
   const searchActive = tab === "search";
@@ -365,7 +373,7 @@ export default function App() {
             foregroundVisible={!foregroundHidden}
             hidden={headerHidden}
             value={tab}
-            onChange={setTab}
+            onChange={goToTab}
             onDoubleClick={() => void toggleDesktopMaximize()}
           />
           <WindowsWindowControls />
@@ -412,7 +420,7 @@ export default function App() {
         <RenderTraceBoundary id="dock">
           <PlayerDock
             tab={tab}
-            onTabChange={setTab}
+            onTabChange={goToTab}
             onOpenNowPlaying={onOpenNowPlaying}
             hidden={dockHidden}
           />
@@ -436,7 +444,7 @@ export default function App() {
         </RenderTraceBoundary>
 
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
-        <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
+        <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && goToTab("queue")} />
 
         {/* Floating download-queue progress chip (favlist/batch downloads); hidden when idle. */}
         <DownloadProgressBadge />

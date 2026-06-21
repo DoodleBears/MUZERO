@@ -28,7 +28,6 @@ import {
   prependTrackIds,
   type ReferencedTrackMetadataPatch,
   saveSettings,
-  setSessionDisplayMode,
   setTrackCover,
   updateReferencedTracksMetadata,
   upsertImportFolder,
@@ -1138,7 +1137,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         activeSessionId: contextSetId,
         currentIndex,
         queueSource,
-        displayMode: session?.displayMode ?? state.displayMode,
+        // displayMode is a global setting now (hydratePlaybackSettings), not per-set —
+        // switching context sets must NOT reset it.
         djEnabled: session?.config.autoExtend ?? false,
       };
       if (listChanged) patch.queue = queue;
@@ -1156,7 +1156,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         state.activeSessionId !== patch.activeSessionId ||
         state.queueSource !== patch.queueSource ||
         state.currentIndex !== patch.currentIndex ||
-        state.displayMode !== patch.displayMode ||
         state.djEnabled !== patch.djEnabled ||
         ("positionSec" in patch && state.positionSec !== patch.positionSec) ||
         ("durationSec" in patch && state.durationSec !== patch.durationSec);
@@ -1326,7 +1325,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       playbackLoading: null,
       positionSec: 0,
       durationSec: 0,
-      displayMode: session?.displayMode ?? "video",
       djEnabled: session?.config.autoExtend ?? false,
     });
     notePerfWork("session.activate.stateSet", performance.now() - setStartedAt, {
@@ -1805,9 +1803,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async setDisplayMode(mode) {
-    const { activeSessionId } = get();
+    // Display mode is a single app-wide preference (like repeat/shuffle/volume),
+    // persisted to settings — NOT per-set. So switching 歌单 keeps the chosen mode.
     set({ displayMode: mode });
-    if (activeSessionId) await setSessionDisplayMode(activeSessionId, mode);
+    try {
+      await saveSettings({ displayMode: mode });
+    } catch (err) {
+      log.warn("player", "failed to persist display mode", err);
+    }
   },
 
   async addUploads(files) {
@@ -4163,7 +4166,8 @@ async function hydratePlaybackSettings(set: (p: Partial<PlayerState>) => void): 
   const repeat = settings.playerRepeatMode ?? "all";
   const shuffle = settings.playerShuffle ?? false;
   const volume = clampVolume(settings.playerVolume);
-  set({ repeat, shuffle, volume });
+  const displayMode = settings.displayMode ?? "video";
+  set({ repeat, shuffle, volume, displayMode });
   mediaEngine?.setVolume(volume);
   // Shuffle is materialized into the persisted queue order (playQueue.entries), so the
   // boot queue is already the last play order. The persisted natural order (for un-shuffle

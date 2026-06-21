@@ -362,24 +362,41 @@ export function GlobalTrackSearch({
   } = useOnlineSourceSearch(onlineQuery, forcedSource);
   const onlineHits = showOnline ? onlineHitsRaw : [];
 
-  // Flat, ordered nav list across the visible sections (the playlist-link card has
-  // its own button, so it sits outside keyboard nav).
-  const navItems = useMemo<NavItem[]>(
-    () => [
+  // A pasted link / playlist URL → put the online result FIRST (top of the list + index 0),
+  // so the obvious "this is the thing you pasted" sits on top and Enter acts on it. A normal
+  // text query keeps local matches first, online last.
+  const onlineFirst = Boolean(link || playlistLink);
+
+  // Flat, ordered nav list across the visible sections (the playlist-link card has its own
+  // button, so it sits outside keyboard nav). Order mirrors the visual section order below.
+  const navItems = useMemo<NavItem[]>(() => {
+    const local: NavItem[] = [
       ...setResults.map((session) => ({ type: "set", session }) as const),
       ...trackResults.map((track) => ({ type: "track", track }) as const),
       ...lyricResults.map((result) => ({ type: "lyric", ...result }) as const),
       ...albumResults.map((entry) => ({ type: "album", entry }) as const),
       ...artistResults.map((entry) => ({ type: "artist", entry }) as const),
-      ...onlineHits.map((hit) => ({ type: "online", hit }) as const),
-    ],
-    [setResults, trackResults, lyricResults, albumResults, artistResults, onlineHits],
-  );
-  const trackStart = setResults.length;
+    ];
+    const online = onlineHits.map((hit) => ({ type: "online", hit }) as const);
+    return onlineFirst ? [...online, ...local] : [...local, ...online];
+  }, [
+    setResults,
+    trackResults,
+    lyricResults,
+    albumResults,
+    artistResults,
+    onlineHits,
+    onlineFirst,
+  ]);
+
+  // Nav-index base for each section, shifted by the online block when it leads.
+  const localBase = onlineFirst ? onlineHits.length : 0;
+  const setStart = localBase;
+  const trackStart = setStart + setResults.length;
   const lyricStart = trackStart + trackResults.length;
   const albumStart = lyricStart + lyricResults.length;
   const artistStart = albumStart + albumResults.length;
-  const onlineStart = artistStart + artistResults.length;
+  const onlineStart = onlineFirst ? 0 : artistStart + artistResults.length;
 
   // `@` filter menu — sources dropped where streaming is unavailable.
   const filterOptions = streamingSupported
@@ -551,6 +568,47 @@ export function GlobalTrackSearch({
   const onlineActive = showOnline && (onlineSearching || onlineHits.length > 0 || !!link);
   const isEmpty = navItems.length === 0 && !onlineActive;
 
+  // The online / pasted-link results. Rendered at the TOP when a link is pasted (onlineFirst),
+  // otherwise below the local matches — so the divider/spacing only applies in the bottom slot.
+  const onlineSection =
+    showOnline && (onlineSearching || onlineHits.length > 0 || link) ? (
+      <div className={onlineFirst ? undefined : "mt-2 border-white/10 border-t pt-2"}>
+        <p className="px-3 pb-1 text-muted-foreground text-xs">
+          {t(link ? "globalSearch.linkResult" : "globalSearch.online")}
+          {onlineSearching ? ` · ${t("globalSearch.onlineSearching")}` : ""}
+        </p>
+        {playlistLink && (
+          <PlaylistLinkCard
+            playlist={playlistLink}
+            onOpen={() => {
+              openOnlinePlaylist(playlistLink);
+              onOpenChange(false);
+            }}
+          />
+        )}
+        {onlineHits.map((hit, i) => (
+          <OnlineResultRow
+            key={`${hit.source}:${hit.externalId}`}
+            hit={hit}
+            index={onlineStart + i}
+            selected={selectedIndex === onlineStart + i}
+            onMouseEnter={() => setSelectedIndex(onlineStart + i)}
+            onPlay={() => void activate({ type: "online", hit }, false)}
+            onDownloadAudio={() => {
+              startBackgroundDownload(hit, { audioOnly: true });
+              onOpenChange(false);
+            }}
+            onDownloadVideo={canDownloadVideo(hit.source) ? () => setDownloadHit(hit) : undefined}
+          />
+        ))}
+        {link && !onlineSearching && onlineHits.length === 0 && !playlistLink && (
+          <p className="px-3 py-2 text-muted-foreground text-xs">
+            {t("globalSearch.linkNotFound")}
+          </p>
+        )}
+      </div>
+    ) : null;
+
   return (
     <div
       className="fixed inset-0 z-[90] bg-background/55 px-4 pt-[12vh] backdrop-blur-md"
@@ -614,6 +672,7 @@ export function GlobalTrackSearch({
 
         <RenderTraceBoundary id="global-search:results" active={open}>
           <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox" ref={listRef}>
+            {onlineFirst && onlineSection}
             {setResults.length > 0 && (
               <RenderTraceBoundary id="global-search:sets" active={open}>
                 <div>
@@ -625,9 +684,9 @@ export function GlobalTrackSearch({
                       coverTrack={
                         session.trackIds[0] ? setCoverTrackById.get(session.trackIds[0]) : undefined
                       }
-                      index={i}
-                      selected={selectedIndex === i}
-                      onMouseEnter={() => setSelectedIndex(i)}
+                      index={setStart + i}
+                      selected={selectedIndex === setStart + i}
+                      onMouseEnter={() => setSelectedIndex(setStart + i)}
                       onActivate={() => void activate({ type: "set", session }, false)}
                     />
                   ))}
@@ -732,45 +791,7 @@ export function GlobalTrackSearch({
                 </div>
               ))}
 
-            {showOnline && (onlineSearching || onlineHits.length > 0 || link) && (
-              <div className="mt-2 border-white/10 border-t pt-2">
-                <p className="px-3 pb-1 text-muted-foreground text-xs">
-                  {t(link ? "globalSearch.linkResult" : "globalSearch.online")}
-                  {onlineSearching ? ` · ${t("globalSearch.onlineSearching")}` : ""}
-                </p>
-                {playlistLink && (
-                  <PlaylistLinkCard
-                    playlist={playlistLink}
-                    onOpen={() => {
-                      openOnlinePlaylist(playlistLink);
-                      onOpenChange(false);
-                    }}
-                  />
-                )}
-                {onlineHits.map((hit, i) => (
-                  <OnlineResultRow
-                    key={`${hit.source}:${hit.externalId}`}
-                    hit={hit}
-                    index={onlineStart + i}
-                    selected={selectedIndex === onlineStart + i}
-                    onMouseEnter={() => setSelectedIndex(onlineStart + i)}
-                    onPlay={() => void activate({ type: "online", hit }, false)}
-                    onDownloadAudio={() => {
-                      startBackgroundDownload(hit, { audioOnly: true });
-                      onOpenChange(false);
-                    }}
-                    onDownloadVideo={
-                      canDownloadVideo(hit.source) ? () => setDownloadHit(hit) : undefined
-                    }
-                  />
-                ))}
-                {link && !onlineSearching && onlineHits.length === 0 && !playlistLink && (
-                  <p className="px-3 py-2 text-muted-foreground text-xs">
-                    {t("globalSearch.linkNotFound")}
-                  </p>
-                )}
-              </div>
-            )}
+            {!onlineFirst && onlineSection}
           </div>
         </RenderTraceBoundary>
 

@@ -1,11 +1,26 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { deleteTracks, removeTracksFromSession } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { TrackListSection } from "./track-list-section";
 
-// Hoisted so the `vi.mock` factory below (lifted above imports) can safely
-// reference it — vitest only permits hoisted-factory access to vi.hoisted values.
-const { virtualTrackListMock } = vi.hoisted(() => ({ virtualTrackListMock: vi.fn() }));
+// Hoisted so the `vi.mock` factories below (lifted above imports) can safely
+// reference them — vitest only permits hoisted-factory access to vi.hoisted values.
+const { virtualTrackListMock, confirmDialogMock } = vi.hoisted(() => ({
+  virtualTrackListMock: vi.fn(),
+  confirmDialogMock: vi.fn(),
+}));
+
+vi.mock("@/db/repositories", () => ({
+  deleteTracks: vi.fn(() => Promise.resolve()),
+  prependTrackIds: vi.fn(() => Promise.resolve()),
+  removeTracksFromSession: vi.fn(() => Promise.resolve()),
+  reorderTracksInSession: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("@/stores/notification-store", () => ({
+  notify: { success: vi.fn(), error: vi.fn() },
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -30,7 +45,10 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 vi.mock("@/components/ui/confirm-dialog", () => ({
-  ConfirmDialog: () => null,
+  ConfirmDialog: (props: Record<string, unknown>) => {
+    confirmDialogMock(props);
+    return null;
+  },
 }));
 
 vi.mock("./add-to-set-menu", () => ({
@@ -85,4 +103,50 @@ describe("TrackListSection", () => {
       }),
     );
   });
+
+  it("a set row's trash offers remove-from-set vs delete-everywhere", async () => {
+    render(<TrackListSection setId="ses_1" tracks={[track("trk_1")]} />);
+    const props = virtualTrackListMock.mock.calls.at(-1)?.[0] as {
+      onDeleteTrack: (track: Track) => void;
+    };
+
+    // The row trash opens a two-choice dialog (it no longer silently removes).
+    await act(async () => props.onDeleteTrack(track("trk_1")));
+    const dialog = confirmDialogMock.mock.calls
+      .map(
+        (call) =>
+          call[0] as { open: boolean; confirm: ConfirmActionMock; secondary?: ConfirmActionMock },
+      )
+      .filter((p) => p.open && p.secondary)
+      .at(-1);
+    expect(dialog).toBeTruthy();
+
+    // Primary = remove from THIS set only (reversible); the song is not deleted.
+    await act(async () => dialog?.confirm.onConfirm());
+    expect(removeTracksFromSession).toHaveBeenCalledWith("ses_1", ["trk_1"]);
+    expect(deleteTracks).not.toHaveBeenCalled();
+
+    // Secondary = delete the song everywhere (irreversible).
+    await act(async () => dialog?.secondary?.onConfirm());
+    expect(deleteTracks).toHaveBeenCalledWith(["trk_1"]);
+  });
+
+  it("the global library row trash goes straight to a permanent-delete confirm", async () => {
+    render(<TrackListSection tracks={[track("trk_1")]} />);
+    const props = virtualTrackListMock.mock.calls.at(-1)?.[0] as {
+      onDeleteTrack: (track: Track) => void;
+    };
+
+    await act(async () => props.onDeleteTrack(track("trk_1")));
+    // No set context → no remove-from-set choice (single permanent confirm only).
+    const opened = confirmDialogMock.mock.calls
+      .map((call) => call[0] as { open: boolean; secondary?: ConfirmActionMock })
+      .filter((p) => p.open)
+      .at(-1);
+    expect(opened?.secondary).toBeUndefined();
+  });
 });
+
+interface ConfirmActionMock {
+  onConfirm: () => void | Promise<void>;
+}
