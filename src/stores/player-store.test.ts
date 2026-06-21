@@ -1935,4 +1935,126 @@ describe("player-store context-aware play (playTrackInContext)", () => {
     });
     await expect(repos.getPlayQueue()).resolves.toMatchObject({ contextSetId: undefined });
   });
+
+  // --- Phase 4a: materialized shuffle + linear stepping (Part B) ---------------
+
+  async function setupShuffleSet(rt: Awaited<ReturnType<typeof loadRuntime>>, names: string[]) {
+    const { db, repos, usePlayerStore } = rt;
+    const set = await repos.createSession({
+      name: "S",
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    const items = names.map((n) => readyTrack(`trk_${n}`, set.id, `T${n}`, `blb_${n}`));
+    await db.tracks.bulkAdd(items);
+    for (const it of items) await putMediaBlob(db, it.id, it.blobId as string);
+    await repos.prependTrackIds(
+      set.id,
+      items.map((i) => i.id),
+    );
+    usePlayerStore.getState().init();
+    const tracks = await repos.getTracksByIds(items.map((i) => i.id));
+    return { set, tracks };
+  }
+
+  it("shuffle on reorders the queue, pinning the current track first", async () => {
+    const rt = await loadRuntime();
+    const { usePlayerStore } = rt;
+    const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c", "d"]);
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[2], { source: { kind: "set", setId: set.id }, tracks });
+    await waitFor(() =>
+      expect(usePlayerStore.getState().queue[usePlayerStore.getState().currentIndex]?.id).toBe(
+        "trk_c",
+      ),
+    );
+
+    usePlayerStore.getState().setShuffle(true);
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.shuffle).toBe(true);
+      expect(s.queue[0]?.id).toBe("trk_c"); // current pinned first
+      expect(s.currentIndex).toBe(0);
+      expect(new Set(s.queue.map((t) => t.id))).toEqual(
+        new Set(["trk_a", "trk_b", "trk_c", "trk_d"]),
+      );
+    });
+  });
+
+  it("turning shuffle off restores the natural order", async () => {
+    const rt = await loadRuntime();
+    const { usePlayerStore } = rt;
+    const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c", "d"]);
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[2], { source: { kind: "set", setId: set.id }, tracks });
+    await waitFor(() => expect(usePlayerStore.getState().currentIndex).toBe(2));
+
+    usePlayerStore.getState().setShuffle(true);
+    await waitFor(() => expect(usePlayerStore.getState().queue[0]?.id).toBe("trk_c"));
+
+    usePlayerStore.getState().setShuffle(false);
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queue.map((t) => t.id)).toEqual(["trk_a", "trk_b", "trk_c", "trk_d"]);
+      expect(s.queue[s.currentIndex]?.id).toBe("trk_c"); // current preserved
+    });
+  });
+
+  it("plays the clicked track next even in shuffle (insert after current is not skipped)", async () => {
+    const rt = await loadRuntime();
+    const { db, repos, usePlayerStore } = rt;
+    const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c"]);
+    // A standalone track that gets 点歌'd in after the current one.
+    const requested = readyTrack("trk_req", set.id, "Requested", "blb_req");
+    await db.tracks.add(requested);
+    await putMediaBlob(db, requested.id, "blb_req");
+
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[0], { source: { kind: "set", setId: set.id }, tracks });
+    usePlayerStore.getState().setShuffle(true);
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.shuffle).toBe(true);
+      expect(s.queue[0]?.id).toBe("trk_a"); // current pinned
+    });
+
+    const cur = usePlayerStore.getState().currentIndex;
+    await repos.playQueueInsertAt(cur + 1, [requested.id]);
+    await waitFor(() => expect(usePlayerStore.getState().queue[cur + 1]?.id).toBe("trk_req"));
+
+    await usePlayerStore.getState().next();
+
+    // Linear next over the visible queue → the 点歌 plays next, not a random track.
+    const s = usePlayerStore.getState();
+    expect(s.queue[s.currentIndex]?.id).toBe("trk_req");
+  });
+
+  it("next() follows the visible (shuffled) queue order", async () => {
+    const rt = await loadRuntime();
+    const { usePlayerStore } = rt;
+    const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c", "d"]);
+    // Enable shuffle first so the materialize happens inside the awaited play call.
+    usePlayerStore.getState().setShuffle(true);
+    await usePlayerStore
+      .getState()
+      .playTrackInContext(tracks[0], { source: { kind: "set", setId: set.id }, tracks });
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queue[0]?.id).toBe("trk_a"); // clicked track pinned first
+      expect(s.currentIndex).toBe(0);
+    });
+
+    const expectedNextId = usePlayerStore.getState().queue[1]?.id;
+    await usePlayerStore.getState().next();
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queue[s.currentIndex]?.id).toBe(expectedNextId); // linear: visible next played
+    });
+  });
 });

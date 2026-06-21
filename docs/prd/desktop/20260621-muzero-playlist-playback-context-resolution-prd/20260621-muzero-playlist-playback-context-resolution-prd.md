@@ -18,7 +18,7 @@
 | 1 | Set 上下文 + 顺序对齐（修复主 bug） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 派生实体 / 系统歌单 / 全部歌曲上下文统一 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Online 歌单（发现 tab 第 5 项）上下文 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | **随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）** | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | **随机播放队列模型（materialized shuffle + Next-in-Queue 点歌）** | 🔄 4a 完成（核心）/ 4b 待做（持久化+Setting+面板分区） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | `sessionId` 语义收敛 + `playTrack` 清理 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -459,30 +459,30 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 
 **Goal:** 随机播放 = 对 context 物化洗牌一次进 `entries`、**每歌单稳定复用**（Q8）；点歌进不洗牌的优先 FIFO；可见队列 == 播放顺序；删除并行 `shuffleOrder`；队列 + 来源 + 洗牌排列持久化以**续播**（Q3）。详见 §2.5。
 
-**Tasks:**
-- [ ] `setShuffle(on)`：on → 若当前 context 已有持久洗牌快照（且未开「toggle 重洗」Setting）→ **复用**；否则 Fisher–Yates 洗一次（钉当前曲首位）并按 context key 持久化。off → 从 `orderedSetTrackIds` 自然序重载、以当前曲为锚，**保留**洗牌快照备复用。
-- [ ] `next()`/`skipPrev()`/`prev()` 改为线性走 `entries`（+ repeat 环绕），**删除** `shuffleOrder` 及其在 `peek*`/`window*`/`queue.ts` 里的所有分支。
-- [ ] 点歌统一：`playNextTrack`/`playQueuePlayNext` 走 `requested` 优先 FIFO（复用 `playQueueRequestNextAt` 语义），紧跟当前曲、不洗牌、优先播。
-- [ ] **重洗时机（Q8）**：仅「切换歌单/context」默认生成新洗牌；同歌单内 toggle 随机/切循环模式**不重洗**；repeat-all 轮尾**复用同排列循环**（不静默重洗）。
-- [ ] **Setting（Q8）**：`AppSettings.shuffleReshuffleOnToggle`（默认关）+ Settings 可见控件（i18n 四语）。开启后 toggle 随机开关即重洗。
-- [ ] **防接缝重复（Q9）**：任何真正重洗时，新首曲 ≠ 当前/刚播曲（与 `buildShuffleOrder` 钉首位统一）。
-- [ ] **续播持久化（Q3）**：`queueSource` 快照 + 洗牌排列快照随 `PlayQueue` 行持久；启动恢复「playing from」+ 光标 + 顺序，可继续播放。移除非持久 `shuffleOrder` 的启动重建。
-- [ ] DJ autoExtend 追加进未播剩余段（在未播部分洗入），不进已播段 / 不进点歌 FIFO。
-- [ ] **队列面板「接下来播放」分区（Q10）**：用 `requested` 标志在 [`QueuePanel`](../../../../src/components/player/queue-panel.tsx) 渲染轻量分区（点歌块 vs context 块），对齐 Spotify「Next in Queue」。
-- [ ] 大队列性能：洗牌 + 落库为单次 `playQueueSet`，用 perf HUD 在大歌单实测。
+**Phase 4a（核心，已完成）— materialized shuffle + 线性步进:**
+- [x] `next()`/`skipPrev()`/`prev()` + `peekTrack`/`peekUpcomingTracks`/`peekWindowFrom`/`stepCenter` 改为**线性走 `entries`**（[player-store.ts](../../../../src/stores/player-store.ts)）；移除模块 `shuffleOrder` 变量及其全部分支（`queue.ts` 纯函数暂留、Phase 5 清理未用导出）。
+- [x] `setShuffle(on)` → `materializeShuffle`（Fisher–Yates `shuffledIdsPinning`，钉当前曲首位）；`setShuffle(off)` → `restoreNaturalOrder`（用 `naturalOrderIds`）。新内部 `applyQueueOrder` 单次 `playQueueSet` 重排队列。
+- [x] 上下文加载捕获 `naturalOrderIds`（`setActiveSession` / `activateExplicitQueue`）；`playTrackInContext` + `play()` 在 shuffle 时物化洗牌（点歌/点击项钉首位），再 `playIndex`。
+- [x] **点歌不再被跳过**：线性 `next()` 走可见队列，插在当前曲之后的条目（点歌/插队）真的下一首播 —— 即用户报告的核心 bug 修复。
+- [x] 单测（5 个）：shuffle 物化钉当前首位 / 关闭还原自然序 / **点歌在 shuffle 下下一首播** / `next()` 跟随可见洗牌顺序 / 全量回归（player-store 45、player 组件 353 通过，含 cover-pager）。
+
+**Phase 4b（待做）— 持久化 + Setting + 面板分区:**
+- [ ] **续播持久化（Q3）**：`queueSource` 快照 + 每-context 洗牌排列快照随 `PlayQueue` 行 additive 持久；启动恢复「playing from」+ 光标 + 顺序。
+- [ ] **Q8 稳定复用**：仅「切歌单」生成新洗牌（持久快照）；同歌单内 toggle/切循环模式复用；+ Setting `shuffleReshuffleOnToggle`（默认关，i18n 四语）。
+- [ ] **Q9 防接缝**：repeat-all 轮尾若重洗则新首曲 ≠ 刚播曲（4a 已对 toggle 钉当前首位，轮尾默认复用同排列）。
+- [ ] **点歌 FIFO 显式化**：`playNextTrack` 走 `requested` 优先块（`playQueueRequestNextAt`）；**队列面板「接下来播放」分区（Q10）**。
+- [ ] DJ autoExtend 在 shuffle 下追加进未播剩余段（4a 暂追加到末尾）。
+- [ ] 大队列首播延迟 perf HUD 实测。
 
 ### Phase 4 Checklist
 
-- [ ] 单测（核心修复）：shuffle 开启时点歌 → 该曲下一首播、不被重洗甩走；`requested` FIFO 多次点歌按加入顺序播。
-- [ ] 单测（可见==实播）：shuffle 下 `peekTrack("next")` / 队列面板下一行 / 实际 `next()` 落点三者一致。
-- [ ] 单测（Q8 稳定）：同歌单内 toggle 随机关再开 / 切循环模式 → shuffle 结果不变；切到另一歌单 → 生成新结果。
-- [ ] 单测（Q8 Setting）：`shuffleReshuffleOnToggle=true` 时 toggle 随机即重洗；默认 false 时复用。
-- [ ] 单测（Q9）：重洗后首曲 ≠ 刚播曲。
-- [ ] 单测（shuffle off 还原）：关闭 shuffle 后 `entries` == `orderedSetTrackIds` 自然序、以当前曲为锚；再开复用原洗牌排列。
-- [ ] 集成（rule 7）：draft→materialize→shuffle→点歌→next 连续流，队列顺序/点歌优先/续歌落点不被破坏。
-- [ ] 回归：cover-pager 窗口（`peekWindowFrom`）在线性模型下行为正确（删 `shuffleOrder` 后仍对齐）。
-- [ ] 续播（Q3）：重启后 shuffle 顺序 + 光标 + 来源标签保留，可继续播放。
-- [ ] `make check` 通过。
+- [x] 单测（核心修复）：shuffle 开启时点歌 → 该曲下一首播、不被重洗甩走。
+- [x] 单测（可见==实播）：shuffle 下 `peekTrack`/可见队列下一行 / 实际 `next()` 落点一致（线性）。
+- [x] 单测（shuffle off 还原）：关闭 shuffle 后 `entries` == 自然序、以当前曲为锚。
+- [x] 回归：cover-pager 窗口（`peekWindowFrom`/`stepCenter`）在线性模型下行为正确（删 `shuffleOrder` 后；player 组件 353 通过）。
+- [x] 4a `make check` 等价：tsc 通过；player-store 45 + player 组件 353 通过。
+- [ ] （4b）单测 Q8 稳定 / Setting / Q9 / 续播（Q3）。
+- [ ] （4b）`make check` 通过。
 
 ### Phase 5: `sessionId` 语义收敛 + `playTrack` 清理
 

@@ -100,8 +100,6 @@ import {
   manualStepIndex,
   prevIndex,
   type RepeatMode,
-  shuffleManualNext,
-  shufflePrev,
   upcomingManualIndices,
   windowManualIndices,
 } from "@/player/queue";
@@ -446,9 +444,11 @@ let lyricsTimer: ReturnType<typeof setTimeout> | null = null;
 // dismiss or replace it in place (never stacks). Module scope, not store state.
 let lyricsToastId: string | null = null;
 let playbackSettingsLoaded = false;
-// The active shuffled play order (queue indices). Non-reactive: next/prev read it,
-// setShuffle rebuilds it, and it self-heals when stale vs the queue length.
-let shuffleOrder: number[] = [];
+// The active context's NATURAL (pre-shuffle) order, captured on every queue load.
+// Non-reactive (module scope, rule 6). Lets "turn shuffle off" restore the order the
+// user curated/saw, since shuffle is materialized into the queue itself (no parallel
+// permutation). Persistence of this across reloads is Phase 4b (Q3/Q8).
+let naturalOrderIds: string[] = [];
 // True while a cover-pager drag window is open. Non-reactive (module scope, rule 6):
 // the gesture owns the visual window, so DJ auto-extend is held off until it settles
 // (no queue mutation under the user's finger). Flipped by `setCoverGestureActive`.
@@ -574,6 +574,7 @@ async function activateExplicitQueue(
   watchSetForAppend(null, [], true);
 
   const trackIds = tracks.map((t) => t.id);
+  naturalOrderIds = trackIds; // remember natural order so "turn shuffle off" can restore it
   loadedTrackId = null;
   cancelPlaybackLoading(set);
   await playQueueSet(trackIds, { currentIndex: -1 });
@@ -591,6 +592,68 @@ async function activateExplicitQueue(
     displayMode: "video",
     djEnabled: false,
   });
+}
+
+/** A fresh shuffled permutation of `ids`, pinning `anchorId` first when given (the
+ *  playing track stays put). Fisher–Yates via {@link buildShuffleOrder}. */
+function shuffledIdsPinning(ids: string[], anchorId: string | undefined): string[] {
+  if (ids.length <= 1) return [...ids];
+  const shuffled = buildShuffleOrder(ids.length, -1).map((i) => ids[i]);
+  if (!anchorId) return shuffled;
+  const rest = shuffled.filter((id) => id !== anchorId);
+  return rest.length === shuffled.length ? shuffled : [anchorId, ...rest];
+}
+
+/** Reorder the live queue to `ids` (a permutation of the current queue), keeping
+ *  `anchorId` current, and persist in one playQueueSet write. */
+async function applyQueueOrder(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  ids: string[],
+  anchorId: string | undefined,
+): Promise<void> {
+  const byId = new Map(get().queue.map((t) => [t.id, t] as const));
+  const nextQueue = ids.map((id) => byId.get(id)).filter((t): t is Track => Boolean(t));
+  if (nextQueue.length === 0) return;
+  const currentIndex = anchorId ? nextQueue.findIndex((t) => t.id === anchorId) : -1;
+  const contextSetId = get().activeSessionId ?? undefined;
+  await playQueueSet(
+    nextQueue.map((t) => t.id),
+    { contextSetId, currentIndex },
+  );
+  consumedTrackIds = new Set(nextQueue.map((t) => t.id));
+  lastQueueSig = queueSig(nextQueue);
+  set({ queue: nextQueue, currentIndex });
+}
+
+/** Materialize a shuffle into the live queue, pinning `anchorId` (the current track) first. */
+function materializeShuffle(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  anchorId: string | undefined,
+): Promise<void> {
+  return applyQueueOrder(
+    set,
+    get,
+    shuffledIdsPinning(
+      get().queue.map((t) => t.id),
+      anchorId,
+    ),
+    anchorId,
+  );
+}
+
+/** Restore the context's natural order into the live queue (anchor stays current). */
+function restoreNaturalOrder(
+  set: (partial: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  anchorId: string | undefined,
+): Promise<void> {
+  const present = new Set(get().queue.map((t) => t.id));
+  const target = naturalOrderIds.filter((id) => present.has(id));
+  // Keep any queue ids missing from the natural list (e.g. DJ-appended) at the end.
+  for (const id of present) if (!target.includes(id)) target.push(id);
+  return applyQueueOrder(set, get, target.length ? target : [...present], anchorId);
 }
 
 function playableDurationSec(value: number | undefined): number {
@@ -941,7 +1004,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       previoustrack: () => void get().prev(),
       nexttrack: () => void get().next(),
     });
-    void hydratePlaybackSettings(set, get).catch((err: unknown) =>
+    void hydratePlaybackSettings(set).catch((err: unknown) =>
       log.warn("player", "failed to hydrate playback settings", err),
     );
     void get()
@@ -1167,6 +1230,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const trackIds = orderedTracks
       ? orderedTracks.map((t) => t.id)
       : orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks);
+    naturalOrderIds = trackIds; // remember natural order so "turn shuffle off" can restore it
     loadedTrackId = null;
     cancelPlaybackLoading(set);
 
@@ -1230,8 +1294,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async play() {
     set({ wantPlay: true });
-    const { currentIndex, queue } = get();
+    const { currentIndex, queue, shuffle } = get();
     if (currentIndex < 0 && queue.length > 0) {
+      // Fresh start (e.g. "play all"): in shuffle, randomize first so playback doesn't
+      // begin from the natural first track.
+      if (shuffle) await materializeShuffle(set, get, undefined);
       await get().playIndex(0);
       return;
     }
@@ -1322,40 +1389,58 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async playTrackInContext(trackToPlay, ctx) {
     const ids = ctx.tracks.map((t) => t.id);
-    const idx = ctx.tracks.findIndex((t) => t.id === trackToPlay.id);
+    const naturalIdx = ctx.tracks.findIndex((t) => t.id === trackToPlay.id);
+    const shuffle = get().shuffle;
     log.debug("player", "playTrackInContext", {
       trackId: trackToPlay.id,
       sourceKind: ctx.source.kind,
-      index: idx,
+      index: naturalIdx,
       count: ids.length,
+      shuffle,
     });
     // Defensive: the track must be in the provided context (the UI always passes the
     // list it rendered, so this only guards against a programming error).
-    if (idx < 0) return;
+    if (naturalIdx < 0) return;
 
     if (ctx.source.kind === "set") {
       const { setId } = ctx.source;
       const st = get();
-      // Cheap path: already playing from this exact set + displayed order → just jump,
-      // don't re-seed the whole queue.
-      const alreadyHere =
+      const sameContext =
         st.activeSessionId === setId &&
         st.queueSource?.kind === "set" &&
-        st.queueSource.setId === setId &&
-        sameTrackIds(st.queue, ids);
-      if (!alreadyHere) {
-        // Load the VIEWED set into the queue in the exact displayed order. Context is
-        // the surface clicked (setId), never trackToPlay.sessionId (its home set).
-        await get().setActiveSession(setId, { tracks: ctx.tracks });
+        st.queueSource.setId === setId;
+      if (sameContext) {
+        if (shuffle) {
+          // Already in this (shuffled) set — play the clicked track where it sits;
+          // don't reshuffle on an in-set click.
+          const pos = st.queue.findIndex((t) => t.id === trackToPlay.id);
+          if (pos >= 0) {
+            await get().playIndex(pos);
+            return;
+          }
+        } else if (sameTrackIds(st.queue, ids)) {
+          // Same displayed order already loaded → cheap jump, no re-seed.
+          await get().playIndex(naturalIdx);
+          return;
+        }
       }
-      await get().playIndex(idx);
-      return;
+      // Load the VIEWED set in the exact displayed order. Context is the clicked
+      // surface (setId), never trackToPlay.sessionId (its home set).
+      await get().setActiveSession(setId, { tracks: ctx.tracks });
+    } else {
+      // Non-set context (system-playlist / entity / library / online-playlist): load
+      // the explicit ordered tracks. No contextSetId → DJ auto-extend stays off.
+      await activateExplicitQueue(set, get, ctx.tracks, ctx.source);
     }
 
-    // Non-set context (system-playlist / entity / library / online-playlist): load the
-    // explicit ordered tracks. No contextSetId → DJ auto-extend stays off.
-    await activateExplicitQueue(set, get, ctx.tracks, ctx.source);
-    await get().playIndex(idx);
+    // Fresh context load: in shuffle, materialize a shuffle pinning the clicked track
+    // first (so it plays now and the rest is randomized), then play index 0.
+    if (shuffle) {
+      await materializeShuffle(set, get, trackToPlay.id);
+      await get().playIndex(0);
+    } else {
+      await get().playIndex(naturalIdx);
+    }
   },
 
   async playNextTrack(track) {
@@ -1521,15 +1606,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async next() {
-    const { queue, currentIndex, repeat, shuffle } = get();
-    let ni: number | null;
-    if (shuffle) {
-      const r = shuffleManualNext(shuffleOrder, queue.length, currentIndex, repeat);
-      shuffleOrder = r.order;
-      ni = r.index;
-    } else {
-      ni = manualNextIndex(queue.length, currentIndex, repeat);
-    }
+    // Shuffle is materialized into the queue order itself (see materializeShuffle),
+    // so next is ALWAYS a linear step over the visible queue — the visible "next" IS
+    // the next track, and a 点歌/insert right after the cursor really plays next.
+    const { queue, currentIndex, repeat } = get();
+    const ni = manualNextIndex(queue.length, currentIndex, repeat);
     if (ni === null) {
       get().pause();
       set({ isPlaying: false });
@@ -1540,15 +1621,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async skipPrev() {
-    const { queue, currentIndex, repeat, shuffle } = get();
-    let pi: number | null;
-    if (shuffle) {
-      const r = shufflePrev(shuffleOrder, queue.length, currentIndex, repeat);
-      shuffleOrder = r.order;
-      pi = r.index;
-    } else {
-      pi = prevIndex(queue.length, currentIndex, repeat);
-    }
+    const { queue, currentIndex, repeat } = get();
+    const pi = prevIndex(queue.length, currentIndex, repeat);
     if (pi === null || pi === currentIndex) return;
     await get().playIndex(pi);
   },
@@ -1563,50 +1637,32 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   peekTrack(direction) {
-    const { queue, currentIndex, repeat, shuffle } = get();
+    // Linear over the visible queue (shuffle is baked into queue order).
+    const { queue, currentIndex, repeat } = get();
     if (queue.length === 0 || currentIndex < 0) return undefined;
-    let index: number | null;
-    if (direction === "next") {
-      if (shuffle) {
-        if (shuffleOrder.length !== queue.length) return undefined;
-        const r = shuffleManualNext(shuffleOrder, queue.length, currentIndex, repeat);
-        index = r.index;
-      } else {
-        index = manualNextIndex(queue.length, currentIndex, repeat);
-      }
-    } else if (shuffle) {
-      if (shuffleOrder.length !== queue.length) return undefined;
-      const r = shufflePrev(shuffleOrder, queue.length, currentIndex, repeat);
-      index = r.index;
-    } else {
-      index = prevIndex(queue.length, currentIndex, repeat);
-    }
+    const index =
+      direction === "next"
+        ? manualNextIndex(queue.length, currentIndex, repeat)
+        : prevIndex(queue.length, currentIndex, repeat);
     if (index === null || index === currentIndex) return undefined;
     return queue[index];
   },
 
   peekUpcomingTracks(count) {
-    const { queue, currentIndex, repeat, shuffle } = get();
-    return upcomingManualIndices({
-      count,
-      currentIndex,
-      length: queue.length,
-      repeat,
-      shuffleOrder: shuffle ? shuffleOrder : undefined,
-    })
+    const { queue, currentIndex, repeat } = get();
+    return upcomingManualIndices({ count, currentIndex, length: queue.length, repeat })
       .map((index) => queue[index])
       .filter((track): track is Track => Boolean(track));
   },
 
   peekWindowFrom(centerIndex, radius) {
-    const { queue, repeat, shuffle } = get();
+    const { queue, repeat } = get();
     const current = centerIndex >= 0 ? queue[centerIndex] : undefined;
     const { prev, next } = windowManualIndices({
       radius,
       currentIndex: centerIndex,
       length: queue.length,
       repeat,
-      shuffleOrder: shuffle ? shuffleOrder : undefined,
     });
     const toTracks = (indices: number[]) =>
       indices.map((index) => queue[index]).filter((track): track is Track => Boolean(track));
@@ -1614,14 +1670,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   stepCenter(centerIndex, dir) {
-    const { queue, repeat, shuffle } = get();
-    const stepped = manualStepIndex({
-      index: centerIndex,
-      length: queue.length,
-      repeat,
-      dir,
-      shuffleOrder: shuffle ? shuffleOrder : undefined,
-    });
+    const { queue, repeat } = get();
+    const stepped = manualStepIndex({ index: centerIndex, length: queue.length, repeat, dir });
     return stepped ?? centerIndex;
   },
 
@@ -1656,7 +1706,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setShuffle(on) {
     set({ shuffle: on });
-    shuffleOrder = on ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];
+    // Materialize: shuffle reorders the queue itself (pinning the current track so it
+    // keeps playing); turning it off restores the context's natural order. The visible
+    // queue is the play order — no parallel permutation. See playback-queue-model PRD.
+    const { queue, currentIndex } = get();
+    const anchorId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
+    if (queue.length > 1) {
+      if (on) {
+        if (naturalOrderIds.length !== queue.length) naturalOrderIds = queue.map((t) => t.id);
+        void materializeShuffle(set, get, anchorId);
+      } else {
+        void restoreNaturalOrder(set, get, anchorId);
+      }
+    }
     void saveSettings({ playerShuffle: on }).catch((err: unknown) =>
       log.warn("player", "failed to persist shuffle mode", err),
     );
@@ -4014,10 +4076,7 @@ function flushDeferredSetAppends(): void {
   }
 }
 
-async function hydratePlaybackSettings(
-  set: (p: Partial<PlayerState>) => void,
-  get: () => PlayerState,
-): Promise<void> {
+async function hydratePlaybackSettings(set: (p: Partial<PlayerState>) => void): Promise<void> {
   if (playbackSettingsLoaded) return;
   playbackSettingsLoaded = true;
   const settings = await getSettings();
@@ -4026,7 +4085,9 @@ async function hydratePlaybackSettings(
   const volume = clampVolume(settings.playerVolume);
   set({ repeat, shuffle, volume });
   mediaEngine?.setVolume(volume);
-  shuffleOrder = shuffle ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];
+  // Shuffle is materialized into the persisted queue order (playQueue.entries), so the
+  // boot queue is already the last play order — nothing to rebuild here. Persisting the
+  // natural-order snapshot for un-shuffle across reloads is Phase 4b (Q3/Q8).
 }
 
 function clampVolume(value: number | undefined): number {
