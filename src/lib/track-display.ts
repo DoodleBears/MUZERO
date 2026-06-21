@@ -4,6 +4,18 @@ import type { SetDisplayMode, Track } from "@/db/types";
 export type StageContent = "video" | "cover" | "title";
 
 /**
+ * Whether a track can play its own moving video right now — the single predicate
+ * both the foreground stage and the ambient Pixi background key on so they never
+ * disagree about "is this a video". A track is a playable video iff it's a
+ * `video` kind that has finished landing (`status === "ready"`); a generating /
+ * pending / failed video has no playable bytes yet, so the stage falls back to
+ * cover/title and the background stays on the image path. Undefined → false.
+ */
+export function trackIsPlayableVideo(track: Pick<Track, "kind" | "status"> | undefined): boolean {
+  return track?.kind === "video" && track.status === "ready";
+}
+
+/**
  * Resolve what to show on the now-playing stage, honoring the set's display mode
  * with the fallback the product wants: video-first → cover → title.
  *  - "video" mode: play the video when available, else a cover image if present,
@@ -19,7 +31,7 @@ export function resolveStageContent(opts: {
   if (!track) return "title";
   if (displayMode === "cover") return hasCover ? "cover" : "title";
   // displayMode === "video"
-  if (track.kind === "video" && track.status === "ready") return "video";
+  if (trackIsPlayableVideo(track)) return "video";
   if (hasCover) return "cover";
   return "title";
 }

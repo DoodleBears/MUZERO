@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 观测先行：把「前台 content 判定 vs 实际播放」可见化 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 观测先行：把「前台 content 判定 vs 实际播放」可见化 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 修复：视频显示判定 + `<video>` 收养/续播跟 LIVE `current` | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 回归与单测：穷举切歌时序 + 前后台同源 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -243,20 +243,21 @@ nowplaying.stage.content  { liveTrackId, displayTrackId, liveKind, liveStatus,
 
 ## 6. Implementation Plan
 
-### Phase 1: 观测先行（把症状变成无歧义信号）
+### Phase 1: 观测先行（把症状变成无歧义信号）✅
 
-**Goal:** 在改渲染路径前，先用日志/HUD 证实主因是 **2.2（content 退化 cover）** 还是 **2.3（video 元素 paused/detached）**，拿到 before/after ground truth（对齐 prd-create.md「观测先行，再优化」）。
+**Goal:** 在改渲染路径前，先把「前台 content 判定 vs LIVE 实际」可见化，并抽出**唯一的** video 判定谓词，让前台 stage 与背景层以后只能依据同一个真值（防再次漂移）。
 
-**Tasks:**
-- [ ] 在 `MediaStage` 增加 §4.2 的 `nowplaying.stage.content` 诊断（仅切歌/状态变化时打一行，非每帧）。
-- [ ] 复现脚本：用控制端点驱动「视频 track 上快捷键连点切歌 / coverflow 拖拽切歌」，采集 `liveTrackId` vs `displayTrackId` 的错位时长与 `resolvedContent`。
-- [ ] 记录 `videoEl.paused` / `parentElement === container` / `readyState`，区分「被判成 cover」与「视频在播但被隐藏/暂停」。
+**Done:**
+- [x] 抽出纯谓词 `trackIsPlayableVideo(track)`（[`track-display.ts`](../../../../src/lib/track-display.ts)）= `kind === "video" && status === "ready"`，并让 `resolveStageContent` 复用它（行为不变，测试覆盖）。前台/背景从此共用同一真值（OQ#4 落地）。
+- [x] 单测 `trackIsPlayableVideo`（[`track-display.test.ts`](../../../../src/lib/track-display.test.ts)）：audio / 非 ready video / undefined 全 false；并断言它与 `resolveStageContent` 的 video 分支一致（single source of truth）。
+- [x] 在 `MediaStage` 增加 `nowplaying.stage.content` 诊断（[media-stage.tsx](../../../../src/components/player/media-stage.tsx)）：每次切歌/状态变化打一行（非每帧），含 `liveTrackId` vs `displayTrackId`、`liveKind/Status`、`resolvedContent`、`showVideo`、`mismatch`，及 `videoPaused`/`videoInContainer`/`videoReadyState`，用于区分 **2.2（content 退化 cover）** 与 **2.3（video 元素 paused/detached）**。`mismatch` 为真时 `phase: "retry"` 便于检索。
 
 ### Phase 1 Checklist
 
-- [ ] 能稳定复现并在日志看到 `liveKind==="video"` 且 `resolvedContent==="cover"` 的窗口（验证 2.2）。
-- [ ] 明确 2.3 是否叠加（`videoEl.paused === true` 而 `isPlaying === true`）。
-- [ ] before 指标存档（错位时长分布）。
+- [x] `trackIsPlayableVideo` 谓词 + 单测落地，`resolveStageContent` 复用（前后台同源地基）。
+- [x] `nowplaying.stage.content` 诊断接好，无用户内容（仅 id/kind/status + 元素布尔，符合规则 8）。
+- [x] `mismatch` 字段在「LIVE 是视频但前台 showVideo=false」时为真——把症状变成无歧义信号。
+- [N/A] 本环境无 live Electron 复现；2.2 vs 2.3 的最终确认改由 Phase 2/3 的单测编码（见 OQ#1，证据偏 2.2）。诊断已就位，可在真机直接读取 before/after。
 
 ### Phase 2: 修复（video 判定 + `<video>` 续播跟 LIVE）
 
@@ -334,7 +335,7 @@ nowplaying.stage.content  { liveTrackId, displayTrackId, liveKind, liveStatus,
 | 1 | 主因是 2.2（content 退化 cover）还是 2.3（video 元素 paused/detached），还是叠加？ | Open | Phase 1 观测拍板；当前证据（用户说"只显示封面"非静止帧）偏 2.2 |
 | 2 | 视频判定回 LIVE 后，连点 burst 会不会让 `<video>` 在每首都 reload 造成卡顿？ | Open | 视频 reload 由 `ensureLoadedAndPlay`/`loadedTrackId` 去重，不随渲染；burst-settle 仍合并封面静帧，理论上不回退性能；Phase 1/3 复测 |
 | 3 | 收养 effect 改为依赖 LIVE current.id 重跑 `mount()`，是否会与 coverflow base 隐藏（opacity:0）期叠加导致多次 append？ | Open | `mount()` 已对「parentElement 不同才 append」做幂等；需测 coverflow 提交窗口 |
-| 4 | 是否顺手让 `now-playing-background` 与 `MediaStage` 共用一个「是否视频」纯函数，彻底防再次漂移？ | Open | 倾向是（抽一个 `isPlayableVideo(track)` 供两处复用） |
+| 4 | 是否顺手让 `now-playing-background` 与 `MediaStage` 共用一个「是否视频」纯函数，彻底防再次漂移？ | Resolved | 是。Phase 1 已抽 `trackIsPlayableVideo`，`resolveStageContent` + `MediaStage` 已复用；Phase 3 让 `background.ts` 也复用 |
 
 ---
 
@@ -343,6 +344,7 @@ nowplaying.stage.content  { liveTrackId, displayTrackId, liveKind, liveStatus,
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-21 | MUZERO/Player | 初稿：定位根因为「前台视频判定用 burst-settled `displayTrack`、背景用 LIVE `current`」的错位（违反 media-stage.tsx:55 注释承诺）；给出观测先行 + 视频判定回 LIVE + `<video>` 续播跟 LIVE 的修复计划 |
+| 2026-06-21 | MUZERO/Player | Phase 1 完成：抽出 `trackIsPlayableVideo` 谓词（+单测）并让 `resolveStageContent` 复用；`MediaStage` 接入 `nowplaying.stage.content` 诊断（带 `mismatch` 信号）。OQ#4（共用谓词）落地。 |
 
 ---
 

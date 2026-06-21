@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Track } from "@/db/types";
-import { resolveStageContent, trackHasCover, trackSubtitle } from "./track-display";
+import {
+  resolveStageContent,
+  trackHasCover,
+  trackIsPlayableVideo,
+  trackSubtitle,
+} from "./track-display";
 
 function track(partial: Partial<Track>): Track {
   return {
@@ -79,6 +84,29 @@ describe("resolveStageContent — video-first fallback", () => {
         hasCover: false,
       }),
     ).toBe("title");
+  });
+});
+
+describe("trackIsPlayableVideo", () => {
+  it("is true only for a ready video track", () => {
+    expect(trackIsPlayableVideo(videoTrack)).toBe(true);
+  });
+
+  it("is false for audio, a not-ready video, or undefined", () => {
+    expect(trackIsPlayableVideo(audioTrack)).toBe(false);
+    expect(trackIsPlayableVideo(track({ kind: "video", status: "generating" }))).toBe(false);
+    expect(trackIsPlayableVideo(track({ kind: "video", status: "pending" }))).toBe(false);
+    expect(trackIsPlayableVideo(track({ kind: "video", status: "failed" }))).toBe(false);
+    expect(trackIsPlayableVideo(undefined)).toBe(false);
+  });
+
+  it("agrees with resolveStageContent's video branch (single source of truth)", () => {
+    // In video mode the stage shows video iff the track is a playable video.
+    for (const t of [videoTrack, audioTrack, track({ kind: "video", status: "generating" })]) {
+      const isVideo =
+        resolveStageContent({ track: t, displayMode: "video", hasCover: false }) === "video";
+      expect(isVideo).toBe(trackIsPlayableVideo(t));
+    }
   });
 });
 

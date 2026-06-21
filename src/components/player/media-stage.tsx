@@ -4,24 +4,24 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/hooks/use-app-data";
 import { useBurstSettledValue } from "@/hooks/use-burst-settled-value";
-import { useCoverDerivativeUrl, useTrackCoverUrl } from "@/hooks/use-media";
+import { useTrackCoverUrl } from "@/hooks/use-media";
 import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
-  shouldRequestCoverBacklightDerivative,
 } from "@/lib/album-cover-appearance";
-import { resolveStageContent, trackHasCover } from "@/lib/track-display";
+import { createDiagnosticLogger } from "@/lib/logger";
+import { resolveStageContent, trackHasCover, trackIsPlayableVideo } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { CanvasCover } from "./canvas-cover";
 import { StageTitleFallback } from "./stage-title-fallback";
 
 const DEFAULT_VIDEO_ASPECT = 16 / 9;
+const stageLog = createDiagnosticLogger("nowplaying.stage");
 // Quiet window before the cover/title visual adopts a new track during a rapid
 // next/prev burst. A single switch lands on the leading edge (instant); only a
 // genuine mash coalesces, so deliberate clicks never feel delayed.
 const STAGE_DISPLAY_SETTLE_MS = 300;
-const COVER_BACKLIGHT_MISS_DELAY_MS = 1600;
 
 /**
  * The now-playing "stage". Owns the spot where the shared <video> element is
@@ -71,20 +71,6 @@ export function MediaStage({
   const displayTrackIdRef = useRef(displayTrack?.id);
   displayTrackIdRef.current = displayTrack?.id;
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
-  // Only the "backlight" effect renders the blurred derivative — gate the request
-  // so the default "shadow" mode no longer fires a worker render + DB write + blob
-  // URL for an image it never shows on every track switch (audit O1).
-  const coverBacklightUrl = useCoverDerivativeUrl(
-    shouldRequestCoverBacklightDerivative(coverEffectMode, coverBacklightEnabled)
-      ? displayTrack
-      : undefined,
-    "backlight",
-    {
-      generateOnMiss: false,
-      missDelayMs: COVER_BACKLIGHT_MISS_DELAY_MS,
-      traceSource: "media-stage:backlight",
-    },
-  );
   const [videoError, setVideoError] = useState(false);
   const [videoAspect, setVideoAspect] = useState<number | null>(null);
   const content = resolveStageContent({
@@ -97,6 +83,47 @@ export function MediaStage({
   const showVideo = content === "video";
   // A video track the WebView accepted as "video" but failed to decode.
   const videoBroke = showVideo && videoError;
+
+  // Observability (PRD 20260621-video-stage-shows-cover-after-switch, Phase 1):
+  // surface when the foreground stage's content decision (from the burst-settled
+  // `displayTrack`) DISAGREES with the LIVE `current` track — the exact split that
+  // makes the ambient background play a video while the stage falls back to a cover.
+  // One line per change (not per frame). No user content — only ids/kind/status +
+  // element booleans (CLAUDE.md rule 8 / telemetry whitelist).
+  const liveIsVideo = trackIsPlayableVideo(current);
+  const stageContentMismatch = liveIsVideo !== showVideo;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stage-state inputs are the deps; element booleans are read at log time
+  useEffect(() => {
+    const el = getMediaEngine()?.element;
+    stageLog.debug("content", {
+      category: "media",
+      phase: stageContentMismatch ? "retry" : "state",
+      liveTrackId: current?.id,
+      displayTrackId: displayTrack?.id,
+      liveKind: current?.kind,
+      liveStatus: current?.status,
+      displayKind: displayTrack?.kind,
+      displayStatus: displayTrack?.status,
+      resolvedContent: content,
+      showVideo,
+      liveIsVideo,
+      mismatch: stageContentMismatch,
+      videoError,
+      videoPaused: el?.paused,
+      videoInContainer: el ? el.parentElement === containerRef.current : undefined,
+      videoReadyState: el?.readyState,
+    });
+  }, [
+    current?.id,
+    current?.kind,
+    current?.status,
+    displayTrack?.id,
+    content,
+    showVideo,
+    liveIsVideo,
+    stageContentMismatch,
+    videoError,
+  ]);
 
   // Adopt the persistent media element into this stage; release on unmount
   // (playback keeps going while the element is detached).
@@ -151,8 +178,18 @@ export function MediaStage({
   const showGeneratedBackdrop = content === "title" || videoError;
   const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
   const useCoverShadow = coverEffectMode === "shadow";
+  // The resting backlight blurs the SAME original cover the stage shows (via the CSS
+  // blur + saturate in NowPlayingCoverBacklight), exactly like the travelling coverflow
+  // card backlight (cover-pager-strip). It used to read a pre-blurred 192px "backlight"
+  // derivative, but that derivative is generated lazily off the render path — when
+  // neither the playback warmup nor an on-miss generate runs (both were dropped in the
+  // import/playback-jank perf pass, c8d93ccc), the derivative never exists and the
+  // resting glow silently vanishes, while the drag overlay (already CSS-blurring the raw
+  // cover) still shows one — the reported "拖拽才有背光、松手/切歌后没了". Sourcing the raw
+  // cover removes that dependency: the glow shows whenever the cover does, with no worker
+  // render on the switch frame. (PRD 20260621-now-playing-backlight-derivative-missing.)
   const showCoverBacklight =
-    coverBacklightEnabled && showCover && coverEffectMode === "backlight" && !!coverBacklightUrl;
+    coverBacklightEnabled && showCover && coverEffectMode === "backlight" && !!coverUrl;
 
   // Video keeps its intrinsic ratio. Covers and title cards stay square like
   // album artwork, which keeps direct switches and swipe handoffs on one stable
@@ -175,7 +212,7 @@ export function MediaStage({
         fadeIn={coverBacklightFadeIn}
         fadeMs={coverBacklightFadeMs}
         opacity={backlight.opacity / 100}
-        url={coverBacklightUrl}
+        url={coverUrl}
       />
       <div
         ref={containerRef}
