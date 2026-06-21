@@ -354,7 +354,8 @@ interface PlayerState {
   seek: (sec: number) => void;
   setVolume: (v: number) => void;
   setRepeat: (mode: RepeatMode) => void;
-  setShuffle: (on: boolean) => void;
+  /** Resolves once the queue has been materialized (shuffle on) / restored (off). */
+  setShuffle: (on: boolean) => Promise<void>;
   setDisplayMode: (mode: SetDisplayMode) => Promise<void>;
   /** Import uploaded audio/video files into the active set. */
   addUploads: (files: FileList | File[]) => Promise<void>;
@@ -1704,19 +1705,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     );
   },
 
-  setShuffle(on) {
+  async setShuffle(on) {
     set({ shuffle: on });
     // Materialize: shuffle reorders the queue itself (pinning the current track so it
     // keeps playing); turning it off restores the context's natural order. The visible
     // queue is the play order — no parallel permutation. See playback-queue-model PRD.
+    // AWAIT the reorder so a rapid follow-up action (next/playIndex) can't be clobbered
+    // by a late-landing materialize resetting the cursor to the anchor.
     const { queue, currentIndex } = get();
     const anchorId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
     if (queue.length > 1) {
       if (on) {
         if (naturalOrderIds.length !== queue.length) naturalOrderIds = queue.map((t) => t.id);
-        void materializeShuffle(set, get, anchorId);
+        await materializeShuffle(set, get, anchorId);
       } else {
-        void restoreNaturalOrder(set, get, anchorId);
+        await restoreNaturalOrder(set, get, anchorId);
       }
     }
     void saveSettings({ playerShuffle: on }).catch((err: unknown) =>

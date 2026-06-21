@@ -214,6 +214,10 @@ function routeToCommand(method, segments, body) {
   ) {
     return { kind: "downloadQueue", payload: body };
   }
+  // Playback-queue-model E2E: POST /playback/:action (seed | playInSet)
+  if (method === "POST" && segments.length === 2 && segments[0] === "playback") {
+    return { kind: "playbackContext", payload: { action: segments[1], ...body } };
+  }
   return null;
 }
 

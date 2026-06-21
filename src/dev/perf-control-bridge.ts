@@ -69,7 +69,8 @@ export interface PerfControlCommand {
     | "recoverCover"
     | "resolveLink"
     | "syncPlaylists"
-    | "downloadQueue";
+    | "downloadQueue"
+    | "playbackContext";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -119,6 +120,8 @@ interface PerfCommandHandlerDeps {
   syncPlaylists?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** Drive/inspect the persistent download queue (list/enqueue/seedActive/recover/clearAll). */
   downloadQueue?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Playback-queue-model E2E: seed a cross-set scenario / play a track in a set context. */
+  playbackContext?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -135,6 +138,8 @@ const PLAYER_METHODS = new Set([
   "setActiveSession",
   "playSystemPlaylist",
   "setDisplayMode",
+  "setShuffle",
+  "setRepeat",
 ]);
 
 const PERF_NAV_TAB_ALIASES = new Set(["sets"]);
@@ -147,12 +152,32 @@ function normalizePerfNavTab(tab: string): ReturnType<typeof normalizeTab> {
   throw new Error(`unknown tab: ${tab}`);
 }
 
+/** Flatten the active QueueSource for the wire (playback-queue-model E2E). */
+function serializeQueueSource(source: ReturnType<typeof usePlayerStore.getState>["queueSource"]) {
+  if (!source) return null;
+  switch (source.kind) {
+    case "set":
+      return { kind: source.kind, setId: source.setId };
+    case "system-playlist":
+      return { kind: source.kind, id: source.id };
+    case "entity":
+      return { kind: source.kind, entityKind: source.entityKind, entityKey: source.entityKey };
+    case "online-playlist":
+      return { kind: source.kind, playlistId: source.playlist.id, source: source.playlist.source };
+    default:
+      return { kind: source.kind };
+  }
+}
+
 function snapshot(deps: PerfCommandHandlerDeps) {
   const s = deps.getPlayerState();
   return {
     tab: deps.getNavState().tab,
     activeSessionId: s.activeSessionId,
+    queueSource: serializeQueueSource(s.queueSource),
+    shuffle: s.shuffle,
     queueLength: s.queue.length,
+    queueTrackIds: s.queue.map((t) => t.id),
     currentIndex: s.currentIndex,
     isPlaying: s.isPlaying,
     wantPlay: s.wantPlay,
@@ -202,6 +227,12 @@ async function runPlayer(
       break;
     case "setDisplayMode":
       await s.setDisplayMode(String(payload.mode));
+      break;
+    case "setShuffle":
+      await s.setShuffle(Boolean(payload.on));
+      break;
+    case "setRepeat":
+      s.setRepeat(String(payload.mode ?? "all"));
       break;
     default:
       await s[method]();
@@ -302,6 +333,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "downloadQueue": {
         if (!deps.downloadQueue) throw new Error("downloadQueue not wired");
         return deps.downloadQueue(command.payload ?? {});
+      }
+      case "playbackContext": {
+        if (!deps.playbackContext) throw new Error("playbackContext not wired");
+        return deps.playbackContext(command.payload ?? {});
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
@@ -899,6 +934,67 @@ export function startPerfControlBridge(): void {
       await prependTrackIds(session.id, [track.id]);
       await usePlayerStore.getState().setActiveSession(session.id);
       return { sessionId: session.id, trackId: track.id };
+    },
+    // Playback-queue-model E2E (Part A/B). Seeds a cross-set scenario, or plays a track
+    // in an explicit set context (the actual fix path) so a driver can assert the queue
+    // came from the VIEWED set, not the track's home set.
+    playbackContext: async (payload) => {
+      const action = String(payload.action ?? "");
+      if (action === "seed") {
+        const { audio, cover } = await loadExampleTrackAssets();
+        const mk = (sessionId: string, title: string) =>
+          createUploadedTrack({
+            sessionId,
+            title,
+            kind: "audio",
+            blob: audio,
+            mime: audio.type || "audio/mpeg",
+            durationSec: 30,
+            mediaMetadata: fallbackUploadMediaMetadata(audio, title),
+            embeddedCover: cover,
+          });
+        const setX = await createSession({
+          name: "E2E-X",
+          seedPrompt: "",
+          config: { autoExtend: false },
+        });
+        const setY = await createSession({
+          name: "E2E-Y",
+          seedPrompt: "",
+          config: { autoExtend: false },
+        });
+        const a = await mk(setX.id, "E2E-A shared"); // home set = X
+        const b = await mk(setY.id, "E2E-B");
+        const c = await mk(setY.id, "E2E-C");
+        const d = await mk(setY.id, "E2E-D");
+        await prependTrackIds(setX.id, [a.id]); // X = [A]
+        await prependTrackIds(setY.id, [b.id, c.id, d.id]);
+        await prependTrackIds(setY.id, [a.id]); // Y = [A, B, C, D]
+        return {
+          setX: setX.id,
+          setY: setY.id,
+          trackA: a.id,
+          trackB: b.id,
+          trackC: c.id,
+          trackD: d.id,
+        };
+      }
+      if (action === "playInSet") {
+        const setId = String(payload.setId ?? "");
+        const trackId = String(payload.trackId ?? "");
+        const { getSession, getTracksByIds } = await import("@/db/repositories");
+        const { orderedSetTrackIds } = await import("@/player/set-order");
+        const session = await getSession(setId);
+        const ids = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks);
+        const tracks = await getTracksByIds(ids);
+        const track = tracks.find((t) => t.id === trackId);
+        if (!track) throw new Error(`track ${trackId} not in set ${setId}`);
+        await usePlayerStore
+          .getState()
+          .playTrackInContext(track, { source: { kind: "set", setId }, tracks });
+        return { played: trackId, setId };
+      }
+      throw new Error(`unknown playbackContext action: ${action}`);
     },
     // Render-trace: reset per-surface commit counters before a scenario, snapshot after
     // — surfaces shows which re-rendered (and whether a hidden one wasted work).

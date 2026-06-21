@@ -481,6 +481,8 @@ const trackIds = orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks
 - [x] 单测（shuffle off 还原）：关闭 shuffle 后 `entries` == 自然序、以当前曲为锚。
 - [x] 回归：cover-pager 窗口（`peekWindowFrom`/`stepCenter`）在线性模型下行为正确（删 `shuffleOrder` 后；player 组件 353 通过）。
 - [x] 4a `make check` 等价：tsc 通过；player-store 45 + player 组件 353 通过。
+- [x] **真机 E2E（control endpoint harness）**：扩展 [`perf-control-bridge`](../../../../src/dev/perf-control-bridge.ts)（snapshot 加 `queueSource`/`shuffle`/`queueTrackIds`；player 白名单加 `setShuffle`/`setRepeat`；新 `playbackContext` seed/playInSet）+ 驱动脚本 [`scripts/playback-context-drive.mjs`](../../../../scripts/playback-context-drive.mjs)。在隔离 userData 的真实 Electron 实例上 **7/7 通过**：Part A 跨集上下文（从 Y 点共享曲 A → queue=Y 非 X）、Part B shuffle 物化钉当前/线性 next/关闭还原自然序。
+- [x] **E2E 抓到并修复真实竞态**：`setShuffle` 原 fire-and-forget 的物化在紧接的 `next()` 后落地会把 cursor 重置回锚点 → 改为 **`async setShuffle` await 物化/还原**（`Promise<void>`，所有调用方都是 fire-and-forget，兼容）。
 - [ ] （4b）单测 Q8 稳定 / Setting / Q9 / 续播（Q3）。
 - [ ] （4b）`make check` 通过。
 
