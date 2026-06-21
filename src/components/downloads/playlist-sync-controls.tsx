@@ -1,7 +1,6 @@
 import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -18,6 +17,10 @@ import { canDownloadVideo } from "@/streamsrc/download-action";
 
 const FREQUENCIES: PlaylistAutoSyncFrequency[] = ["manual", "app-start", "15min", "30min", "60min"];
 
+/** What an auto-sync downloads for newly-added items. Default "video" ("默认应该是视频"). */
+type DownloadMode = "video" | "audio" | "off";
+const DOWNLOAD_MODES: DownloadMode[] = ["video", "audio", "off"];
+
 export function freqLabel(t: TFunction, freq: PlaylistAutoSyncFrequency): string {
   switch (freq) {
     case "manual":
@@ -33,11 +36,23 @@ export function freqLabel(t: TFunction, freq: PlaylistAutoSyncFrequency): string
   }
 }
 
+function modeLabel(t: TFunction, mode: DownloadMode): string {
+  switch (mode) {
+    case "video":
+      return t("playlistSync.dlVideo");
+    case "audio":
+      return t("playlistSync.dlAudio");
+    case "off":
+      return t("playlistSync.dlOff");
+  }
+}
+
 /**
- * Per-playlist auto-sync controls (frequency dropdown + "auto-download new videos" toggle),
- * bound to ONE external playlist/favlist. Shared by the source-playlists list (Settings) and
- * the subscribed-playlists panel — both write to the bound set via {@link subscribeToPlaylist}
- * (find-or-create + cadence + immediate sync), so the set is the single source of truth.
+ * Per-playlist auto-sync controls: a cadence dropdown + a "download new items as" mode dropdown
+ * (video / audio / don't download — default video), bound to ONE external playlist/favlist. Shared
+ * by the source-playlists list (Settings) and the subscribed-playlists panel — both write to the
+ * bound set via {@link subscribeToPlaylist} (find-or-create + cadence + immediate sync), so the set
+ * is the single source of truth.
  */
 export function PlaylistSyncControls({
   source,
@@ -57,13 +72,21 @@ export function PlaylistSyncControls({
   const settings = useSettings();
   const [busy, setBusy] = useState(false);
   const frequency = matched?.autoSyncFrequency ?? "manual";
-  // New subscriptions default to the global "auto-download playlist videos" setting (video
-  // sources only); an already-bound set keeps its own recorded choice.
-  const autoDownload = matched
-    ? matched.autoDownloadNew === true
-    : canDownloadVideo(source) && settings.autoDownloadPlaylistVideos !== false;
+  // An already-bound set keeps its recorded choice; a new subscription defaults to "video"
+  // when the global "auto-download playlist videos" setting is on, else "off".
+  const downloadMode: DownloadMode = matched
+    ? matched.autoDownloadNew
+      ? matched.autoDownloadAudioOnly
+        ? "audio"
+        : "video"
+      : "off"
+    : settings.autoDownloadPlaylistVideos !== false
+      ? "video"
+      : "off";
 
-  async function apply(next: { frequency: PlaylistAutoSyncFrequency; autoDownloadNew: boolean }) {
+  async function apply(next: { frequency: PlaylistAutoSyncFrequency; downloadMode: DownloadMode }) {
+    const autoDownloadNew = next.downloadMode !== "off";
+    const audioOnly = next.downloadMode === "audio";
     setBusy(true);
     try {
       // "manual" with no bound set yet → nothing to subscribe; just record on an existing set.
@@ -71,10 +94,16 @@ export function PlaylistSyncControls({
         if (matched)
           await updateSession(matched.id, {
             autoSyncFrequency: "manual",
-            autoDownloadNew: next.autoDownloadNew,
+            autoDownloadNew,
+            autoDownloadAudioOnly: audioOnly,
           });
       } else {
-        await subscribeToPlaylist(source, playlistId, name, { ...next, coverUrl });
+        await subscribeToPlaylist(source, playlistId, name, {
+          frequency: next.frequency,
+          autoDownloadNew,
+          audioOnly,
+          coverUrl,
+        });
         notify.success(t("playlistSync.subscribed", { name }));
       }
     } catch {
@@ -90,11 +119,7 @@ export function PlaylistSyncControls({
         value={frequency}
         disabled={busy}
         onValueChange={(value) => {
-          if (value)
-            void apply({
-              frequency: value as PlaylistAutoSyncFrequency,
-              autoDownloadNew: autoDownload,
-            });
+          if (value) void apply({ frequency: value as PlaylistAutoSyncFrequency, downloadMode });
         }}
       >
         <SelectTrigger className="h-7 w-auto min-w-24 px-2 text-foreground text-xs">
@@ -111,20 +136,24 @@ export function PlaylistSyncControls({
         </SelectContent>
       </Select>
       {frequency !== "manual" && canDownloadVideo(source) && (
-        <label
-          htmlFor={`auto-dl-${source}-${playlistId}`}
-          className="flex cursor-pointer items-center gap-1.5 text-muted-foreground text-xs"
+        <Select
+          value={downloadMode}
+          disabled={busy}
+          onValueChange={(value) => {
+            if (value) void apply({ frequency, downloadMode: value as DownloadMode });
+          }}
         >
-          <Checkbox
-            id={`auto-dl-${source}-${playlistId}`}
-            checked={autoDownload}
-            disabled={busy}
-            onCheckedChange={(checked) =>
-              void apply({ frequency, autoDownloadNew: checked === true })
-            }
-          />
-          <span>{t("playlistSync.autoDownload")}</span>
-        </label>
+          <SelectTrigger className="h-7 w-auto min-w-24 px-2 text-foreground text-xs">
+            <SelectValue>{(value) => modeLabel(t, (value as DownloadMode) ?? "video")}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {DOWNLOAD_MODES.map((m) => (
+              <SelectItem key={m} value={m}>
+                {modeLabel(t, m)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
     </div>
   );

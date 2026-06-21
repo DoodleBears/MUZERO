@@ -3,8 +3,9 @@
  * {@link @/sync/playlist-auto-sync} scheduler against the live DB + download queue. Mirrors
  * {@link ./cloud-auto-sync.ts}. `syncBoundPlaylistSet` does ONE playlist fetch, adds new items
  * to the bound set (deduped by the repo), records `lastAutoSyncAt`, and — when the set opted in
- * via `autoDownloadNew` — enqueues ONLY the genuinely-new items for video download (so a 529-item
- * favlist downloads everything on first sync, then only newly-added videos thereafter).
+ * via `autoDownloadNew` — enqueues ONLY the genuinely-new items for download as video or audio
+ * (per `autoDownloadAudioOnly`, default video), so a 529-item favlist downloads everything on the
+ * first sync, then only newly-added items thereafter.
  */
 import {
   createSession,
@@ -78,9 +79,11 @@ export async function syncBoundPlaylistSet(setId: string): Promise<void> {
 
     if (session.autoDownloadNew && hits.length > 0) {
       const settings = await getSettings();
+      const audioOnly = session.autoDownloadAudioOnly === true;
       const quality = settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY;
+      // Video download needs a video-capable source; audio download works for any source.
       const newHits = hits.filter(
-        (h) => !existingExternal.has(h.externalId) && canDownloadVideo(h.source),
+        (h) => !existingExternal.has(h.externalId) && (audioOnly || canDownloadVideo(h.source)),
       );
       for (const hit of newHits) {
         await enqueueDownload({
@@ -89,7 +92,8 @@ export async function syncBoundPlaylistSet(setId: string): Promise<void> {
           title: hit.title,
           coverUrl: hit.coverUrl,
           sessionId: setId,
-          quality,
+          audioOnly,
+          quality: audioOnly ? undefined : quality,
         });
       }
     }
@@ -98,8 +102,8 @@ export async function syncBoundPlaylistSet(setId: string): Promise<void> {
   }
 }
 
-/** Enqueue every not-yet-downloaded streamed video item in a set (download the favlist itself). */
-async function enqueueSetVideos(setId: string): Promise<void> {
+/** Enqueue every not-yet-downloaded streamed item in a set (download the favlist itself). */
+async function enqueueSetDownloads(setId: string, audioOnly: boolean): Promise<void> {
   const session = await getSession(setId);
   if (!session) return;
   const settings = await getSettings();
@@ -107,14 +111,16 @@ async function enqueueSetVideos(setId: string): Promise<void> {
   const tracks = await getTracksByIds(session.trackIds);
   for (const t of tracks) {
     if (t.origin !== "streamed" || t.blobId) continue; // already downloaded → skip
-    if (!t.streamSourceId || !t.streamExternalId || !canDownloadVideo(t.streamSourceId)) continue;
+    if (!t.streamSourceId || !t.streamExternalId) continue;
+    if (!audioOnly && !canDownloadVideo(t.streamSourceId)) continue; // video needs a video source
     await enqueueDownload({
       source: t.streamSourceId,
       externalId: t.streamExternalId,
       title: t.title,
       coverUrl: t.remoteCoverUrl,
       sessionId: setId,
-      quality,
+      audioOnly,
+      quality: audioOnly ? undefined : quality,
     });
   }
 }
@@ -130,8 +136,15 @@ export async function subscribeToPlaylist(
   source: StreamSourceId,
   playlistId: string,
   name: string,
-  opts: { frequency: PlaylistAutoSyncFrequency; autoDownloadNew: boolean; coverUrl?: string },
+  opts: {
+    frequency: PlaylistAutoSyncFrequency;
+    autoDownloadNew: boolean;
+    /** When auto-downloading, grab audio instead of video. Default false (video). */
+    audioOnly?: boolean;
+    coverUrl?: string;
+  },
 ): Promise<string> {
+  const audioOnly = opts.audioOnly === true;
   let set = await findSessionByStreamPlaylist(source, playlistId);
   if (!set) {
     set = await createSession({
@@ -147,12 +160,13 @@ export async function subscribeToPlaylist(
   await updateSession(set.id, {
     autoSyncFrequency: opts.frequency,
     autoDownloadNew: opts.autoDownloadNew,
+    autoDownloadAudioOnly: audioOnly,
   });
   // Pull current items in now (so the set isn't empty) — adds + (if opted-in) enqueues new ones.
   await syncBoundPlaylistSet(set.id);
   // First enabling auto-download on an already-populated set: also download its EXISTING items
   // (syncBoundPlaylistSet only enqueues items new to that sync). Queue dedup makes this idempotent.
-  if (opts.autoDownloadNew) await enqueueSetVideos(set.id);
+  if (opts.autoDownloadNew) await enqueueSetDownloads(set.id, audioOnly);
   return set.id;
 }
 

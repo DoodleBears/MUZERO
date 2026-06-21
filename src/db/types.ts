@@ -458,8 +458,11 @@ export interface DjSession {
   streamPlaylistRef?: { source: StreamSourceId; id: string };
   /** Auto-sync cadence for a set bound to an external playlist/favlist (`streamPlaylistRef`). */
   autoSyncFrequency?: PlaylistAutoSyncFrequency;
-  /** After an auto-sync adds new items, enqueue them for video download. */
+  /** After an auto-sync adds new items, enqueue them for download. */
   autoDownloadNew?: boolean;
+  /** When {@link autoDownloadNew}, download audio-only instead of video. Undefined = video
+   *  (the default — "默认应该是视频"). Lets a 收藏夹 sync pull audio instead of full video. */
+  autoDownloadAudioOnly?: boolean;
   /** Last successful auto-sync (ms epoch); drives the scheduler's interval. */
   lastAutoSyncAt?: number;
   /** Safe display-only source snapshot for sets imported from a cloud drive. */
