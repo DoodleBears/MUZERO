@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 可注入的「汉字→读音→罗马音」核心 + 纯汉字双读音（CN+JP）变体（TDD） | ✅ 完成（`kanji-romaji.ts` + `searchVariants` 全汉字分支 CN+JP 双读音 + `setKanjiTokenizer` 注入；41 测试全绿，含既有 34 回归） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 接入 `@sglkc/kuromoji` 真词典 + Vite worker / Electron `app://` 打包 + 构建产物实测 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 接入 `@sglkc/kuromoji` 真词典 + Vite worker / Electron `app://` 打包 + 构建产物实测 | 🔄 代码完成（dep + bridge + worker 后台加载 + Vite dict 插件；typecheck + 单测绿）；**构建产物 / Electron app:// 词典加载实测待跑**（需 dev 重启 / 打包） | [Phase 2 Checklist](#phase-2-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -156,11 +156,12 @@ export function readingRomajiVariants(
 **Goal:** 真实日文读音端到端可用，词典在 web + Electron 构建产物都能加载。
 
 **Tasks:**
-- [ ] `pnpm add @sglkc/kuromoji`；`THIRD-PARTY-LICENSES.md` 登记 kuromoji + IPADIC。
-- [ ] `ensureTransliterationLoaded`：并列 `import("@sglkc/kuromoji")` + `builder({ dicPath }).build()`，就绪后 `setKanjiTokenizer`。失败走既有降级。
-- [ ] **词典打包（高风险项）**：IPADIC `.dat.gz` 作为静态资源；`dicPath` 在 dev（Vite served）、web build、Electron `app://` 三处都能解析。验证 worker 内 fetch 词典成功。
-- [ ] **构建产物实测**：`make build` / `make desktop-build` 后，⌘F 输入 `sakura` 命中纯汉字 JP 标题；测词典 chunk 大小（gzipped），记录进 PRD。
-- [ ] perf：首次 JP 搜索触发词典加载（一次性），实测加载耗时 + 之后命中无卡顿；worker 内分词不阻塞主线程。
+- [x] `pnpm add @sglkc/kuromoji`（1.1.0；MIT + IPADIC Apache-2.0）。`THIRD-PARTY-LICENSES.md` 登记待补。
+- [x] [`kuromoji-tokenizer.ts`](../../../../src/lib/kuromoji-tokenizer.ts) bridge：`buildKanjiTokenizer(dicPath)`（builder→build→tokenize→`toReadingTokens`）+ 纯 `toReadingTokens` 单测。
+- [x] worker（[`global-search-local-worker.ts`](../../../../src/workers/global-search-local-worker.ts)）：`dictionariesReady` 后**后台非阻塞**加载 kuromoji → `setKanjiTokenizer`；失败 `log.warn` 降级（不阻塞首搜，romaji 就绪后「snap in」）。
+- [x] **词典打包**：[`vite.config.ts`](../../../../vite.config.ts) inline 插件 `kuromojiDictPlugin`——dev middleware 从 node_modules 流式 serve `/kuromoji-dict/*`，build `generateBundle` emit 为 asset（17MB 不进 git/public）。`@sglkc/kuromoji` 加进 `optimizeDeps.include`（CJS 预打包；browser field 自动换 fetch 词典 loader）。
+- [ ] **构建产物 / Electron 实测（待跑）**：dev 重启 / `make build` / `make desktop-build` 后，⌘F 输入 `sakura` 命中库内纯汉字 JP 标题；确认 worker `fetch("/kuromoji-dict/base.dat.gz")` 在 dev + web build + Electron `app://` 都成功；测词典 chunk 大小，记录。
+- [ ] perf：首次 JP 搜索触发后台词典加载（一次性 ~17MB），实测加载耗时 + 之后命中无卡顿。
 
 #### Phase 2 Checklist
 - [ ] 构建产物里 ⌘F `sakura` 命中库内纯汉字 JP 标题（真机/构建实测，非仅单测）。

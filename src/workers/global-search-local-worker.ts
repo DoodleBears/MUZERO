@@ -1,7 +1,9 @@
 /// <reference lib="webworker" />
 
 import { MuzeroDB } from "@/db/muzero-db";
-import { ensureTransliterationLoaded } from "@/lib/search-transliterate";
+import { buildKanjiTokenizer } from "@/lib/kuromoji-tokenizer";
+import { log } from "@/lib/logger";
+import { ensureTransliterationLoaded, setKanjiTokenizer } from "@/lib/search-transliterate";
 import type { GlobalSearchLocalInput } from "./global-search-local-core";
 import { buildGlobalSearchLocalResults } from "./global-search-local-core";
 
@@ -11,6 +13,17 @@ type WorkerRequest = SearchMessage;
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const db = new MuzeroDB();
 const dictionariesReady = ensureTransliterationLoaded();
+
+// Japanese kanji readings (kuromoji, ~17MB IPADIC dict) load in the BACKGROUND after the
+// lighter pinyin/kana dicts — non-blocking, so the first search returns immediately with
+// pinyin + kana romaji, and pure-kanji JP romaji (桜 → sakura) "snaps in" once the tokenizer
+// is ready (setKanjiTokenizer clears the variant cache so the next search recomputes). A
+// failed dict load degrades to pinyin-only, never breaks search.
+void dictionariesReady.then(() =>
+  buildKanjiTokenizer()
+    .then((tokenize) => setKanjiTokenizer(tokenize))
+    .catch((error) => log.warn("search", "kuromoji (JP kanji readings) failed to load", { error })),
+);
 
 ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
