@@ -117,7 +117,8 @@ describe("addHitsToSet", () => {
   it("adds all hits to a fresh set", async () => {
     const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
     const res = await addHitsToSet(set.id, [a, b], db);
-    expect(res).toEqual({ added: 2, skipped: 0 });
+    expect(res).toMatchObject({ added: 2, skipped: 0 });
+    expect(res.tracks).toHaveLength(2); // resolved rows returned 1:1 in hit order
     expect((await db.sessions.get(set.id))?.trackIds).toHaveLength(2);
   });
 
@@ -125,7 +126,7 @@ describe("addHitsToSet", () => {
     const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
     await addHitsToSet(set.id, [a, b], db);
     const res = await addHitsToSet(set.id, [b, c], db); // b already present
-    expect(res).toEqual({ added: 1, skipped: 1 });
+    expect(res).toMatchObject({ added: 1, skipped: 1 });
     expect((await db.sessions.get(set.id))?.trackIds).toHaveLength(3);
     expect(await db.tracks.where("sessionId").equals(set.id).count()).toBe(3);
   });

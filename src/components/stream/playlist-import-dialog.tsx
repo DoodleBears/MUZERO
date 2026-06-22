@@ -7,7 +7,11 @@ import { Disc3Icon } from "@/components/ui/disc-3";
 import { useSessions, useSettings } from "@/hooks/use-app-data";
 import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
-import { canDownloadVideo, downloadPlaylistVideos } from "@/streamsrc/download-action";
+import {
+  canDownloadVideo,
+  downloadPlaylistVideos,
+  downloadPlaylistVideosToSet,
+} from "@/streamsrc/download-action";
 import type { StreamPlaylist } from "@/streamsrc/provider";
 
 /**
@@ -94,6 +98,16 @@ export function PlaylistImportDialog({
 
   const syncInto = (setId: string, setName: string) =>
     run(async () => {
+      // Video source (default-download-video on): re-sync through the persistent download
+      // queue so NEW MVs download in place AND the unified indicator shows their progress —
+      // the old `addStreamedPlaylistToSet` cached audio to memory blobs with no progress.
+      if (defaultDownloadsVideo) {
+        const { added, skipped } = await downloadPlaylistVideosToSet(pl.source, pl.id, setId, {
+          onProgress,
+        });
+        notify.success(t("playlistImport.added", { added, skipped, name: setName }));
+        return;
+      }
       const { added, skipped } = await addStreamedPlaylistToSet(pl.source, pl.id, setId, {
         download,
         onProgress,

@@ -35,6 +35,7 @@ import {
 import { cacheStreamPlaylistCover, cacheStreamPlaylistTrackCovers } from "./playlist-cover-cache";
 import type { StreamPart, StreamSearchHit, VideoQualityOption } from "./provider";
 import { createStreamSource } from "./registry";
+import { isTrackCacheableToDevice } from "./source-detect";
 import { createStreamHttp } from "./stream-http";
 import { addHitsToSet } from "./streamed-track-repo";
 
@@ -192,25 +193,43 @@ export function startBackgroundDownload(
 }
 
 /**
- * Download many hits as video SEQUENTIALLY — each gets its own progress notification
- * (exactly like a single search download), at the default quality (prefer-match-else-
- * degrade). Sequential so a big favlist doesn't fire N parallel downloads / hit a rate
- * limit. Stops the batch on an auth wall.
+ * Resolve a favlist/playlist ref to its hits + the settings used to fetch it — the shared
+ * head of {@link downloadPlaylistVideos} and {@link downloadPlaylistVideosToSet}. Returns
+ * null when the source can't import playlists OR the playlist is empty (both callers map
+ * that to their own empty result), so the two functions differ ONLY in how they resolve the
+ * target set — not in this preamble.
  */
-export async function downloadHitsAsVideo(
+async function resolvePlaylistHits(
+  sourceId: StreamSearchHit["source"],
+  mediaId: string,
+): Promise<{ hits: StreamSearchHit[]; settings: Awaited<ReturnType<typeof getSettings>> } | null> {
+  const settings = await getSettings();
+  const source = makeSource(sourceId, settings.streamSources?.[sourceId]?.cookie);
+  if (!source?.importPlaylist) return null;
+  const hits = await source.importPlaylist(mediaId);
+  if (hits.length === 0) return null;
+  return { hits, settings };
+}
+
+/**
+ * Add a favlist's hits to `setId`, then enqueue VIDEO downloads for the ones not already
+ * local — the shared spine of {@link downloadPlaylistVideos} (ref-bound set) and
+ * {@link downloadPlaylistVideosToSet} (explicit set). The two differ only in set resolution;
+ * this is their identical tail. `tracks` is 1:1 with `hits` (addHitsToSet pushes one row per
+ * hit, in order), so `tracks[i]` is always defined — no guard needed.
+ */
+async function addAndQueuePlaylistVideos(
+  setId: string,
   hits: StreamSearchHit[],
-  opts?: { quality?: string },
-): Promise<{ queued: number }> {
-  for (const hit of hits) {
-    await enqueueDownload({
-      source: hit.source,
-      externalId: hit.externalId,
-      title: hit.title,
-      coverUrl: hit.coverUrl,
-      quality: opts?.quality,
-    });
-  }
-  return { queued: hits.length };
+  quality: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ added: number; skipped: number; queued: number }> {
+  const { added, skipped, tracks } = await addHitsToSet(setId, hits, undefined, onProgress);
+  void cacheStreamPlaylistTrackCovers({ sessionId: setId, hits });
+  // Only enqueue items not already downloaded locally — never re-download a video you have.
+  const pending = hits.filter((_, i) => isTrackCacheableToDevice(tracks[i]));
+  const queued = await enqueueHitsForDownload(pending, { sessionId: setId, quality });
+  return { added, skipped, queued };
 }
 
 /**
@@ -223,11 +242,9 @@ export async function downloadPlaylistVideos(
   mediaId: string,
   opts?: { quality?: string; name?: string; coverUrl?: string },
 ): Promise<{ queued: number; setId: string | null }> {
-  const settings = await getSettings();
-  const source = makeSource(sourceId, settings.streamSources?.[sourceId]?.cookie);
-  if (!source?.importPlaylist) return { queued: 0, setId: null };
-  const hits = await source.importPlaylist(mediaId);
-  if (hits.length === 0) return { queued: 0, setId: null };
+  const resolved = await resolvePlaylistHits(sourceId, mediaId);
+  if (!resolved) return { queued: 0, setId: null };
+  const { hits, settings } = resolved;
 
   let set = await findSessionByStreamPlaylist(sourceId, mediaId);
   if (!set) {
@@ -241,21 +258,36 @@ export async function downloadPlaylistVideos(
     if (opts?.coverUrl)
       void cacheStreamPlaylistCover({ sessionId: set.id, coverUrl: opts.coverUrl });
   }
-  await addHitsToSet(set.id, hits);
-  void cacheStreamPlaylistTrackCovers({ sessionId: set.id, hits });
-
   const quality = opts?.quality ?? settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY;
-  for (const hit of hits) {
-    await enqueueDownload({
-      source: hit.source,
-      externalId: hit.externalId,
-      title: hit.title,
-      coverUrl: hit.coverUrl,
-      sessionId: set.id,
-      quality,
-    });
-  }
-  return { queued: hits.length, setId: set.id };
+  const { queued } = await addAndQueuePlaylistVideos(set.id, hits, quality);
+  return { queued, setId: set.id };
+}
+
+/**
+ * Incremental favlist re-sync into an EXPLICIT set (the matched 歌单, or one the user picks)
+ * rather than the playlist-ref-bound set {@link downloadPlaylistVideos} resolves: add the
+ * items (deduped, with progress) then enqueue each for video download targeting THAT set.
+ *
+ * Why this exists: the old re-sync path cached to in-memory blobs WITHOUT the persistent
+ * queue, so a 收藏夹 → 同一歌单 re-sync downloaded no MVs and showed no download progress
+ * (the indicator only watches `downloadJobs`). Going through the queue gives the synced
+ * favlist the same in-place video download + unified progress as a fresh import.
+ */
+export async function downloadPlaylistVideosToSet(
+  sourceId: StreamSearchHit["source"],
+  mediaId: string,
+  targetSetId: string,
+  opts?: { quality?: string; onProgress?: (done: number, total: number) => void },
+): Promise<{ added: number; skipped: number; queued: number }> {
+  // Incremental: addAndQueuePlaylistVideos downloads only what isn't already local — the NEW
+  // items plus any existing refs never downloaded (e.g. added by the old no-download re-sync
+  // path). Already-downloaded MVs are skipped, so re-syncing a 收藏夹 doesn't re-pull videos
+  // you already have.
+  const resolved = await resolvePlaylistHits(sourceId, mediaId);
+  if (!resolved) return { added: 0, skipped: 0, queued: 0 };
+  const { hits, settings } = resolved;
+  const quality = opts?.quality ?? settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY;
+  return addAndQueuePlaylistVideos(targetSetId, hits, quality, opts?.onProgress);
 }
 
 // ---- Persistent download queue (PRD 20260621): concurrency + retry + restart recovery ----
@@ -373,6 +405,30 @@ export async function enqueuePartsForDownload(
     });
   }
   return parts.length;
+}
+
+/**
+ * Enqueue each hit for VIDEO download (default quality) targeting `sessionId`, through the
+ * persistent queue — so a favlist import / re-sync downloads its MVs in place AND surfaces
+ * progress in the unified download indicator. Mirrors {@link enqueuePartsForDownload}; the
+ * `enqueue` dep is injected for tests. Returns the count enqueued.
+ */
+export async function enqueueHitsForDownload(
+  hits: StreamSearchHit[],
+  opts: { sessionId?: string; quality?: string },
+  enqueue: (input: EnqueueInput) => Promise<unknown> = enqueueDownload,
+): Promise<number> {
+  for (const hit of hits) {
+    await enqueue({
+      source: hit.source,
+      externalId: hit.externalId,
+      title: hit.title,
+      coverUrl: hit.coverUrl,
+      sessionId: opts.sessionId,
+      quality: opts.quality,
+    });
+  }
+  return hits.length;
 }
 
 /** Fire-and-forget batch (分P) download → the persistent queue (progress shows in the indicator). */

@@ -109,7 +109,7 @@ function NotificationItemView({
     >
       <div
         className={cn(
-          "relative flex items-center gap-2 overflow-hidden rounded-xl border bg-card/95 px-3 py-2 text-sm shadow-lg backdrop-blur",
+          "relative flex items-center gap-2 overflow-hidden rounded-md border bg-card/95 px-3 py-2 text-sm shadow-lg backdrop-blur",
           isError && "border-destructive bg-destructive text-white",
         )}
       >

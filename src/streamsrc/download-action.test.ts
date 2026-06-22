@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { enqueuePartsForDownload } from "./download-action";
+import { enqueueHitsForDownload, enqueuePartsForDownload } from "./download-action";
 import type { EnqueueInput } from "./download-queue";
 import type { StreamPart, StreamSearchHit } from "./provider";
 
@@ -9,6 +9,15 @@ function hit(): StreamSearchHit {
     externalId: "BV1",
     title: "Whole video",
     coverUrl: "https://cdn/cover.jpg",
+  };
+}
+
+function favHit(n: number): StreamSearchHit {
+  return {
+    source: "bili",
+    externalId: `BV${n}`,
+    title: `Fav ${n}`,
+    coverUrl: `https://cdn/${n}.jpg`,
   };
 }
 
@@ -42,6 +51,41 @@ describe("enqueuePartsForDownload", () => {
     const enqueue = vi.fn(async (_input: EnqueueInput) => undefined);
 
     const count = await enqueuePartsForDownload(hit(), [], enqueue);
+
+    expect(count).toBe(0);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("enqueueHitsForDownload (favlist re-sync → video queue)", () => {
+  it("enqueues every hit targeting the set, so progress shows in the download indicator", async () => {
+    const enqueue = vi.fn(async (_input: EnqueueInput) => undefined);
+
+    const count = await enqueueHitsForDownload(
+      [favHit(1), favHit(2)],
+      { sessionId: "ses_fav", quality: "1080" },
+      enqueue,
+    );
+
+    expect(count).toBe(2);
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    // The crucial bit the old in-memory cache path missed: a queued job bound to the set
+    // (→ db.downloadJobs → indicator) at the chosen quality.
+    expect(enqueue).toHaveBeenNthCalledWith(1, {
+      source: "bili",
+      externalId: "BV1",
+      title: "Fav 1",
+      coverUrl: "https://cdn/1.jpg",
+      sessionId: "ses_fav",
+      quality: "1080",
+    });
+    expect(enqueue).toHaveBeenNthCalledWith(2, expect.objectContaining({ externalId: "BV2" }));
+  });
+
+  it("enqueues nothing for an empty hit list", async () => {
+    const enqueue = vi.fn(async (_input: EnqueueInput) => undefined);
+
+    const count = await enqueueHitsForDownload([], { sessionId: "ses_fav" }, enqueue);
 
     expect(count).toBe(0);
     expect(enqueue).not.toHaveBeenCalled();

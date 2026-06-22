@@ -121,6 +121,9 @@ export interface AddHitsResult {
   added: number;
   /** Hits that were already in the set (deduped by source + externalId). */
   skipped: number;
+  /** The resolved track rows IN HIT ORDER (1:1 with `hits`) — lets callers act per track,
+   *  e.g. enqueue video downloads only for the ones not yet downloaded locally. */
+  tracks: Track[];
 }
 
 /**
@@ -138,14 +141,16 @@ export async function addHitsToSet(
   const session = await db.sessions.get(sessionId);
   const before = new Set(session?.trackIds ?? []);
   const ids: string[] = [];
+  const tracks: Track[] = [];
   for (const hit of hits) {
     const track = await createStreamedTrack(hitToStreamedInput(sessionId, hit), db);
     ids.push(track.id);
+    tracks.push(track);
     onProgress?.(ids.length, hits.length);
   }
   await prependTrackIds(sessionId, ids, db);
   const addedIds = new Set(ids.filter((id) => !before.has(id)));
-  return { added: addedIds.size, skipped: hits.length - addedIds.size };
+  return { added: addedIds.size, skipped: hits.length - addedIds.size, tracks };
 }
 
 /**

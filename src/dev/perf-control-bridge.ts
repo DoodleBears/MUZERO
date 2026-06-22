@@ -769,11 +769,13 @@ export function startPerfControlBridge(): void {
       }
       let downloaded: unknown = null;
       if (payload.importId && payload.downloadAll) {
-        const { downloadHitsAsVideo } = await import("@/streamsrc/download-action");
+        const { enqueueHitsForDownload } = await import("@/streamsrc/download-action");
         const all = (await source.importPlaylist?.(String(payload.importId))) ?? [];
         const limit = payload.limit ? Number(payload.limit) : undefined;
         const hits = limit ? all.slice(0, limit) : all;
-        downloaded = await downloadHitsAsVideo(hits, { quality: payload.quality as string });
+        downloaded = {
+          queued: await enqueueHitsForDownload(hits, { quality: payload.quality as string }),
+        };
       }
       // Auto-sync subscribe E2E: bind the favlist to a set + cadence + (optional) auto-download.
       let subscribed: unknown = null;
