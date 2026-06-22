@@ -2,6 +2,27 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.4.1 — 2026-06-23 · Playback that does exactly what you see
+
+A refinement release built around one idea: the queue you see is the queue that plays. Songs now play from the playlist you're actually viewing — not wherever they were first saved — and the visible queue is the real play order, shuffle included, so 'play next' and song requests land exactly where you expect and your queue survives a restart. Background progress for downloads, song loading, and syncing collapses into a single notification stack with real, cancelable progress. Search can now find Japanese songs by romaji (type 'sakura' to find 桜), cover art looks sharper, favlist / playlist downloads are sturdier, and several Now Playing and tab-switching glitches are fixed.
+
+### Highlights
+- **player** Songs play from the playlist you're in — and the queue you see is the queue that plays — Start a song and it now plays from the playlist you're actually viewing, instead of jumping to wherever the song was first saved (which could silently play nothing, or switch you to a different set). The visible queue is now the real play order — shuffle materializes into the list you see — so 'play next' and song requests land exactly next instead of being skipped, and the queue, its source, and its order all survive a restart.
+
+### Added
+- **player** Stable shuffle you can actually see — Shuffle now lays out a fixed order into the visible queue once, instead of silently re-rolling every time the queue changes (which used to throw away a just-inserted 'next' track). A new setting controls whether toggling shuffle reshuffles the order or keeps the current one.
+- **app** All background progress in one place — Downloads, song loading, syncing, and imports now all report into a single notification stack with real progress bars you can cancel — no more hunting across a floating badge, a tiny cover spinner, and a separate toast. Quick local track switches stay silent; only loads that actually take a moment surface a 'Downloading …' notification with byte-level progress.
+- **search** Find Japanese songs by romaji — ⌘F search now reads kanji the Japanese way, so typing 'sakura' finds 桜 even when the title has no kana at all. Chinese titles still match by pinyin, and a pure-kanji title is searchable by either reading.
+
+### Changed
+- **search** A smarter ⌘F — A new @songs filter narrows results to just track names, the Songs section always shows its header so it reads as a distinct group, a pasted link jumps to the top of results, and result covers load right away instead of only on hover.
+- **library** Crisper cover art — List thumbnails now render at higher resolution (320px / quality 0.9) so they no longer look soft on hi-DPI screens, and the gallery grid uses the full-resolution original cover. Existing thumbnails regenerate sharper the next time they're shown.
+- **streaming** Sturdier favlist & playlist downloads — Re-syncing a 收藏夹 / playlist now routes through the persistent download queue and skips items you've already saved, so it resumes, retries, and shows progress like everything else. You can choose video or audio for auto-sync downloads, single ⌘F downloads get the same retry queue, and a failed download now shows a copyable, detailed error instead of a vague failure. _(desktop)_
+
+### Fixed
+- **player** Now Playing video and glow fixes — Switching to a video track by dragging the cover or using a shortcut no longer leaves the Now Playing stage stuck on the still cover while the background plays the video — the foreground now follows the live current track. The cover backlight glow also shows at rest again, not only while you're dragging the cover.
+- **app** Faithful tab switching — Switching tabs with Ctrl+1 / Ctrl+2 no longer resets your library scroll position, sort order, or selected set — keyboard switching now behaves exactly like clicking the nav or a Dock song.
+
 ## v1.4.0 — 2026-06-21 · Download Bilibili & YouTube videos to your library
 
 MUZERO is now a real video downloader. Pick a quality and save Bilibili or YouTube videos as local, playable tracks — no FFmpeg, no extra tools. Paste a link (or just a BV ID / video ID) in ⌘F to grab one, or import a whole 收藏夹 / playlist and download every item as video. A persistent download queue resumes after a restart, retries failures, limits concurrency, and shows progress in a panel and a floating badge. You can also subscribe a favlist or playlist so new items sync in automatically.
