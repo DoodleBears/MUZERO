@@ -1,10 +1,12 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { readingRomajiVariants } from "./kanji-romaji";
 import {
   ensureTransliterationLoaded,
   NO_MATCH_SCORE,
   normalizeSearchText,
   scoreVariants,
   searchVariants,
+  setKanjiTokenizer,
   transliterateInitial,
   transliterateSortKey,
 } from "./search-transliterate";
@@ -175,5 +177,59 @@ describe("transliterateSortKey — reading-order comparable", () => {
       transliterateSortKey(a).localeCompare(transliterateSortKey(b)),
     );
     expect(sorted).toEqual(["Adele", "北京", "周杰伦"]); // adele < beijing < zhoujielun
+  });
+});
+
+describe("searchVariants — pure-kanji Japanese reading (kuromoji, injected)", () => {
+  afterEach(() => setKanjiTokenizer(null));
+
+  it("emits BOTH the Chinese pinyin AND the Japanese romaji for a pure-kanji title", () => {
+    // 空 → Chinese pinyin "kong"; the injected JP reading ソラ → romaji "sora".
+    setKanjiTokenizer((text) => (text === "空" ? [{ reading: "ソラ" }] : []));
+    const v = searchVariants("空");
+    expect(v).toContain("kong"); // Chinese reading (pinyin) — still there
+    expect(v).toContain("sora"); // Japanese reading (kuromoji → romaji) — new
+    expect(scoreVariants(searchVariants("sora"), v)).toBeLessThan(NO_MATCH_SCORE);
+  });
+
+  it("joins a multi-token reading (spaced + compact)", () => {
+    setKanjiTokenizer(() => [{ reading: "ジドウ" }, { reading: "ジマク" }]);
+    const v = searchVariants("自動字幕");
+    expect(v).toContain("jidou jimaku");
+    expect(v).toContain("jidoujimaku");
+  });
+
+  it("without a tokenizer, pure-kanji still yields pinyin only (no crash)", () => {
+    setKanjiTokenizer(null);
+    expect(searchVariants("北京").some((x) => x.includes("beijing"))).toBe(true);
+  });
+
+  it("does not consult the tokenizer for kana-containing titles (kana-first)", () => {
+    let called = false;
+    setKanjiTokenizer(() => {
+      called = true;
+      return [];
+    });
+    searchVariants("さくら");
+    expect(called).toBe(false);
+  });
+});
+
+describe("readingRomajiVariants", () => {
+  const toRomaji = (kana: string): string =>
+    ({ サクラ: "sakura", ジドウ: "jidou", ジマク: "jimaku" })[kana] ?? kana.toLowerCase();
+
+  it("romanizes multiple readings into spaced + compact forms", () => {
+    expect(readingRomajiVariants([{ reading: "ジドウ" }, { reading: "ジマク" }], toRomaji)).toEqual(
+      ["jidou jimaku", "jidoujimaku"],
+    );
+  });
+
+  it("returns a single variant for a single reading", () => {
+    expect(readingRomajiVariants([{ reading: "サクラ" }], toRomaji)).toEqual(["sakura"]);
+  });
+
+  it("skips tokens with no / '*' reading and returns [] when none are usable", () => {
+    expect(readingRomajiVariants([{ reading: "*" }, {}], toRomaji)).toEqual([]);
   });
 });

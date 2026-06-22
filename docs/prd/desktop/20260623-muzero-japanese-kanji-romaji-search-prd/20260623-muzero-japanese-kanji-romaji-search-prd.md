@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 可注入的「汉字→读音→罗马音」核心 + 纯汉字双读音（CN+JP）变体（TDD） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 可注入的「汉字→读音→罗马音」核心 + 纯汉字双读音（CN+JP）变体（TDD） | ✅ 完成（`kanji-romaji.ts` + `searchVariants` 全汉字分支 CN+JP 双读音 + `setKanjiTokenizer` 注入；41 测试全绿，含既有 34 回归） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 接入 `@sglkc/kuromoji` 真词典 + Vite worker / Electron `app://` 打包 + 构建产物实测 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -145,10 +145,11 @@ export function readingRomajiVariants(
 - [ ] 单测：注入 fake tokenizer（`桜`→`[{reading:"サクラ"}]`），断言 `searchVariants("桜")` 同时含 `ying`（拼音）**与** `sakura`（罗马音）；含假名标题不受影响（仍假名优先、不跑拼音）。
 
 #### Phase 1 Checklist
-- [ ] `桜`（fake tokenizer）→ 变体含 `ying` AND `sakura`；`scoreVariants(searchVariants("sakura"), searchVariants("桜"))` < `NO_MATCH_SCORE`。
-- [ ] 全汉字但中文（`北京`）→ 仍出拼音 `beijing`；无 tokenizer 注入时不报错、退化为拼音-only。
-- [ ] 含假名标题（`さくら` / `君の名は`）变体不变（回归）。
-- [ ] 既有 34 个 transliterate/search-core 测试全绿。
+- [x] 纯汉字（fake tokenizer）→ 变体同时含拼音（`空`→`kong`）AND 罗马音（`sora`）；`scoreVariants(searchVariants("sora"), …)` < `NO_MATCH_SCORE`。
+- [x] 全汉字但中文（`北京`）→ 仍出拼音 `beijing`；无 tokenizer 注入时不报错、退化为拼音-only。
+- [x] 含假名标题（`さくら` / `君の名は`）变体不变（kana-first；tokenizer 不被 consulted，回归）。
+- [x] 既有 34 个 transliterate/search-core 测试全绿（总 41 绿）。
+- [x] `setKanjiTokenizer` 注入 + 清缓存；`readingRomajiVariants` 纯函数单测（spaced/compact、跳过 `*`/空读音）。
 
 ### Phase 2: 接 `@sglkc/kuromoji` 真词典 + 打包 + 构建产物实测
 
