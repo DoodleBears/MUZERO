@@ -110,7 +110,7 @@ export const ui = {
     nav: { docs: "文档", download: "下载", github: "GitHub", openApp: "打开 MUZERO" },
     hero: {
       eyebrow: "本地优先 · 无需账号 · 无需云端",
-      title: "你的私人音乐博物馆。",
+      title: "你的私人音乐博物馆",
       lede: "上传、标注、记住每一首歌。播放来自任意来源的音乐,让 AI DJ 不断续上队列。一切都留在你的设备上。",
     },
     cta: { openApp: "打开 MUZERO", download: "下载", readDocs: "查看文档 →" },
@@ -123,7 +123,7 @@ export const ui = {
       { label: "AI DJ", title: "随侧的 AI DJ", body: "接入大模型来编排歌单、接受点歌,就像一位 DJ。" },
       { label: "个性化", title: "随心定制", body: "流光背景、配色、特效、歌词与主题。" },
     ],
-    closer: { title: "把你的音乐带回家。" },
+    closer: { title: "把你的音乐带回家" },
     footer: { tagline: "本地优先。你的音乐留在你的设备上。" },
     download: {
       title: "下载与更新日志",
