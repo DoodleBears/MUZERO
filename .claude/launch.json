@@ -12,6 +12,12 @@
       "runtimeExecutable": "sh",
       "runtimeArgs": ["-c", "MUZERO_DEV_PORT=1440 pnpm dev"],
       "port": 1440
+    },
+    {
+      "name": "site-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@muzero/site", "dev", "--port", "4321"],
+      "port": 4321
     }
   ]
 }

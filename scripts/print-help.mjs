@@ -54,6 +54,14 @@ const groups = [
     ],
   },
   {
+    name: "Site (marketing + docs)",
+    commands: [
+      ["site", "Marketing + docs site dev server (Astro, http://localhost:4321)"],
+      ["site-build", "Build the site -> packages/site/dist"],
+      ["site-preview", "Build + preview the production site locally"],
+    ],
+  },
+  {
     name: "Release",
     commands: [
       ["version-bump", "Pick patch/minor/major/beta interactively (or pass TYPE=)"],

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mu0.app/sitemap-index.xml

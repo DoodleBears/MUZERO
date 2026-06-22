@@ -1,0 +1,25 @@
+{
+  "name": "@muzero/site",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "MUZERO public marketing + docs site (mu0.app). Astro + Starlight.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "gen:covers": "node scripts/gen-covers.mjs",
+    "fetch:covers": "node scripts/fetch-covers.mjs",
+    "optimize:media": "node scripts/optimize-media.mjs"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.7.3",
+    "@astrojs/starlight": "^0.40.0",
+    "astro": "^6.4.8",
+    "gsap": "^3.15.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.2"
+  }
+}

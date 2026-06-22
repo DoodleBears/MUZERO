@@ -1,0 +1,17 @@
+/* MUZERO docs brand tokens — align Starlight to the app's dark identity (#09090b)
+   with a restrained cover-palette/flow accent. Landing page styling lives
+   inline in src/pages/index.astro; this only themes the Starlight docs chrome. */
+:root {
+  --sl-color-accent-low: #2a2440;
+  --sl-color-accent: #8b7ff0;
+  --sl-color-accent-high: #d6cffb;
+  /* Match the main app's default UI font stack (src/theme/font.ts
+     DEFAULT_FONT_STACK) so docs read like the app — pure system fonts. */
+  --sl-font:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+:root[data-theme="dark"] {
+  --sl-color-bg: #09090b;
+  --sl-color-bg-nav: #0c0c0f;
+  --sl-color-bg-sidebar: #0b0b0e;
+}

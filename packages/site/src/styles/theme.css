@@ -1,0 +1,49 @@
+/* Shared theme tokens for the landing surfaces (index, download).
+ * Dark by default (brand-first); light via [data-theme="light"] on <html>.
+ * The theme is driven by the SAME localStorage key Starlight uses
+ * ("starlight-theme"), so toggling on the landing and in the docs stays in sync.
+ * --container stays per-page (index 1080, download 720); only colors live here. */
+:root {
+  --bg: #09090b;
+  --fg: #ededee;
+  --muted: #9a9aa4;
+  --faint: #6b6b74;
+  --line: rgba(255, 255, 255, 0.09);
+  --surface: #0d0d11;
+  --cover-line: rgba(255, 255, 255, 0.16);
+  --accent: #8b7ff0;
+  --accent-soft: rgba(139, 127, 240, 0.16);
+  --font:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Inverted solid header pill: bg = page foreground, content = page bg. */
+  --header-bg: #ededee;
+  --header-fg: #0c0c10;
+  --header-muted: #3f3f46;
+  --header-line: rgba(9, 9, 11, 0.12);
+  color-scheme: dark;
+}
+
+/* Theme switch: a transitioned property bound to a CSS var can freeze at the old
+   value in Chromium when the var flips. ThemeToggle adds this class for one frame
+   so the theme change applies instantly (transitions resume right after). */
+html.theme-switching,
+html.theme-switching * {
+  transition: none !important;
+}
+
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --fg: #18181b;
+  --muted: #52525b;
+  --faint: #8e8e98;
+  --line: rgba(0, 0, 0, 0.1);
+  --surface: #f4f4f6;
+  --cover-line: rgba(0, 0, 0, 0.08);
+  --accent: #6d5fe0;
+  --accent-soft: rgba(109, 95, 224, 0.12);
+  --header-bg: #18181b;
+  --header-fg: #ffffff;
+  --header-muted: #b4b4bd;
+  --header-line: rgba(255, 255, 255, 0.16);
+  color-scheme: light;
+}

@@ -1,3 +1,13 @@
+packages:
+  - "packages/*"
+
+# Astro 6 (packages/site) requires Vite 7, but the root app deliberately runs
+# Vite 8. Scope Vite 7 to Astro's subtree only so the site's dev server doesn't
+# choke (Vite 8's esbuild mis-parses Astro frontmatter → bogus "Unterminated
+# string literal"); the app keeps Vite 8 untouched.
+overrides:
+  "astro>vite": "^7"
+
 allowBuilds:
   electron-winstaller: false
   esbuild: false
