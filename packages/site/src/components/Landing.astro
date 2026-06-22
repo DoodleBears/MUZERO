@@ -1263,7 +1263,15 @@ const showcases = SHOWCASE_MEDIA.map((media, i) => ({ media, ...t.showcases[i] }
               continue;
             }
             btn.href = latest.platforms[assets[0]]!.url;
-            btn.textContent = `${tilesWrap.dataset.tDownload ?? "Download"} · v${latest.version}`;
+            // When the OS ships more than one build (mac arm64/x64, linux
+            // appimage/deb), label the primary button with its arch/format so
+            // macOS Apple Silicon vs Intel is unambiguous; the others stay as
+            // variant links. Single-build OSes keep the version on the button.
+            const tDownload = tilesWrap.dataset.tDownload ?? "Download";
+            btn.textContent =
+              assets.length > 1
+                ? `${tDownload} · ${VARIANT_LABEL[assets[0]]}`
+                : `${tDownload} · v${latest.version}`;
             btn.hidden = false;
             variants.innerHTML = assets
               .slice(1)
