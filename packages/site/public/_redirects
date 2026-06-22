@@ -1,0 +1,8 @@
+# Cloudflare Pages redirects for mu0.app (the marketing + docs site).
+#
+# After the Phase-3 cutover the app lives at my.mu0.app and the landing owns
+# mu0.app/. These send returning users / muscle-memory /app links to the app.
+# (Before cutover my.mu0.app does not exist yet — this file ships WITH the
+# cutover, so the targets are live by the time it deploys.)
+/app       https://my.mu0.app/         302
+/app/*     https://my.mu0.app/:splat    302

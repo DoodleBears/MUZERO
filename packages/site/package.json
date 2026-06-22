@@ -11,7 +11,10 @@
     "astro": "astro",
     "gen:covers": "node scripts/gen-covers.mjs",
     "fetch:covers": "node scripts/fetch-covers.mjs",
-    "optimize:media": "node scripts/optimize-media.mjs"
+    "optimize:media": "node scripts/optimize-media.mjs",
+    "pages:project": "wrangler pages project create mu0-site --production-branch main",
+    "pages:deploy": "wrangler pages deploy --branch main",
+    "pages:deploy:preview": "wrangler pages deploy --branch preview"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",

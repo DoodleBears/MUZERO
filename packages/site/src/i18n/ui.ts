@@ -41,17 +41,34 @@ interface Showcase {
 }
 
 interface Strings {
+  /** <title> + meta description / OG for the landing page. */
+  meta: { title: string; description: string };
   nav: { docs: string; download: string; github: string; openApp: string };
   hero: { eyebrow: string; title: string; lede: string };
   cta: { openApp: string; download: string; readDocs: string };
   showcases: Showcase[];
   closer: { title: string };
   footer: { tagline: string };
+  /** /download archive page chrome. */
   download: { title: string; sub: string };
+  /** Landing #download section. */
+  landingDownload: {
+    sub: string;
+    comingSoon: string;
+    allVersions: string;
+    latest: string;
+    fallback: string;
+  };
+  lightbox: { hint: string };
 }
 
 export const ui = {
   en: {
+    meta: {
+      title: "MUZERO — Your private music museum",
+      description:
+        "MUZERO is your private, local-first music museum: upload, annotate, and play MV and music from every source — with an AI DJ on the side. No account, no cloud.",
+    },
     nav: { docs: "Docs", download: "Download", github: "GitHub", openApp: "Open MUZERO" },
     hero: {
       eyebrow: "Local-first · No account · No cloud",
@@ -74,9 +91,22 @@ export const ui = {
       title: "Downloads & changelog",
       sub: "Every MUZERO desktop release for macOS, Windows, and Linux. The app auto-updates itself — this page is for manual installs, older versions, and seeing what changed.",
     },
+    landingDownload: {
+      sub: "Desktop apps for macOS, Windows, and Linux.",
+      comingSoon: "Coming soon",
+      allVersions: "All versions & checksums →",
+      latest: "Latest",
+      fallback: "Desktop builds are on the way — for now:",
+    },
+    lightbox: { hint: "Click to zoom · scroll to fine-tune · Esc or click outside to close" },
   },
 
   zh: {
+    meta: {
+      title: "MUZERO — 你的私人音乐博物馆",
+      description:
+        "MUZERO 是你的私人、本地优先的音乐博物馆:上传、标注、播放来自任意来源的 MV 与音乐,还配一位 AI DJ。无需账号,无需云端。",
+    },
     nav: { docs: "文档", download: "下载", github: "GitHub", openApp: "打开 MUZERO" },
     hero: {
       eyebrow: "本地优先 · 无需账号 · 无需云端",
@@ -99,9 +129,22 @@ export const ui = {
       title: "下载与更新日志",
       sub: "MUZERO 桌面端的每个版本(macOS、Windows、Linux)。应用会自动更新——本页用于手动安装、历史版本,以及查看更新内容。",
     },
+    landingDownload: {
+      sub: "macOS、Windows、Linux 桌面应用。",
+      comingSoon: "即将推出",
+      allVersions: "全部版本与校验和 →",
+      latest: "最新",
+      fallback: "桌面版即将上线——目前可以:",
+    },
+    lightbox: { hint: "点击放大 · 滚动微调 · Esc 或点击外部关闭" },
   },
 
   ja: {
+    meta: {
+      title: "MUZERO — あなただけの音楽博物館",
+      description:
+        "MUZERO はローカルファーストのプライベート音楽博物館。あらゆるソースの MV や音楽をアップロード・メモ・再生でき、AI DJ も。アカウント不要、クラウド不要。",
+    },
     nav: { docs: "ドキュメント", download: "ダウンロード", github: "GitHub", openApp: "MUZERO を開く" },
     hero: {
       eyebrow: "ローカルファースト · アカウント不要 · クラウド不要",
@@ -124,9 +167,22 @@ export const ui = {
       title: "ダウンロードと変更履歴",
       sub: "MUZERO デスクトップの全リリース(macOS・Windows・Linux)。アプリは自動更新されます——このページは手動インストール、旧バージョン、変更点の確認用です。",
     },
+    landingDownload: {
+      sub: "macOS・Windows・Linux 向けデスクトップアプリ。",
+      comingSoon: "近日公開",
+      allVersions: "全バージョンとチェックサム →",
+      latest: "最新",
+      fallback: "デスクトップ版は近日公開——今は:",
+    },
+    lightbox: { hint: "クリックで拡大 · スクロールで微調整 · Esc または外側クリックで閉じる" },
   },
 
   ko: {
+    meta: {
+      title: "MUZERO — 나만의 음악 박물관",
+      description:
+        "MUZERO는 로컬 우선의 개인 음악 박물관입니다. 모든 소스의 MV와 음악을 업로드·메모·재생하고 AI DJ도 함께. 계정 불필요, 클라우드 불필요.",
+    },
     nav: { docs: "문서", download: "다운로드", github: "GitHub", openApp: "MUZERO 열기" },
     hero: {
       eyebrow: "로컬 우선 · 계정 불필요 · 클라우드 불필요",
@@ -149,5 +205,13 @@ export const ui = {
       title: "다운로드 & 변경 이력",
       sub: "macOS·Windows·Linux용 모든 MUZERO 데스크톱 릴리스. 앱은 자동 업데이트됩니다 — 이 페이지는 수동 설치, 이전 버전, 변경 내용 확인용입니다.",
     },
+    landingDownload: {
+      sub: "macOS·Windows·Linux 데스크톱 앱.",
+      comingSoon: "곧 출시",
+      allVersions: "모든 버전 & 체크섬 →",
+      latest: "최신",
+      fallback: "데스크톱 빌드가 곧 출시됩니다 — 지금은:",
+    },
+    lightbox: { hint: "클릭하여 확대 · 스크롤로 미세 조정 · Esc 또는 바깥 클릭으로 닫기" },
   },
 } satisfies Record<Locale, Strings>;

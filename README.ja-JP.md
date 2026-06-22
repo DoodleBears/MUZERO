@@ -9,7 +9,7 @@ MUZERO はローカルファーストの音楽 / ビデオプレーヤーです�
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja-JP.md) · [한국어](./README.ko-KR.md)
 
-[mu0.app](https://mu0.app) · [Changelog](./CHANGELOG.md) · [Product PRD](./docs/prd/20260612-muzero-product-positioning-readme-prd/20260612-muzero-product-positioning-readme-prd.md)
+[mu0.app](https://mu0.app) · [Docs](https://mu0.app/docs) · [Changelog](./CHANGELOG.md) · [Product PRD](./docs/prd/20260612-muzero-product-positioning-readme-prd/20260612-muzero-product-positioning-readme-prd.md)
 
 <br/>
 
@@ -78,140 +78,33 @@ MUZERO は、private music bank、あるいは private museum という発想か
 | **無料の hosted service** | `mu0.app` は配布、Web アクセス、任意の共有権限管理のための無料サービスです。ライブラリを預かるものではありません。 |
 | **共有境界が明確** | 共有短縮リンクと権限メタデータだけが `mu0` サービスを必要とします。音声 / ビデオの bytes はローカル端末または自分のクラウドから取得されます。 |
 
-## ハイライト機能
+## ドキュメント
 
-### 速く、キーボード中心
+詳しいガイド、ハイライト、アーキテクチャは **[mu0.app/docs](https://mu0.app/docs)** にあります：
 
-- 多数のショートカットをカスタマイズできます。再生、キュー、検索、ナビゲーション、ライブラリ管理の主要操作をキーボードだけで完結できます。
-- `Command/Ctrl + F` で曲、アルバム、アーティスト、セット、歌詞、タグ、メモ、オンラインソースを横断検索できます。
-- MUZERO はローカルの大規模ライブラリ検索を前提に設計されています。6,000 曲のプレイリストで、使い始めるまで 30 秒近く待たされるべきではありません。
+- [はじめに](https://mu0.app/docs/getting-started/) — アプリを開いて最初の曲を取り込む
+- [ソースと取り込み](https://mu0.app/docs/sources/) — アップロード + NetEase・Bilibili・YouTube
+- [クラウド同期](https://mu0.app/docs/sync/) — すべての端末を同じライブラリに
+- [Agent DJ](https://mu0.app/docs/agent-dj/) — モデルをつないでキューを任せる
+- [セルフホスト / デプロイ](https://mu0.app/docs/self-host/) — Web ビルドを自分で動かす
+- [アーキテクチャ](https://mu0.app/docs/architecture/) — データモデル、DJ ループ、プロジェクトマップ、技術スタック
 
-### 一度設定して、どの端末でも再生
-
-- クラウドドライブを一度設定すれば、trusted setup link をコピーするだけで別のスマホや PC を同じライブラリにつなげられます。
-- セット、曲、カバー、メモ、記憶、歌詞、再生メタデータを自分の端末間で同期できます。MUZERO がメディアを預かる必要はありません。
-- 友人には読み取り専用のライブラリ / 共有リンクで素早く音楽を渡せます。より豊かな `mu0.app` 短縮リンク、取り消し可能な招待、権限管理はロードマップで進めています。
-
-### 高度にカスタマイズできるビジュアル
-
-- 背景動画、背景画像、カバー由来の背景、スペクトラム背景、波形スタイル、shader scene、テーマカラーのプリセットを選べます。
-- 背景エフェクト、ビジュアライザー、パレット、歌詞エフェクト、翻訳、ローマ字、単語単位の歌詞表示を、聴く場面に合わせて調整できます。
-
-### Vibe Coding のための AI DJ
-
-- MUZERO をサブディスプレイに置けば、コードを書く時、デザインする時、文章を書く時、長く集中したい時の DJ / Radio になります。
-- Agent に今のムードを伝えたり、seed となるセットを渡したり、ライブラリを検索させたりしながら、キューを自然に続けられます。
-
-## 機能
-
-### プライベート音楽バンク
-
-- 音声ファイル、フォルダ、MV を取り込み、混在したセットを作れます。
-- 曲ごとにメモ、タグ、記憶の写真、カスタムカバーを追加できます。
-- タイトル、アーティスト、アルバム、タグ、メモ、歌詞、表記ゆれ、ソースメタデータで検索できます。
-- アーティスト、アルバム、セット、記憶、歌詞、再生履歴を同じローカルライブラリで扱えます。
-
-### 自分のクラウドへ同期
-
-- 自分が所有するクラウドドライブへライブラリを publish / pull できます。
-- 現在の production path: Cloudflare R2 / S3 互換オブジェクトストレージ。
-- ストレージ provider のロードマップ: Nextcloud、Synology、rclone serve などに向けた WebDAV support。
-- メディア bytes は内容アドレスで保存され、軽量な track 行には入れないため、大きなライブラリでも検索を保ちやすくします。
-
-### オンラインソース
-
-- デスクトップで次のソースを検索 / 解決できます。
-  - NetEase Cloud Music
-  - Bilibili
-  - YouTube
-- ソース側が必要とする場合、ログイン状態をローカルに保存して高音質やアカウント限定コンテンツを扱えます。
-- ストリーミング曲とカバーをローカルにキャッシュし、オフライン再生できます。
-
-### ビジュアルプレーヤー
-
-- プレーヤーファーストの bottom dock: カバー / タイトル、幅いっぱいの progress、ステータス、ナビゲーションをひとつの面に統合。
-- Now Playing stage は video、cover art、title fallback、audio-only mode、immersive background に対応。
-- spectrum、waveform、radial、LED reflex、liquid、aurora、cover-palette flow などのビジュアライザーを内蔵。
-- デスクトップ優先で作りつつ、モバイルにも対応する responsive layout。
-
-### Agent DJ
-
-- DJ は `TrackBrief` を書きます: caption、lyrics、style、BPM、key、structure、generation hints。
-- 音楽生成 provider は差し替え可能: デフォルトは offline mock、実生成には cloud BYOK provider。
-- Agent はライブラリ検索、タグやメモの文脈利用、セットのキュレーション、DJ のようなキュー継続ができます。
-- LLM と provider は adapter の背後に隔離され、ライブラリは特定 vendor に依存しません。
+すぐ使いたい場合は [my.mu0.app](https://my.mu0.app) を開くか、[ダウンロードページ](https://mu0.app/download) からデスクトップ版を入手してください。
 
 ## ローカル実行
 
-Node.js 24.16+ と pnpm が必要です。fnm を使う場合は、このリポジトリの `.node-version` をそのまま使えます:
+Node.js 24.16+、pnpm、（デスクトップ / モバイルのビルドには）Rust + Tauri の前提、Xcode、Android SDK/NDK が必要です。
 
 ```bash
 fnm install
 fnm use
 make install
-make dev
+make dev            # Web dev server → http://localhost:41730
+make electron-dev   # Electron デスクトップ shell
+make check          # 型チェック + lint + テスト
 ```
 
-Web dev server は `http://localhost:41730` です。
-
-デスクトップ:
-
-```bash
-make electron-dev
-```
-
-Tauri / モバイル:
-
-```bash
-make desktop
-make ios-init && make ios
-make android-init && make android
-```
-
-品質チェック:
-
-```bash
-make check
-```
-
-## デプロイ / セルフホスト
-
-MUZERO は Vite アプリなので、静的ファイルとしてビルドできます。
-
-```bash
-make build
-```
-
-`dist/` を Cloudflare Pages にデプロイして個人用 Web 版として使えます。オンラインソース再生のようにカスタム request header が必要な機能は、Electron デスクトップ shell が最も安定します。
-
-`mu0.app` は公式の無料 hosted surface です。任意の共有リンク control plane は Cloudflare Workers + D1 + KV を前提に設計されており、その phase が実装された後はセルフホストできます。ローカル再生、ローカルライブラリ管理、自分のクラウドドライブ同期に MUZERO アカウントは不要です。
-
-## プロジェクトマップ
-
-| 領域 | Path |
-|------|------|
-| App shell / routes | [`src/App.tsx`](./src/App.tsx), [`src/pages/`](./src/pages/) |
-| Player / media engine | [`src/player/`](./src/player/), [`src/components/player/`](./src/components/player/) |
-| AI DJ engine | [`src/dj/`](./src/dj/) |
-| Music-generation providers | [`src/musicgen/`](./src/musicgen/) |
-| Online source providers | [`src/streamsrc/`](./src/streamsrc/) |
-| Local database | [`src/db/`](./src/db/) |
-| Cloud sync | [`src/sync/`](./src/sync/) |
-| Visualizers | [`src/visualizer/`](./src/visualizer/) |
-| Desktop / mobile shell | [`src-tauri/`](./src-tauri/), [`electron/`](./electron/) |
-| Product requirements | [`docs/prd/`](./docs/prd/) |
-
-## 技術スタック
-
-Tauri 2、Electron、Vite、React 19、TypeScript、Tailwind CSS v4、COSS UI、Base UI、Dexie、IndexedDB、Zustand、TanStack Query、TanStack Virtual、Vercel AI SDK、Zod、Vitest、Biome、Cloudflare R2、任意の hosted control plane 向け Cloudflare Workers。
-
-## Roadmap
-
-- WebDAV storage adapter と cloud-drive provider abstraction。
-- `mu0.app` share links、取り消し可能な invites、ブラウザ playback page。
-- 検索、キュレーション、説明、音楽生成のための Agent tools。
-- モバイルの background audio と touch-first browsing の磨き込み。
-- 追加 visualizer presets と cover-driven immersive scenes。
+完全なビルド / デプロイと Tauri / モバイルのコマンドは[セルフホストガイド](https://mu0.app/docs/self-host/)にあります。
 
 ## License
 

@@ -1,0 +1,12 @@
+# MUZERO marketing + docs site (mu0.app) — Cloudflare Pages project "mu0-site".
+#
+# This is SEPARATE from the app's "mu0-app" project (root wrangler.toml). At the
+# Phase-3 cutover the app moves to my.mu0.app and this site takes over the
+# mu0.app apex. Full runbook: docs/deploy/mu0-site-cutover.md.
+#
+# Pages config files can't carry the Worker-only `account_id`; the root Makefile
+# exports CLOUDFLARE_ACCOUNT_ID for wrangler. Deploy with `make site-deploy`.
+"$schema" = "../../node_modules/wrangler/config-schema.json"
+name = "mu0-site"
+compatibility_date = "2026-06-23"
+pages_build_output_dir = "./dist"

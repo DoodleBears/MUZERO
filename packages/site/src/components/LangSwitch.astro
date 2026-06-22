@@ -87,28 +87,43 @@
 </style>
 
 <script>
+  // Route-based switch: navigate to the same page in another locale (/, /zh/,
+  // /ja/, /ko/). The destination renders that locale server-side. Inlined path
+  // logic (mirrors src/i18n) so the client bundle doesn't pull the catalog.
   const SHORT: Record<string, string> = { en: "EN", zh: "中", ja: "あ", ko: "한" };
+  const LOCALES = ["en", "zh", "ja", "ko"];
+  const DEFAULT = "en";
 
-  function setLabel(lang: string) {
-    for (const el of document.querySelectorAll("[data-ls-label]")) {
-      el.textContent = SHORT[lang] ?? "EN";
-    }
-  }
-
-  function applyLang(lang: string) {
-    document.documentElement.dataset.lang = lang;
-    try {
-      localStorage.setItem("muzero-site-lang", lang);
-    } catch {}
-    setLabel(lang);
+  function localizedPath(pathname: string, locale: string): string {
+    const segs = pathname.replace(/^\/+/, "").split("/");
+    const hasLocale = !!segs[0] && LOCALES.includes(segs[0]) && segs[0] !== DEFAULT;
+    const base = hasLocale
+      ? `/${segs.slice(1).join("/")}`
+      : pathname.startsWith("/")
+        ? pathname
+        : `/${pathname}`;
+    if (locale === DEFAULT) return base;
+    if (base === "/") return `/${locale}/`;
+    return `/${locale}${base}`;
   }
 
   for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-set-lang]")) {
     btn.addEventListener("click", () => {
-      applyLang(btn.dataset.setLang ?? "en");
+      const lang = btn.dataset.setLang ?? "en";
+      try {
+        localStorage.setItem("muzero-site-lang", lang);
+      } catch {}
+      const target = localizedPath(window.location.pathname, lang) + window.location.hash;
+      if (target !== window.location.pathname + window.location.hash) {
+        window.location.href = target;
+      }
       btn.closest("details")?.removeAttribute("open");
     });
   }
 
-  setLabel(document.documentElement.dataset.lang || "en");
+  // Label reflects the locale rendered server-side (<html data-lang>).
+  const cur = document.documentElement.dataset.lang || "en";
+  for (const el of document.querySelectorAll("[data-ls-label]")) {
+    el.textContent = SHORT[cur] ?? "EN";
+  }
 </script>

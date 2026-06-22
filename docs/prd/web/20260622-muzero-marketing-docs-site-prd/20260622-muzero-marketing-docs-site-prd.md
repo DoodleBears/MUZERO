@@ -11,10 +11,35 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Site foundation (Astro + Starlight scaffold + landing) | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Docs content as single source (port README, i18n) | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Domain split + cutover (`mu0.app` → site, app → `my.mu0.app`) | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | SEO hardening (sitemap / hreflang / OG / structured data) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 1 | Site foundation (Astro + Starlight scaffold + landing) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | Docs content as single source (port README, i18n) | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | Domain split + cutover (`mu0.app` → site, app → `my.mu0.app`) | 🔄 Materials ready (deploy pending) | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | SEO hardening (sitemap / hreflang / OG / structured data) | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
+
+> **Progress note (2026-06-23):** The whole site is **functionally complete**;
+> only the outward-facing Cloudflare cutover is left.
+>
+> - **Phase 1** ✅ — Astro + Starlight scaffold, landing (GSAP album-cover
+>   convergence → logo), download + changelog page, floating-island header,
+>   dark/light theme, lightbox.
+> - **Phase 2** ✅ — Docs ported from the README into 7 Starlight pages; **full
+>   route-based i18n (en/zh/ja/ko) across landing + download + docs** (all 7 docs
+>   translated per locale). Architecture: **Starlight owns i18n** (`locales`); the
+>   custom pages route per-locale via `<Landing>`/`<DownloadPage>` components +
+>   `src/pages/[lang]/`. The 4 READMEs were shortened to point at `mu0.app/docs`.
+> - **Phase 4** ✅ — `@astrojs/sitemap` + robots + per-page hreflang + OG +
+>   per-locale JSON-LD (SoftwareApplication + WebSite).
+> - **Phase 3** 🔄 — deploy **materials shipped** (`packages/site/wrangler.toml`
+>   = Pages project `mu0-site`; `public/_redirects` `/app`→`my.mu0.app`;
+>   `make site-pages-project` / `site-deploy`; runbook
+>   [`docs/deploy/mu0-site-cutover.md`](../../deploy/mu0-site-cutover.md)). The
+>   actual Pages-project creation, custom-domain rebind, DNS, and the app
+>   `index.html` canonical/OG flip are **operator actions** (held in the runbook
+>   so nothing points at not-yet-live URLs).
+>
+> Translations are owner-review drafts. i18n note: Starlight forbids a top-level
+> Astro `i18n` config alongside its `locales` ("Cannot provide both") — hence
+> Starlight-owns-i18n + manual per-locale custom-page routes.
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 

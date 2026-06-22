@@ -1,23 +1,46 @@
 ---
 title: Getting started
-description: Install MUZERO and open your private, local-first music library.
+description: Open MUZERO and import your first tracks. No account, no cloud — everything stays on your device.
+sidebar:
+  order: 1
 ---
 
-MUZERO runs as a desktop app (Electron) and a hosted web app. Your library lives
-in a device-local database — there is no account and no MUZERO media backend.
+MUZERO runs as a hosted **web app** and a **desktop app** (Electron). Your library
+lives in a device-local database — there is no account and no MUZERO media backend.
 
 ## Open the app
 
-- **Web** — open [my.mu0.app](https://my.mu0.app) and start uploading.
-- **Desktop** — download an installer from the [download center](/download/).
+- **Web** — go to [my.mu0.app](https://my.mu0.app) and start uploading.
+- **Desktop** — download an installer from the [download page](/download/). The
+  desktop app has the best support for online sources (it can set the request
+  headers some sources require).
 
-## What you can do
+The web and desktop apps keep separate local libraries (they're different
+origins). Use [cloud sync](/docs/sync/) to share one library across them.
 
-- Upload audio, folders, and music videos into mixed sets.
-- Add notes, tags, memory photos, and custom covers to every track.
-- Search across titles, tags, lyrics, notes, and online sources.
-- Sync to your own cloud drive (R2 / S3-compatible).
-- Connect an Agent DJ to curate sets and keep the queue moving.
+## Your first five minutes
 
-> This is a Phase 1 placeholder. Full guides (sources, sync, AI DJ, self-host)
-> are migrated from the README in Phase 2.
+1. **Add music.** Drag in audio files, a folder, or a music video — or paste a
+   link (see [Sources](/docs/sources/)).
+2. **Annotate it.** Give a track tags, a note, a memory photo, or a custom cover.
+   "Music carries memories" is the whole point.
+3. **Search.** Press `⌘F` / `Ctrl+F` for global search across titles, artists,
+   tags, lyrics, notes, and online sources.
+4. **Make a set.** Group tracks into a set (playlist). Sets can mix your uploads
+   and AI-generated tracks.
+5. **Let the DJ run** (optional). Connect a model and let the [Agent DJ](/docs/agent-dj/)
+   keep the queue moving.
+
+## Keyboard-first
+
+MUZERO is built for large local libraries and keyboard control:
+
+- Customize shortcuts for playback, queue, search, navigation, and library actions.
+- `⌘F` / `Ctrl+F` opens global search from anywhere.
+- A 6,000-track library should be usable instantly, not after a long load.
+
+## Next
+
+- [Sources & importing](/docs/sources/)
+- [Cloud sync](/docs/sync/)
+- Running the project locally → [Self-host & deploy](/docs/self-host/)
