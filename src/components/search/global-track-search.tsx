@@ -178,7 +178,7 @@ export function GlobalTrackSearch({
   // Which sections the active filter shows. No filter → fast library facets +
   // songs; heavyweight full-lyrics search is opt-in via @lyrics.
   const showSets = filter === null || filter.kind === "set";
-  const showTrackResults = filter === null;
+  const showTrackResults = filter === null || filter.kind === "track";
   const showLyricResults = filter?.kind === "lyrics";
   const showAlbums = filter === null || filter.kind === "album";
   const showArtists = filter === null || filter.kind === "artist";
@@ -344,13 +344,6 @@ export function GlobalTrackSearch({
     lyricTrackById,
     lyricsByTrackId,
   ]);
-
-  const showSongsHeader =
-    trackResults.length > 0 &&
-    (setResults.length > 0 ||
-      lyricResults.length > 0 ||
-      albumResults.length > 0 ||
-      artistResults.length > 0);
 
   // Online — a source filter forces that one source ad-hoc; otherwise the enabled chips.
   const onlineQuery = open && showOnline ? searchText : "";
@@ -697,7 +690,7 @@ export function GlobalTrackSearch({
             {showTrackResults && trackResults.length > 0 && (
               <RenderTraceBoundary id="global-search:tracks" active={open}>
                 <div>
-                  {showSongsHeader && <SectionHeader>{t("globalSearch.songs")}</SectionHeader>}
+                  <SectionHeader>{t("globalSearch.songs")}</SectionHeader>
                   {trackResults.map((track, i) => (
                     <GlobalTrackSearchRow
                       key={track.id}
@@ -914,16 +907,20 @@ function FilterPill({ filter, onClear }: { filter: SearchFilter; onClear: () => 
   const label =
     filter.kind === "source"
       ? (SOURCE_LABEL[filter.source] ?? filter.source)
-      : filter.kind === "set"
-        ? t("gallery.modeSets")
-        : filter.kind === "lyrics"
-          ? t("dock.lyrics")
-          : filter.kind === "artist"
-            ? t("gallery.modeArtists")
-            : t("gallery.modeAlbums");
+      : filter.kind === "track"
+        ? t("globalSearch.songs")
+        : filter.kind === "set"
+          ? t("gallery.modeSets")
+          : filter.kind === "lyrics"
+            ? t("dock.lyrics")
+            : filter.kind === "artist"
+              ? t("gallery.modeArtists")
+              : t("gallery.modeAlbums");
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary bg-accent px-2 py-0.5 text-foreground text-xs">
-      {filter.kind === "set" ? (
+      {filter.kind === "track" ? (
+        <Music className="size-3.5" />
+      ) : filter.kind === "set" ? (
         <ListMusic className="size-3.5" />
       ) : filter.kind === "lyrics" ? (
         <Captions className="size-3.5" />
@@ -961,6 +958,7 @@ function FilterMenu({
 }) {
   const { t } = useTranslation();
   const labelFor = (opt: FilterOption): string => {
+    if (opt.id === "track") return t("globalSearch.songs");
     if (opt.id === "set") return t("gallery.modeSets");
     if (opt.id === "lyrics") return t("dock.lyrics");
     if (opt.id === "artist") return t("gallery.modeArtists");
@@ -987,7 +985,9 @@ function FilterMenu({
             i === index ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
           )}
         >
-          {opt.id === "set" ? (
+          {opt.id === "track" ? (
+            <Music className="size-4 text-muted-foreground" />
+          ) : opt.id === "set" ? (
             <ListMusic className="size-4 text-muted-foreground" />
           ) : opt.id === "lyrics" ? (
             <Captions className="size-4 text-muted-foreground" />
