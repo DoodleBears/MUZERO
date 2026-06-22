@@ -133,7 +133,7 @@ function NotificationItemView({
               if (!action.keepOpen) onDismiss();
             }}
             className={cn(
-              "whitespace-nowrap rounded-md px-2 py-0.5 font-medium text-xs transition-colors",
+              "whitespace-nowrap rounded px-2 py-0.5 font-medium text-xs transition-colors",
               action.variant === "ghost"
                 ? "hover:bg-foreground/10"
                 : "bg-primary text-primary-foreground hover:bg-primary/90",
