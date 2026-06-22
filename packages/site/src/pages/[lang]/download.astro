@@ -1,0 +1,14 @@
+---
+// Per-locale downloads + changelog: /zh/download/, /ja/download/, /ko/download/.
+// en lives at src/pages/download.astro.
+import DownloadPage from "../../components/DownloadPage.astro";
+import type { Locale } from "../../i18n";
+
+export function getStaticPaths() {
+  return [{ params: { lang: "zh" } }, { params: { lang: "ja" } }, { params: { lang: "ko" } }];
+}
+
+const { lang } = Astro.params;
+---
+
+<DownloadPage locale={lang as Locale} />

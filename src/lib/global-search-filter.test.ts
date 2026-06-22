@@ -39,6 +39,7 @@ describe("parseMention", () => {
 describe("matchFilterOptions", () => {
   it("returns every option for an empty partial", () => {
     expect(matchFilterOptions("").map((o) => o.id)).toEqual([
+      "track",
       "set",
       "lyrics",
       "artist",
@@ -51,6 +52,8 @@ describe("matchFilterOptions", () => {
   });
 
   it("prefix-matches latin aliases", () => {
+    expect(matchFilterOptions("song").map((o) => o.id)).toEqual(["track"]);
+    expect(matchFilterOptions("track").map((o) => o.id)).toEqual(["track"]);
     expect(matchFilterOptions("set").map((o) => o.id)).toEqual(["set"]);
     expect(matchFilterOptions("play").map((o) => o.id)).toEqual(["set"]);
     expect(matchFilterOptions("lyr").map((o) => o.id)).toEqual(["lyrics"]);
@@ -66,9 +69,11 @@ describe("matchFilterOptions", () => {
   });
 
   it("prefix-matches CJK aliases", () => {
+    expect(matchFilterOptions("歌曲").map((o) => o.id)).toEqual(["track"]);
+    expect(matchFilterOptions("曲").map((o) => o.id)).toEqual(["track"]);
     expect(matchFilterOptions("歌单").map((o) => o.id)).toEqual(["set"]);
     expect(matchFilterOptions("歌词").map((o) => o.id)).toEqual(["lyrics"]);
-    expect(matchFilterOptions("歌").map((o) => o.id)).toEqual(["set", "lyrics", "artist"]);
+    expect(matchFilterOptions("歌").map((o) => o.id)).toEqual(["track", "set", "lyrics", "artist"]);
     expect(matchFilterOptions("词").map((o) => o.id)).toEqual(["lyrics"]);
     expect(matchFilterOptions("专辑").map((o) => o.id)).toEqual(["album"]);
     expect(matchFilterOptions("网易").map((o) => o.id)).toEqual(["netease"]);

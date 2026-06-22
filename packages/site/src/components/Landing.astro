@@ -1,0 +1,1490 @@
+---
+// NOTE: imports MUST stay at the very top of the frontmatter. Astro's compiler
+// hoists imports by byte offset; with imports placed after code AND multi-byte
+// chars (—, →, ⌘) in the comments below, that splice miscalculated and corrupted
+// the output ("Unterminated string literal"). Keep all imports first.
+import { PLATFORM_ICONS } from "../lib/platform-icons";
+import { OS_LABEL } from "../lib/release";
+import AudioLinesIcon from "../components/AudioLinesIcon.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
+import LangSwitch from "../components/LangSwitch.astro";
+import { alternates, localizedPath, LOCALE_HTML_LANG, useTranslations, type Locale } from "../i18n";
+import "../styles/theme.css";
+
+// MUZERO landing page (mu0.app).
+// Plain Astro page — owns "/". Starlight owns /docs/*.
+// Centered hero: the copy sits in the middle, with album covers SCATTERED all
+// around it. On scroll the covers converge from every direction to the center
+// (the copy stays visible during the gather), then resolve into the MUZERO logo.
+// Below the hero, an image-first showcase of the README media.
+//
+// Cover tiles are real, commercially-licensed photos (Pexels License) written as
+// webp by scripts/fetch-covers.mjs. Swap in your own covers by editing that
+// script's ID list (or pointing `covers[].src` at your own webp).
+
+// "Open MUZERO" → the local app dev server in dev, my.mu0.app in prod.
+// Override with PUBLIC_APP_URL if your app dev port differs from 41730.
+const APP_URL =
+  import.meta.env.PUBLIC_APP_URL ??
+  (import.meta.env.DEV ? "http://localhost:41730" : "https://my.mu0.app");
+const GITHUB_URL = "https://github.com/DoodleBears/MUZERO";
+
+const DL_OSES = ["mac", "win", "linux"] as const;
+
+// Rendered as a component by src/pages/index.astro (en) and
+// src/pages/[lang]/index.astro (zh/ja/ko) — locale comes in as a prop.
+const locale = (Astro.props.locale ?? "en") as Locale;
+const t = useTranslations(locale);
+const hreflangs = alternates(Astro.url.pathname);
+
+// JSON-LD structured data (per-locale). SoftwareApplication describes the app;
+// WebSite marks the site. Helps search engines render rich results.
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "MUZERO",
+    applicationCategory: "MultimediaApplication",
+    operatingSystem: "macOS, Windows, Linux, Web",
+    description: t.meta.description,
+    url: `https://mu0.app${localizedPath("/", locale)}`,
+    inLanguage: LOCALE_HTML_LANG[locale],
+    image: "https://mu0.app/muzero-logo-dark.png",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    author: { "@type": "Person", name: "DoodleBears", url: GITHUB_URL },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "MUZERO",
+    url: "https://mu0.app/",
+  },
+];
+
+// Deterministic pseudo-random so the scatter is stable across builds.
+const rand = (s) => {
+  const x = Math.sin(s * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+const COVER_COUNT = 18;
+const covers = Array.from({ length: COVER_COUNT }, (_, i) => {
+  const angle = (i / COVER_COUNT) * Math.PI * 2 + (rand(i) - 0.5) * 0.5; // even ring + slight jitter
+  const radius = 0.7 + rand(i + 3) * 0.26; // 0.7..0.96 → a ring around center, not clustered
+  const sx = +(Math.cos(angle) * radius * 34).toFixed(2); // vw offset (pulled in from edges)
+  const sy = +(Math.sin(angle) * radius * 30 + 8).toFixed(2); // vh: range + downward bias so
+  // the top of the ring clears the fixed header (no nav overlap) yet stays full
+  const rot = +((rand(i + 9) * 2 - 1) * 26).toFixed(2); // -26..26 deg
+  const scl = +(0.5 + rand(i + 3) * 0.6).toFixed(2); // 0.5..1.1
+  const op = +(0.42 + scl * 0.4).toFixed(2); // depth-tied opacity
+  const z = Math.round(scl * 100);
+  const hue = Math.round((i / (COVER_COUNT - 1)) * 320);
+  return { i, sx, sy, rot, scl, op, z, hue, src: `/covers/photo-${String(i + 1).padStart(2, "0")}.webp` };
+});
+
+// Media is locale-independent; the text comes from the i18n catalog (zipped by
+// index, same order as ui.ts showcases[]).
+const SHOWCASE_MEDIA = [
+  "/media/now-playing.webp",
+  "/media/visualizer.webp",
+  "/media/switch-song.webp",
+  "/media/search.webp",
+  "/media/library.webp",
+  "/media/dj.webp",
+  "/media/settings.webp",
+];
+const showcases = SHOWCASE_MEDIA.map((media, i) => ({ media, ...t.showcases[i] }));
+---
+
+<!doctype html>
+<html lang={LOCALE_HTML_LANG[locale]} data-lang={locale}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#09090b" />
+    <script is:inline>
+      (() => {
+        try {
+          const p = localStorage.getItem("starlight-theme") || "auto";
+          const t =
+            p === "light" || p === "dark"
+              ? p
+              : matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+          document.documentElement.dataset.theme = t;
+        } catch {}
+      })();
+    </script>
+    <link rel="icon" type="image/png" href="/muzero-logo-dark.png" />
+    <!-- Inter (Google Fonts) — used only for the MUZERO wordmark/logo. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@800&display=swap"
+      rel="stylesheet"
+    />
+    <title>{t.meta.title}</title>
+    <meta name="description" content={t.meta.description} />
+    <link rel="canonical" href={`https://mu0.app${localizedPath("/", locale)}`} />
+    {
+      hreflangs.map((a) => (
+        <link rel="alternate" hreflang={a.hreflang} href={`https://mu0.app${a.href}`} />
+      ))
+    }
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={t.meta.title} />
+    <meta property="og:description" content={t.meta.description} />
+    <meta property="og:url" content={`https://mu0.app${localizedPath("/", locale)}`} />
+    <meta property="og:image" content="https://mu0.app/muzero-logo-dark.png" />
+    <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  </head>
+
+  <body>
+    <header class="site-header" id="siteHeader">
+      <div class="header-pill">
+        <a class="brand" href={localizedPath("/", locale)}>
+          <img class="brand-mark brand-mark--dark" src="/muzero-logo-dark.png" alt="" width="22" height="22" />
+          <img class="brand-mark brand-mark--light" src="/muzero-logo-light.png" alt="" width="22" height="22" />
+          <span class="wordmark">MUZERO</span>
+        </a>
+        <nav class="nav">
+          <div class="nav-inline">
+            <a href={localizedPath("/docs/", locale)}>{t.nav.docs}</a>
+            <a href="#download">{t.nav.download}</a>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+            <LangSwitch />
+            <ThemeToggle />
+          </div>
+          <details class="nav-burger">
+            <summary class="burger-btn" aria-label="Menu">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M3 6h18M3 12h18M3 18h18"></path>
+              </svg>
+            </summary>
+            <div class="burger-menu">
+              <a href={localizedPath("/docs/", locale)}>{t.nav.docs}</a>
+              <a href="#download">{t.nav.download}</a>
+              <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+              <div class="burger-foot">
+                <div class="burger-lang">
+                  <button type="button" data-set-lang="en">EN</button>
+                  <button type="button" data-set-lang="zh">中</button>
+                  <button type="button" data-set-lang="ja">あ</button>
+                  <button type="button" data-set-lang="ko">한</button>
+                </div>
+                <ThemeToggle />
+              </div>
+            </div>
+          </details>
+          <a class="nav-cta" href={APP_URL}><AudioLinesIcon size={17} />{t.nav.openApp}</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-visual" aria-hidden="true">
+          <div class="cover-field" id="field">
+            {
+              covers.map((c) => (
+                <div
+                  class="cover"
+                  style={`--sx:${c.sx}vw; --sy:${c.sy}vh; --rot:${c.rot}deg; --scl:${c.scl}; --hue:${c.hue}; opacity:${c.op}; z-index:${c.z};`}
+                >
+                  <img src={c.src} alt="" loading="eager" decoding="async" />
+                </div>
+              ))
+            }
+          </div>
+        </div>
+
+        <div class="container hero-copy">
+          <h1 set:html={t.hero.title} />
+          <p class="lede fade-out">{t.hero.lede}</p>
+          <div class="cta-row fade-out">
+            <a class="btn btn-primary" href={APP_URL}><AudioLinesIcon size={18} />{t.cta.openApp}</a>
+            <a class="btn btn-ghost" href="#download">{t.cta.download}</a>
+            <a class="btn btn-link" href={localizedPath("/docs/", locale)}>{t.cta.readDocs}</a>
+          </div>
+        </div>
+
+        <div class="hero-finale" id="finale" aria-hidden="true">
+          <div class="hero-logo">
+            <img src="/muzero-logo-dark.png" alt="" />
+            <span class="hero-logo-word">MUZERO</span>
+          </div>
+          <div class="cta-row">
+            <a class="btn btn-primary" href={APP_URL}><AudioLinesIcon size={18} />{t.cta.openApp}</a>
+            <a class="btn btn-ghost" href="#download">{t.cta.download}</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="showcase container">
+        {
+          showcases.map((s) => (
+            <article class="show-row reveal">
+              <button
+                class="show-media"
+                type="button"
+                aria-label={`Enlarge: ${s.title}`}
+                data-zoomable
+              >
+                <img src={s.media} alt={s.title} loading="lazy" decoding="async" />
+              </button>
+              <div class="show-text">
+                <span class="show-label">{s.label}</span>
+                <h2>{s.title}</h2>
+                <p>{s.body}</p>
+              </div>
+            </article>
+          ))
+        }
+      </section>
+
+      <section class="container download reveal" id="download">
+        <h2>{t.closer.title}</h2>
+        <p class="download-sub" id="dl-sub">{t.landingDownload.sub}</p>
+
+        <div class="dl-tiles" id="dl-tiles" data-t-latest={t.landingDownload.latest} data-t-download={t.cta.download}>
+          {
+            DL_OSES.map((os) => (
+              <div class="dl-tile" data-os={os}>
+                <span class="dl-ico" set:html={PLATFORM_ICONS[os]} />
+                <span class="dl-os">{OS_LABEL[os]}</span>
+                <a class="dl-btn" data-dl-primary href="#" hidden>
+                  {t.cta.download}
+                </a>
+                <span class="dl-variants" data-dl-variants />
+                <span class="dl-unavail" data-dl-unavail hidden>
+                  {t.landingDownload.comingSoon}
+                </span>
+              </div>
+            ))
+          }
+        </div>
+
+        <p class="dl-fallback" id="dl-fallback" hidden>
+          {t.landingDownload.fallback} <a href={APP_URL}>{t.nav.openApp}</a> ·
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+        </p>
+
+        <a class="dl-all" id="dl-all" href={localizedPath("/download/", locale)} hidden>{t.landingDownload.allVersions}</a>
+      </section>
+    </main>
+
+    <!-- Fullscreen image lightbox: opened from the showcase tiles via a native
+         View Transition (the tile morphs into the fitted image). Mask click /
+         Esc / close button dismiss; click toggles zoom, scroll fine-tunes it.
+         The .lightbox-stage carries the rounded frame (NOT transformed) so the
+         corners don't shimmer while the inner <img> scales. -->
+    <div class="lightbox" id="lightbox" hidden>
+      <button class="lightbox-close" id="lightboxClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path
+            d="M6 6l12 12M18 6L6 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+      <div class="lightbox-stage" id="lightboxStage">
+        <img class="lightbox-img" id="lightboxImg" alt="" draggable="false" />
+      </div>
+      <p class="lightbox-hint" aria-hidden="true">
+        {t.lightbox.hint}
+      </p>
+    </div>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <span class="wordmark small">MUZERO</span>
+        <nav class="footer-nav">
+          <a href={localizedPath("/docs/", locale)}>{t.nav.docs}</a>
+          <a href="#download">{t.nav.download}</a>
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+        </nav>
+        <span class="muted">{t.footer.tagline}</span>
+      </div>
+    </footer>
+
+    <style>
+      @property --gather {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0;
+      }
+
+      /* Colors + --font live in src/styles/theme.css (dark + light). */
+      :root {
+        --container: 1080px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      :global(html) {
+        background: var(--bg);
+        scroll-behavior: smooth;
+      }
+
+      :global(body) {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        overflow-x: hidden;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .container {
+        width: 100%;
+        max-width: var(--container);
+        margin-inline: auto;
+        padding-inline: 24px;
+      }
+
+      /* ---------- floating island header (anysoul-style pill) ---------- */
+      .site-header {
+        position: fixed;
+        left: 50%;
+        top: 14px;
+        transform: translateX(-50%);
+        z-index: 50;
+        width: 100%;
+        max-width: 1120px;
+        padding-inline: 16px;
+        transition: max-width 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      /* Elastic: shrink the island once the page is scrolled. */
+      .site-header.scrolled {
+        max-width: 860px;
+      }
+      .header-pill {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-radius: 999px;
+        padding: 8px 10px 8px 18px;
+        /* Inverted solid pill: background = page foreground, content = page bg. */
+        background: var(--header-bg);
+        color: var(--header-fg);
+        box-shadow: 0 12px 34px -18px rgba(0, 0, 0, 0.55);
+        transition: box-shadow 0.3s ease;
+      }
+      /* Solid inverted pill; deepen the shadow a touch once scrolled. */
+      .site-header.scrolled .header-pill {
+        box-shadow: 0 16px 42px -16px rgba(0, 0, 0, 0.6);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex: none;
+      }
+      .brand-mark {
+        width: 22px;
+        height: 22px;
+        display: block;
+      }
+      /* Pill is inverted, so the logo matches the PILL background:
+         dark theme = light pill → dark logo; light theme = dark pill → light logo. */
+      .brand-mark--light {
+        display: none;
+      }
+      :global(html[data-theme="light"]) .brand-mark--dark {
+        display: none;
+      }
+      :global(html[data-theme="light"]) .brand-mark--light {
+        display: block;
+      }
+      .wordmark {
+        /* Unified MUZERO wordmark/logo type: Inter ExtraBold, -8% tracking. */
+        font-family: "Inter", var(--font);
+        font-weight: 800;
+        letter-spacing: -0.08em;
+        font-size: 1.2rem;
+      }
+      .wordmark.small {
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .nav-inline {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 0.92rem;
+        color: var(--header-muted);
+      }
+      .nav-inline a:hover {
+        color: var(--header-fg);
+      }
+      .nav-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        /* Cutout button on the inverted pill: bg = page fg, text = page bg. */
+        color: var(--header-bg) !important;
+        background: var(--header-fg);
+        padding: 9px 18px;
+        border-radius: 999px;
+        font-weight: 600;
+        transition:
+          background 0.15s ease,
+          transform 0.15s ease;
+      }
+      .nav-cta:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+      }
+      /* Inline (desktop) toggle + lang adopt the inverted header palette. The
+         burger-menu copies use normal page colors (page-bg dropdown). */
+      .nav-inline :global(.theme-toggle),
+      .nav-inline :global(.lang-switch summary) {
+        color: var(--header-muted);
+        border-color: var(--header-line);
+      }
+      .nav-inline :global(.theme-toggle:hover),
+      .nav-inline :global(.lang-switch summary:hover),
+      .nav-inline :global(.lang-switch[open] summary) {
+        color: var(--header-fg);
+        border-color: var(--header-fg);
+        background: color-mix(in srgb, var(--header-fg) 12%, transparent);
+      }
+
+      /* ---- mobile hamburger ---- */
+      .nav-burger {
+        position: relative;
+        display: none;
+      }
+      .burger-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 999px;
+        border: 1px solid var(--header-line);
+        color: var(--header-muted);
+        cursor: pointer;
+        list-style: none;
+      }
+      .burger-btn::-webkit-details-marker {
+        display: none;
+      }
+      .nav-burger[open] .burger-btn,
+      .burger-btn:hover {
+        color: var(--header-fg);
+        border-color: var(--header-fg);
+        background: color-mix(in srgb, var(--header-fg) 12%, transparent);
+      }
+      .burger-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 10px);
+        min-width: 210px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 26px 60px -28px rgba(0, 0, 0, 0.6);
+        z-index: 40;
+      }
+      .burger-menu > a {
+        padding: 10px 12px;
+        border-radius: 10px;
+        color: var(--fg);
+        font-size: 0.95rem;
+      }
+      .burger-menu > a:hover {
+        background: var(--accent-soft);
+      }
+      .burger-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 6px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+      .burger-lang {
+        display: flex;
+        gap: 4px;
+      }
+      .burger-lang button {
+        min-width: 34px;
+        height: 32px;
+        padding-inline: 6px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 0.82rem;
+        cursor: pointer;
+      }
+      .burger-lang button:hover {
+        color: var(--fg);
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      /* ---------- hero (centered copy + scattered covers) ---------- */
+      .hero {
+        position: relative;
+        min-height: 94vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        overflow: hidden;
+      }
+      .hero-copy {
+        position: relative;
+        z-index: 2;
+        max-width: 680px;
+      }
+      /* Vignette behind the centered copy keeps it legible over the covers. */
+      .hero-copy::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 150%;
+        height: 220%;
+        transform: translate(-50%, -50%);
+        background: radial-gradient(
+          50% 50% at 50% 50%,
+          color-mix(in srgb, var(--bg) 92%, transparent),
+          color-mix(in srgb, var(--bg) 60%, transparent) 45%,
+          transparent 72%
+        );
+        z-index: -1;
+        pointer-events: none;
+      }
+      .eyebrow {
+        margin: 0 0 28px;
+        font-size: 0.8rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--faint);
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(2.8rem, 7vw, 5rem);
+        line-height: 1.03;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .lede {
+        margin: 28px auto 0;
+        max-width: 48ch;
+        font-size: clamp(1.05rem, 2.2vw, 1.22rem);
+        color: var(--muted);
+      }
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 14px;
+        margin-top: 40px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        height: 46px;
+        padding-inline: 24px;
+        border-radius: 999px;
+        font-size: 0.96rem;
+        font-weight: 500;
+        border: 1px solid transparent;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease,
+          transform 0.15s ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+      .btn-primary {
+        background: var(--fg);
+        color: var(--bg);
+      }
+      .btn-primary:hover {
+        opacity: 0.9;
+      }
+      .btn-ghost {
+        border-color: var(--line);
+        color: var(--fg);
+      }
+      .btn-ghost:hover {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .btn-link {
+        color: var(--muted);
+        padding-inline: 8px;
+      }
+      .btn-link:hover {
+        color: var(--fg);
+      }
+
+      /* ---------- scattered cover field ---------- */
+      .hero-visual {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+      .cover-field {
+        position: absolute;
+        inset: 0;
+        will-change: transform;
+      }
+      .cover {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: clamp(88px, 10vw, 152px);
+        aspect-ratio: 1 / 1;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid var(--cover-line);
+        box-shadow: 0 26px 60px -30px rgba(0, 0, 0, 0.8);
+        /* --gather 0 = scattered, 1 = converged at center. */
+        /* --gather 0 = scattered ring, 1 = converged at a point below the title
+           (matches the .hero-finale position so covers gather INTO the logo). */
+        transform: translate(-50%, -50%)
+          translate(
+            calc(var(--sx) * (1 - var(--gather))),
+            calc(var(--sy) * (1 - var(--gather)) + 15vh * var(--gather))
+          )
+          rotate(calc(var(--rot) * (1 - var(--gather))))
+          scale(calc(var(--scl) + (0.34 - var(--scl)) * var(--gather)));
+      }
+      .cover img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      /* Spectrum tint unifies the disparate stock photos into the cover-palette
+         identity (back covers read cooler, front warmer). */
+      .cover::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: linear-gradient(
+          155deg,
+          hsl(var(--hue) 80% 58% / 0.5),
+          hsl(calc(var(--hue) + 30) 75% 40% / 0.32)
+        );
+        mix-blend-mode: soft-light;
+        pointer-events: none;
+      }
+
+      /* ---------- hero finale: logo + CTA below the title (convergence climax) --- */
+      .hero-finale {
+        position: absolute;
+        left: 50%;
+        top: 60%;
+        transform: translateX(-50%);
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 30px;
+        text-align: center;
+        opacity: 0;
+        visibility: hidden;
+      }
+      .hero-logo {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+      .hero-logo img {
+        width: clamp(76px, 8vw, 112px);
+        height: auto;
+        filter: drop-shadow(0 24px 60px rgba(139, 127, 240, 0.55));
+      }
+      .hero-logo-word {
+        /* MUZERO wordmark/logo: Inter ExtraBold, tight tracking (Figma -8%). */
+        font-family: "Inter", var(--font);
+        font-weight: 800;
+        letter-spacing: -0.08em;
+        font-size: clamp(1.2rem, 2.8vw, 1.8rem);
+      }
+
+      /* ---------- image-first showcase ---------- */
+      .showcase {
+        display: flex;
+        flex-direction: column;
+        gap: clamp(72px, 10vw, 132px);
+        padding-block: clamp(64px, 10vw, 128px) 24px;
+      }
+      .show-row {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: clamp(28px, 5vw, 64px);
+        align-items: center;
+      }
+      .show-row:nth-child(even) .show-media {
+        order: 2;
+      }
+      .show-row:nth-child(even) .show-text {
+        order: 1;
+      }
+      .show-media {
+        /* native <button> reset — it carries the framed-image styling + the
+           click/keyboard affordance for opening the lightbox. */
+        appearance: none;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        font: inherit;
+        color: inherit;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+        background: var(--surface);
+        box-shadow: 0 40px 90px -55px rgba(139, 127, 240, 0.45);
+        /* hover affordance: the cursor signals the image can be enlarged. The
+           image itself stays put on hover — only the shadow deepens. */
+        cursor: zoom-in;
+        transition: box-shadow 0.3s ease;
+      }
+      .show-media:hover {
+        box-shadow: 0 50px 110px -50px rgba(139, 127, 240, 0.6);
+      }
+      .show-media:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .show-media img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .show-label {
+        display: inline-block;
+        margin-bottom: 14px;
+        font-size: 0.8rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      .show-text h2 {
+        margin: 0 0 12px;
+        font-size: clamp(1.6rem, 3.4vw, 2.3rem);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+      }
+      .show-text p {
+        margin: 0;
+        max-width: 34ch;
+        color: var(--muted);
+        font-size: clamp(1.02rem, 1.6vw, 1.16rem);
+      }
+
+      /* ---------- fullscreen image lightbox ---------- */
+      .lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: clamp(20px, 6vw, 72px);
+        /* the surrounding mask: dim + frost so the image pops, and the cursor
+           hints that clicking the mask closes. */
+        background: color-mix(in srgb, var(--bg) 18%, rgba(0, 0, 0, 0.82));
+        backdrop-filter: blur(10px) saturate(1.1);
+        -webkit-backdrop-filter: blur(10px) saturate(1.1);
+        cursor: zoom-out;
+        animation: lightbox-fade 0.2s ease both;
+      }
+      .lightbox[hidden] {
+        display: none;
+      }
+      @keyframes lightbox-fade {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .lightbox-stage {
+        position: relative;
+        overflow: hidden;
+        max-width: 100%;
+        max-height: 100%;
+        /* match the source tile's 16px so the View Transition only scales the
+           corner — no radius-value reconciliation mid-morph. */
+        border-radius: 16px;
+        box-shadow: 0 40px 120px -30px rgba(0, 0, 0, 0.8);
+        /* The rounded frame lives here and is NEVER transformed — only the inner
+           <img> scales for zoom, so the corners stay crisp (no shimmer). */
+        cursor: zoom-in; /* click to enlarge */
+        touch-action: manipulation; /* kill tap delay + native double-tap zoom */
+        -webkit-tap-highlight-color: transparent;
+      }
+      .lightbox-stage.zoomed {
+        cursor: zoom-out; /* click to return to fit */
+      }
+      .lightbox-img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        transform-origin: center center;
+        will-change: transform;
+        user-select: none;
+        -webkit-user-drag: none;
+        /* the click zoom animates smoothly; wheel-zoom sets duration 0 per frame
+           inline for 1:1 response. */
+        transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .lightbox-close {
+        position: absolute;
+        top: clamp(14px, 3vw, 28px);
+        right: clamp(14px, 3vw, 28px);
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(0, 0, 0, 0.4);
+        color: #fff;
+        cursor: pointer;
+        transition:
+          background 0.15s ease,
+          transform 0.15s ease;
+      }
+      .lightbox-close:hover {
+        background: rgba(0, 0, 0, 0.62);
+        transform: scale(1.06);
+      }
+      .lightbox-hint {
+        position: absolute;
+        bottom: clamp(14px, 3vw, 26px);
+        left: 50%;
+        transform: translateX(-50%);
+        margin: 0;
+        padding: 7px 16px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.4);
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 0.82rem;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      :global(html.lightbox-open) {
+        overflow: hidden;
+      }
+      @media (max-width: 640px) {
+        .lightbox-hint {
+          display: none;
+        }
+      }
+      /* locale spans (mirrors download.astro / LangSwitch): only the active
+         language shows. Used by the lightbox hint. */
+      .lc {
+        display: none;
+      }
+      html[data-lang="en"] .lc[data-lc="en"],
+      html[data-lang="zh"] .lc[data-lc="zh"],
+      html[data-lang="ja"] .lc[data-lc="ja"],
+      html[data-lang="ko"] .lc[data-lc="ko"],
+      html:not([data-lang]) .lc[data-lc="en"] {
+        display: inline;
+      }
+
+      /* ---------- download ---------- */
+      .download {
+        text-align: center;
+        padding-block: 112px 120px;
+        scroll-margin-top: 84px;
+      }
+      .download h2 {
+        margin: 0 0 16px;
+        font-size: clamp(2rem, 5vw, 3rem);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .download-sub {
+        margin: 0 auto 48px;
+        max-width: 52ch;
+        color: var(--muted);
+      }
+      .download-sub a,
+      .dl-fallback a {
+        color: var(--fg);
+        border-bottom: 1px solid var(--line);
+      }
+      .dl-tiles {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 20px;
+      }
+      .dl-tile {
+        width: min(240px, 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding: 30px 22px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--surface);
+      }
+      .dl-tile--match {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent-soft);
+      }
+      .dl-ico {
+        width: 46px;
+        height: 46px;
+        display: flex;
+      }
+      .dl-ico svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .dl-os {
+        font-weight: 600;
+        font-size: 1.05rem;
+      }
+      .dl-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 42px;
+        padding-inline: 20px;
+        border-radius: 999px;
+        background: var(--fg);
+        color: var(--bg);
+        font-size: 0.92rem;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        transition: background 0.15s ease;
+      }
+      .dl-btn:hover {
+        opacity: 0.9;
+      }
+      .dl-variants {
+        display: flex;
+        gap: 10px;
+        font-size: 0.85rem;
+        color: var(--faint);
+      }
+      .dl-variants a {
+        color: var(--muted);
+      }
+      .dl-variants a:hover {
+        color: var(--fg);
+      }
+      .dl-unavail {
+        font-size: 0.85rem;
+        color: var(--faint);
+      }
+      .dl-fallback {
+        max-width: 46ch;
+        margin: 0 auto;
+        color: var(--muted);
+      }
+      .dl-all {
+        display: inline-block;
+        margin-top: 44px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+      .dl-all:hover {
+        color: var(--fg);
+      }
+
+      /* ---------- footer ---------- */
+      .site-footer {
+        border-top: 1px solid var(--line);
+      }
+      .footer-inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px 28px;
+        padding-block: 32px;
+        font-size: 0.88rem;
+      }
+      .footer-nav {
+        display: flex;
+        gap: 22px;
+        color: var(--muted);
+      }
+      .footer-nav a:hover {
+        color: var(--fg);
+      }
+      .footer-inner .muted {
+        margin-left: auto;
+        color: var(--faint);
+      }
+
+      /* ---------- responsive ---------- */
+      @media (max-width: 860px) {
+        .show-row {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+        .show-row .show-media,
+        .show-row:nth-child(even) .show-media {
+          order: 0;
+        }
+        .show-row .show-text,
+        .show-row:nth-child(even) .show-text {
+          order: 1;
+        }
+      }
+      /* Collapse the inline nav into the hamburger on narrow screens. */
+      @media (max-width: 820px) {
+        .nav-inline {
+          display: none;
+        }
+        .nav-burger {
+          display: block;
+        }
+      }
+      @media (max-width: 760px) {
+        .cover {
+          width: clamp(84px, 22vw, 130px);
+        }
+        .footer-inner .muted {
+          margin-left: 0;
+        }
+        .nav-cta {
+          padding: 9px 14px;
+        }
+      }
+    </style>
+
+    <!-- View Transition pseudo-elements are document-global and cannot be Astro
+         scoped, so the lightbox morph timing lives in an is:global block. -->
+    <style is:global>
+      ::view-transition-group(lightbox-media) {
+        animation-duration: 0.42s;
+        animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      ::view-transition-old(lightbox-media),
+      ::view-transition-new(lightbox-media) {
+        /* same image content on both sides → no cross-fade flicker, just morph. */
+        mix-blend-mode: normal;
+      }
+    </style>
+
+    <script>
+      import gsap from "gsap";
+      import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+      gsap.registerPlugin(ScrollTrigger);
+
+      // Floating island header: frost + shrink once the page is scrolled.
+      const siteHeader = document.getElementById("siteHeader");
+      if (siteHeader) {
+        const onHeaderScroll = () =>
+          siteHeader.classList.toggle("scrolled", window.scrollY > 16);
+        onHeaderScroll();
+        window.addEventListener("scroll", onHeaderScroll, { passive: true });
+      }
+
+      // Animations run regardless of prefers-reduced-motion (product decision).
+      const field = document.getElementById("field");
+      const hero = document.querySelector(".hero");
+      const finale = document.getElementById("finale");
+
+      if (field && hero) {
+        // NO JS entrance fade: the covers are visible by default (CSS). A
+        // `gsap.from(opacity:0)` here previously set opacity 0 immediately and
+        // relied on rAF to animate back to 1 — if that rAF was throttled or
+        // interrupted on load (background tab / restored scroll), the whole field
+        // stayed stuck at opacity 0 (covers intermittently invisible).
+
+        // Subtle pointer parallax: drift the whole field (x/y are unshared with
+        // the scroll sequence, which animates --gather + opacity).
+        const px = gsap.quickTo(field, "x", { duration: 0.8, ease: "power3" });
+        const py = gsap.quickTo(field, "y", { duration: 0.8, ease: "power3" });
+        window.addEventListener(
+          "pointermove",
+          (e) => {
+            px((e.clientX / window.innerWidth - 0.5) * 26);
+            py((e.clientY / window.innerHeight - 0.5) * 18);
+          },
+          { passive: true },
+        );
+
+        // Scroll (desktop): covers converge from every direction to the center
+        // (copy stays visible through the gather), then resolve into the logo.
+        gsap.matchMedia().add("(min-width: 961px)", () => {
+          const conv = gsap.timeline({
+            scrollTrigger: {
+              trigger: hero,
+              start: "top top",
+              end: "+=150%",
+              scrub: 0.6,
+              pin: true,
+              anticipatePin: 1,
+            },
+          });
+          conv.fromTo(
+            field,
+            { "--gather": 0 },
+            { "--gather": 1, ease: "power2.inOut", duration: 0.85 },
+            0,
+          );
+          // The TITLE stays visible the whole time — only the supporting copy
+          // (eyebrow, lede, initial CTA) fades as the covers gather.
+          conv.to(
+            ".fade-out",
+            { autoAlpha: 0, y: -16, ease: "power1.in", duration: 0.3, stagger: 0.03 },
+            0.45,
+          );
+          // Covers fade as they pile into the convergence spot below the title.
+          // NB: fade .cover-field (inner), NOT .hero-visual — the entrance tween
+          // owns .hero-visual's opacity, and sharing it caused an intermittent
+          // race where ScrollTrigger.refresh() left the whole field hidden.
+          conv.to(
+            ".cover-field",
+            { autoAlpha: 0, ease: "power1.in", duration: 0.22 },
+            0.78,
+          );
+          if (finale) {
+            // The logo (formed by the gather) + a CTA row re-appear below the
+            // title — the convergence climax.
+            conv.fromTo(
+              finale,
+              { autoAlpha: 0, y: 26, scale: 0.92 },
+              {
+                autoAlpha: 1,
+                y: 0,
+                scale: 1,
+                ease: "back.out(1.4)",
+                duration: 0.4,
+                immediateRender: false,
+              },
+              0.72,
+            );
+          }
+        });
+      }
+
+      // --- Scroll-reveal for the image showcase + download ---
+      gsap.utils.toArray(".reveal").forEach((el) => {
+        gsap.from(el, {
+          opacity: 0,
+          y: 48,
+          duration: 0.8,
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: el,
+            start: "top 84%",
+            toggleActions: "play none none reverse",
+          },
+        });
+      });
+
+      window.addEventListener("load", () => ScrollTrigger.refresh());
+    </script>
+
+    <script>
+      // Populate the download tiles from the live release manifest (same source
+      // as the desktop app's Settings → Version history). Shows the latest
+      // version on each button; falls back gracefully if nothing is published.
+      import { fetchManifest, currentOsFamily, VARIANT_LABEL, osAssets } from "../lib/release";
+
+      const sub = document.getElementById("dl-sub");
+      const tilesWrap = document.getElementById("dl-tiles");
+      const fallback = document.getElementById("dl-fallback");
+      const allLink = document.getElementById("dl-all");
+
+      async function initDownloads() {
+        if (!tilesWrap) return;
+        try {
+          const manifest = await fetchManifest();
+          const latest =
+            manifest.releases.find((r) => r.version === manifest.latest) ?? manifest.releases[0];
+          if (!latest) throw new Error("no releases");
+
+          const tLatest = tilesWrap.dataset.tLatest ?? "Latest";
+          if (sub) sub.innerHTML = `${tLatest} <strong>v${latest.version}</strong> · ${latest.date}`;
+          if (allLink) allLink.hidden = false;
+
+          const os = currentOsFamily();
+          for (const tile of Array.from(tilesWrap.querySelectorAll(".dl-tile"))) {
+            const tileOs = tile.getAttribute("data-os") as "mac" | "win" | "linux";
+            const assets = osAssets(latest, tileOs);
+            const btn = tile.querySelector<HTMLAnchorElement>("[data-dl-primary]");
+            const variants = tile.querySelector<HTMLElement>("[data-dl-variants]");
+            const unavail = tile.querySelector<HTMLElement>("[data-dl-unavail]");
+            if (!btn || !variants) continue;
+            if (assets.length === 0) {
+              if (unavail) unavail.hidden = false;
+              continue;
+            }
+            btn.href = latest.platforms[assets[0]]!.url;
+            btn.textContent = `${tilesWrap.dataset.tDownload ?? "Download"} · v${latest.version}`;
+            btn.hidden = false;
+            variants.innerHTML = assets
+              .slice(1)
+              .map((p) => `<a href="${latest.platforms[p]!.url}">${VARIANT_LABEL[p]}</a>`)
+              .join(" · ");
+            if (tileOs === os) tile.classList.add("dl-tile--match");
+          }
+          if (os !== "other") {
+            const match = tilesWrap.querySelector(`.dl-tile[data-os="${os}"]`);
+            if (match) tilesWrap.prepend(match);
+          }
+        } catch {
+          tilesWrap.hidden = true;
+          if (sub) sub.hidden = true;
+          if (fallback) fallback.hidden = false;
+        }
+      }
+
+      void initDownloads();
+    </script>
+
+    <script>
+      // Fullscreen image lightbox with a native View Transition open/close
+      // (the showcase tile morphs into the fitted image and back). Click toggles
+      // zoom (in toward the click point / back to fit); scroll fine-tunes. No deps.
+      const lightbox = document.getElementById("lightbox") as HTMLElement | null;
+      const lightboxImg = document.getElementById("lightboxImg") as HTMLImageElement | null;
+      const lightboxStage = document.getElementById("lightboxStage") as HTMLElement | null;
+      const lightboxClose = document.getElementById("lightboxClose");
+      const VT_NAME = "lightbox-media";
+      const MIN_SCALE = 1;
+      const MAX_SCALE = 6;
+      const ZOOM_LEVEL = 2.5;
+
+      if (lightbox && lightboxImg && lightboxStage) {
+        const img = lightboxImg; // narrowed, non-null
+        const stage = lightboxStage; // narrowed, non-null
+        const overlay = lightbox; // narrowed, non-null
+        let scale = 1;
+        let tx = 0;
+        let ty = 0;
+        // The source tile (the .show-media <button>) is the View Transition
+        // counterpart — naming the rounded, self-clipping box (not the inner
+        // <img>) avoids the snapshot escaping its ancestor's overflow clip and
+        // snapping at the end of the morph.
+        let lastSource: HTMLElement | null = null;
+
+        const clamp = (v: number, lo: number, hi: number) =>
+          Math.min(hi, Math.max(lo, v));
+        // `apply(animate)` writes the transform; pass animate=true for the click
+        // toggle (smooth) and false for wheel/reset (instant, 1:1). The `.zoomed`
+        // class flips the stage cursor (zoom-in ↔ zoom-out).
+        const apply = (animate = false) => {
+          img.style.transitionDuration = animate ? "" : "0s";
+          img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+          stage.classList.toggle("zoomed", scale > MIN_SCALE + 0.001);
+        };
+        const reset = () => {
+          scale = 1;
+          tx = 0;
+          ty = 0;
+          apply(false);
+        };
+
+        // Zoom toward a viewport point (anchored), to `targetScale`.
+        const zoomTo = (
+          targetScale: number,
+          clientX: number,
+          clientY: number,
+          animate: boolean,
+        ) => {
+          const next = clamp(targetScale, MIN_SCALE, MAX_SCALE);
+          const rect = img.getBoundingClientRect();
+          const dx = clientX - (rect.left + rect.width / 2);
+          const dy = clientY - (rect.top + rect.height / 2);
+          tx += (dx / scale) * (scale - next);
+          ty += (dy / scale) * (scale - next);
+          scale = next;
+          if (scale <= MIN_SCALE) {
+            tx = 0;
+            ty = 0;
+          }
+          apply(animate);
+        };
+
+        // --- open / close (with View Transition morph when supported) ---
+        const startVT = (window.document as any).startViewTransition?.bind(document);
+
+        // Size the image to fill the viewport (contain-fit, upscaling allowed) so
+        // it reads as a true fullscreen view instead of its small native size.
+        // Sizing the element itself (vs object-fit) keeps the box hugging the
+        // image, so clicks on the surrounding mask still close. Zoom/pan ride on
+        // top via transform.
+        const sizeToViewport = (nw: number, nh: number) => {
+          if (!nw || !nh) return;
+          const padX = parseFloat(getComputedStyle(overlay).paddingLeft) || 0;
+          const padY = parseFloat(getComputedStyle(overlay).paddingTop) || 0;
+          const availW = Math.max(1, overlay.clientWidth - padX * 2);
+          const availH = Math.max(1, overlay.clientHeight - padY * 2);
+          const ratio = nw / nh;
+          let w = availW;
+          let h = w / ratio;
+          if (h > availH) {
+            h = availH;
+            w = h * ratio;
+          }
+          stage.style.width = `${Math.round(w)}px`;
+          stage.style.height = `${Math.round(h)}px`;
+        };
+
+        // Fit using the best natural size available: the big image once decoded,
+        // else the (usually already-loaded) source thumbnail. If neither is known
+        // yet, clear the inline size so the CSS max-width fallback shows it; the
+        // big image's load event (below) then re-fits.
+        const applyFit = () => {
+          const thumb = lastSource ? lastSource.querySelector("img") : null;
+          const nw = img.naturalWidth || (thumb ? thumb.naturalWidth : 0);
+          const nh = img.naturalHeight || (thumb ? thumb.naturalHeight : 0);
+          if (nw && nh) {
+            sizeToViewport(nw, nh);
+          } else {
+            stage.style.width = "";
+            stage.style.height = "";
+          }
+        };
+        img.addEventListener("load", applyFit);
+
+        function openLightbox(srcBtn: HTMLElement) {
+          lastSource = srcBtn;
+          const thumb = srcBtn.querySelector("img");
+          const url = thumb ? thumb.currentSrc || thumb.src : "";
+          const reveal = () => {
+            reset();
+            img.src = url;
+            // Size from the thumbnail's natural ratio so the View Transition
+            // captures the full size and the tile morphs *up* into it.
+            applyFit();
+            overlay.hidden = false;
+            document.documentElement.classList.add("lightbox-open");
+          };
+          if (startVT) {
+            // morph the rounded tile box ↔ the rounded stage box (both clip
+            // their own content), so corners stay clean through the whole morph.
+            srcBtn.style.viewTransitionName = VT_NAME;
+            const t = startVT(() => {
+              srcBtn.style.viewTransitionName = "";
+              stage.style.viewTransitionName = VT_NAME;
+              reveal();
+            });
+            t.finished.finally(() => {
+              stage.style.viewTransitionName = "";
+            });
+          } else {
+            reveal();
+          }
+        }
+
+        function closeLightbox() {
+          if (overlay.hidden) return;
+          reset(); // morph back from the fitted image, not a zoomed crop
+          const finish = () => {
+            overlay.hidden = true;
+            img.removeAttribute("src");
+            document.documentElement.classList.remove("lightbox-open");
+          };
+          const src = lastSource;
+          if (startVT && src) {
+            stage.style.viewTransitionName = VT_NAME;
+            const t = startVT(() => {
+              stage.style.viewTransitionName = "";
+              src.style.viewTransitionName = VT_NAME;
+              finish();
+            });
+            t.finished.finally(() => {
+              src.style.viewTransitionName = "";
+            });
+          } else {
+            finish();
+          }
+        }
+
+        // Each showcase tile (a <button>) opens its image. Using a real button
+        // gives Enter/Space + focus for free.
+        for (const btn of Array.from(document.querySelectorAll("[data-zoomable]"))) {
+          btn.addEventListener("click", () => openLightbox(btn as HTMLElement));
+        }
+
+        // Click the mask (not the image/close button) to dismiss.
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) closeLightbox();
+        });
+        lightboxClose?.addEventListener("click", closeLightbox);
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeLightbox();
+        });
+        window.addEventListener("resize", () => {
+          if (overlay.hidden) return;
+          reset();
+          applyFit();
+        });
+
+        // --- zoom: scroll fine-tunes, anchored at the cursor ---
+        img.addEventListener(
+          "wheel",
+          (e) => {
+            e.preventDefault();
+            zoomTo(scale * Math.exp(-e.deltaY * 0.0016), e.clientX, e.clientY, false);
+          },
+          { passive: false },
+        );
+
+        // --- zoom: a click toggles between fit and a fixed zoom at the click
+        // point. Dragging was intentionally dropped — click in, click out. ---
+        stage.addEventListener("click", (e) => {
+          if (scale > MIN_SCALE + 0.001) {
+            zoomTo(MIN_SCALE, e.clientX, e.clientY, true);
+          } else {
+            zoomTo(ZOOM_LEVEL, e.clientX, e.clientY, true);
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

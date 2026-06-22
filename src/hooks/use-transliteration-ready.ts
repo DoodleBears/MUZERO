@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { ensureTransliterationLoaded, isTransliterationReady } from "@/lib/search-transliterate";
+import { log } from "@/lib/logger";
+import {
+  ensureTransliterationLoaded,
+  getTransliterationLoadError,
+  isTransliterationReady,
+} from "@/lib/search-transliterate";
 
 /**
  * Lazily load the transliteration dictionaries on the main thread and report
@@ -14,7 +19,21 @@ export function useTransliterationReady(): boolean {
     if (ready) return;
     let active = true;
     void ensureTransliterationLoaded().then(() => {
-      if (active) setReady(true);
+      if (!active) return;
+      if (isTransliterationReady()) {
+        setReady(true);
+      } else {
+        // Dictionaries failed to load → pinyin/kana/romaji matching is unavailable and
+        // search silently degraded to substring. Surface WHY (the usual cause is the
+        // dynamic-import chunk not resolving in a packaged build).
+        log.warn(
+          "search",
+          "transliteration dictionaries failed to load; pinyin/romaji search disabled",
+          {
+            error: getTransliterationLoadError(),
+          },
+        );
+      }
     });
     return () => {
       active = false;

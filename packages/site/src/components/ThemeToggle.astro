@@ -1,0 +1,73 @@
+---
+// Dark/light theme toggle. Writes the SAME localStorage key Starlight uses
+// ("starlight-theme") and sets <html data-theme>, so the landing and docs stay
+// in sync. The pre-paint inline script in each page <head> applies it on load.
+---
+
+<button class="theme-toggle" type="button" aria-label="Toggle dark / light theme">
+  <svg class="ico ico-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="4"></circle>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+  </svg>
+  <svg class="ico ico-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+  </svg>
+</button>
+
+<style>
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    flex: none;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease,
+      background 0.15s ease;
+  }
+  .theme-toggle:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .ico {
+    display: block;
+  }
+  /* Show the sun in dark mode (click → light), the moon in light mode. */
+  .ico-moon {
+    display: none;
+  }
+  :global(html[data-theme="light"]) .theme-toggle .ico-sun {
+    display: none;
+  }
+  :global(html[data-theme="light"]) .theme-toggle .ico-moon {
+    display: block;
+  }
+</style>
+
+<script>
+  for (const btn of document.querySelectorAll(".theme-toggle")) {
+    btn.addEventListener("click", () => {
+      const root = document.documentElement;
+      const next = root.dataset.theme === "light" ? "dark" : "light";
+      // Disable transitions for one frame so the switch applies instantly — a
+      // transitioned property bound to a CSS var otherwise freezes at the old
+      // value in Chromium when the var flips.
+      root.classList.add("theme-switching");
+      root.dataset.theme = next;
+      try {
+        localStorage.setItem("starlight-theme", next);
+      } catch {}
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => root.classList.remove("theme-switching")),
+      );
+    });
+  }
+</script>

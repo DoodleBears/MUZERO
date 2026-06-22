@@ -11,6 +11,7 @@ import type { StreamSourceId } from "@/db/types";
 
 /** A chosen scope. `source` forces an ad-hoc search of one online source. */
 export type SearchFilter =
+  | { kind: "track" }
   | { kind: "set" }
   | { kind: "lyrics" }
   | { kind: "artist" }
@@ -19,7 +20,7 @@ export type SearchFilter =
 
 export interface FilterOption {
   /** Stable id (menu key + label switch). */
-  id: "set" | "lyrics" | "artist" | "album" | "bili" | "netease" | "youtube" | "qq";
+  id: "track" | "set" | "lyrics" | "artist" | "album" | "bili" | "netease" | "youtube" | "qq";
   /** The filter this option produces when chosen. */
   filter: SearchFilter;
   /** Latin + CJK aliases (lowercased) the `@token` prefix-matches against. */
@@ -32,6 +33,11 @@ export interface FilterOption {
  * and `@artist` both narrow to the same option.
  */
 export const FILTER_OPTIONS: FilterOption[] = [
+  {
+    id: "track",
+    filter: { kind: "track" },
+    aliases: ["song", "songs", "track", "tracks", "title", "歌曲", "曲目", "曲", "标题"],
+  },
   {
     id: "set",
     filter: { kind: "set" },

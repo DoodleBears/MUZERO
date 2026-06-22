@@ -4,9 +4,12 @@
 .PHONY: version-bump changelog-check version-sync release-check release-show release-build release-mac release-win release-linux release-publish release-publish-dry release-locate changelog-md
 .PHONY: test test-watch typecheck lint format check react-doctor react-doctor-perf
 .PHONY: icons ui ui-coss ui-theme clean clean-dist
+.PHONY: site site-build site-preview site-pages-project site-deploy site-deploy-preview
 
 # MUZERO — local-first AI DJ music player (Tauri 2 desktop + mobile).
-# Single-package repo, so targets call pnpm scripts directly (no --filter).
+# The app is the root package, so its targets call pnpm scripts directly (no
+# --filter). The marketing/docs site is a workspace package (packages/site) —
+# its `site*` targets use --filter @muzero/site.
 # Mirrors the doodlekuma.com Makefile conventions: grouped `help`, ?=/:= vars,
 # thin recipes. Run `make` (or `make help`) for the menu.
 
@@ -25,6 +28,9 @@ REQUIRED_NODE ?= 24.16.0
 # overridden to match via --config (mobile HMR uses 41731, so desktop=41732).
 WEB_PORT ?= 41730
 DESKTOP_PORT ?= 41732
+# Marketing/docs site (packages/site) dev/preview port — Astro's default 4321,
+# matched in .claude/launch.json (site-dev). Separate from the app dev ports.
+SITE_PORT ?= 4321
 DEV_URL ?= http://localhost:$(WEB_PORT)
 # Renderer CPU-profiling loop (make electron-profile → make perf-profile). 39222 not 9222
 # (Windows reserves 9222 via Hyper-V excluded ranges). See PRD 20260616-agent-cpu-profiling.
@@ -124,6 +130,32 @@ android:
 
 tauri-info:
 	$(PM) tauri info
+
+# ----------------------------------------------------------------- Site ----
+# Marketing + docs site (packages/site, Astro + Starlight). A workspace package
+# served on its own port so it runs alongside the app dev servers. Ships to its
+# own Cloudflare Pages project (mu0-site); the app keeps mu0-app. See the web PRD.
+site:
+	$(PM) --filter @muzero/site dev --port $(SITE_PORT)
+
+site-build:
+	$(PM) --filter @muzero/site build
+
+site-preview: site-build
+	$(PM) --filter @muzero/site preview --port $(SITE_PORT)
+
+# Cloudflare Pages (mu0-site). One-time: `make site-pages-project`; then deploy
+# with `make site-deploy`. Reads packages/site/wrangler.toml (name=mu0-site,
+# output ./dist); needs CLOUDFLARE_ACCOUNT_ID (exported above) + `wrangler login`.
+# Cutover runbook: docs/deploy/mu0-site-cutover.md.
+site-pages-project:
+	$(PM) --filter @muzero/site run pages:project
+
+site-deploy: site-build
+	$(PM) --filter @muzero/site run pages:deploy
+
+site-deploy-preview: site-build
+	$(PM) --filter @muzero/site run pages:deploy:preview
 
 # ------------------------------------------------------- Build & package ----
 
