@@ -2,6 +2,7 @@
 // Imports first — Astro hoists imports by byte offset; placing them after code
 // with multi-byte chars in comments corrupts the output. Keep imports at top.
 import { changelog, localize } from "../lib/changelog";
+import AudioLinesIcon from "../components/AudioLinesIcon.astro";
 import LangSwitch from "../components/LangSwitch.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
 import { alternates, localizedPath, LOCALE_HTML_LANG, useTranslations, type Locale } from "../i18n";
@@ -66,21 +67,48 @@ const hasText = (field) => !!localize(field, locale);
     }
   </head>
   <body>
-    <header class="site-header">
-      <div class="header-inner">
-        <a class="wordmark" href={localizedPath("/", locale)}>MUZERO</a>
+    <header class="site-header" id="siteHeader">
+      <div class="header-pill">
+        <a class="brand" href={localizedPath("/", locale)}>
+          <img class="brand-mark brand-mark--dark" src="/muzero-logo-dark.png" alt="" width="22" height="22" />
+          <img class="brand-mark brand-mark--light" src="/muzero-logo-light.png" alt="" width="22" height="22" />
+          <span class="wordmark">MUZERO</span>
+        </a>
         <nav class="nav">
-          <a class="nav-link" href={`${localizedPath("/", locale)}#download`}>{t.nav.download}</a>
-          <a class="nav-link" href={localizedPath("/docs/", locale)}>{t.nav.docs}</a>
-          <a class="nav-link" href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
-          <LangSwitch />
-          <ThemeToggle />
-          <a class="nav-cta" href={APP_URL}>{t.nav.openApp}</a>
+          <div class="nav-inline">
+            <a href={localizedPath("/docs/", locale)}>{t.nav.docs}</a>
+            <a href={`${localizedPath("/", locale)}#download`}>{t.nav.download}</a>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+            <LangSwitch />
+            <ThemeToggle />
+          </div>
+          <details class="nav-burger">
+            <summary class="burger-btn" aria-label="Menu">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M3 6h18M3 12h18M3 18h18"></path>
+              </svg>
+            </summary>
+            <div class="burger-menu">
+              <a href={localizedPath("/docs/", locale)}>{t.nav.docs}</a>
+              <a href={`${localizedPath("/", locale)}#download`}>{t.nav.download}</a>
+              <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+              <div class="burger-foot">
+                <div class="burger-lang">
+                  <button type="button" data-set-lang="en">EN</button>
+                  <button type="button" data-set-lang="zh">中</button>
+                  <button type="button" data-set-lang="ja">あ</button>
+                  <button type="button" data-set-lang="ko">한</button>
+                </div>
+                <ThemeToggle />
+              </div>
+            </div>
+          </details>
+          <a class="nav-cta" href={APP_URL}><AudioLinesIcon size={17} />{t.nav.openApp}</a>
         </nav>
       </div>
     </header>
 
-    <main class="container versions">
+    <main class="container versions" data-t-download={t.cta.download}>
       <h1>{t.download.title}</h1>
       <p class="sub">{t.download.sub}</p>
 
@@ -135,56 +163,205 @@ const hasText = (field) => !!localize(field, locale);
         padding-inline: 24px;
       }
 
-      /* header */
+      /* ---------- floating island header (matches landing page) ---------- */
       .site-header {
-        border-bottom: 1px solid var(--line);
+        position: fixed;
+        left: 50%;
+        top: 14px;
+        transform: translateX(-50%);
+        z-index: 50;
+        width: 100%;
+        max-width: 1120px;
+        padding-inline: 16px;
+        transition: max-width 0.55s cubic-bezier(0.4, 0, 0.2, 1);
       }
-      .header-inner {
+      /* Elastic: shrink the island once the page is scrolled. */
+      .site-header.scrolled {
+        max-width: 860px;
+      }
+      .header-pill {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        height: 64px;
-        width: 100%;
-        max-width: 1080px;
-        margin-inline: auto;
-        padding-inline: 24px;
+        border-radius: 999px;
+        padding: 8px 10px 8px 18px;
+        /* Inverted solid pill: background = page foreground, content = page bg. */
+        background: var(--header-bg);
+        color: var(--header-fg);
+        box-shadow: 0 12px 34px -18px rgba(0, 0, 0, 0.55);
+        transition: box-shadow 0.3s ease;
+      }
+      .site-header.scrolled .header-pill {
+        box-shadow: 0 16px 42px -16px rgba(0, 0, 0, 0.6);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex: none;
+      }
+      .brand-mark {
+        width: 22px;
+        height: 22px;
+        display: block;
+      }
+      /* Pill is inverted, so the logo matches the PILL background:
+         dark theme = light pill → dark logo; light theme = dark pill → light logo. */
+      .brand-mark--light {
+        display: none;
+      }
+      html[data-theme="light"] .brand-mark--dark {
+        display: none;
+      }
+      html[data-theme="light"] .brand-mark--light {
+        display: block;
       }
       .wordmark {
         /* Unified MUZERO wordmark/logo type: Inter ExtraBold, -8% tracking. */
         font-family: "Inter", var(--font);
         font-weight: 800;
         letter-spacing: -0.08em;
-        font-size: 1.1rem;
+        font-size: 1.2rem;
       }
       .wordmark.small {
-        font-size: 0.9rem;
+        font-size: 0.95rem;
         color: var(--muted);
       }
       .nav {
         display: flex;
         align-items: center;
-        gap: 18px;
-        font-size: 0.92rem;
-        color: var(--muted);
+        gap: 10px;
       }
-      .nav-link:hover {
-        color: var(--fg);
+      .nav-inline {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 0.92rem;
+        color: var(--header-muted);
+      }
+      .nav-inline a:hover {
+        color: var(--header-fg);
       }
       .nav-cta {
-        color: var(--fg);
-        border: 1px solid var(--line);
-        padding: 7px 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        /* Cutout button on the inverted pill: bg = page fg, text = page bg. */
+        color: var(--header-bg) !important;
+        background: var(--header-fg);
+        padding: 9px 18px;
         border-radius: 999px;
+        font-weight: 600;
+        transition:
+          background 0.15s ease,
+          transform 0.15s ease;
       }
       .nav-cta:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+      }
+      /* Inline (desktop) toggle + lang adopt the inverted header palette. The
+         burger-menu copies use normal page colors (page-bg dropdown). */
+      .nav-inline .theme-toggle,
+      .nav-inline .lang-switch summary {
+        color: var(--header-muted);
+        border-color: var(--header-line);
+      }
+      .nav-inline .theme-toggle:hover,
+      .nav-inline .lang-switch summary:hover,
+      .nav-inline .lang-switch[open] summary {
+        color: var(--header-fg);
+        border-color: var(--header-fg);
+        background: color-mix(in srgb, var(--header-fg) 12%, transparent);
+      }
+
+      /* ---- mobile hamburger ---- */
+      .nav-burger {
+        position: relative;
+        display: none;
+      }
+      .burger-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 999px;
+        border: 1px solid var(--header-line);
+        color: var(--header-muted);
+        cursor: pointer;
+        list-style: none;
+      }
+      .burger-btn::-webkit-details-marker {
+        display: none;
+      }
+      .nav-burger[open] .burger-btn,
+      .burger-btn:hover {
+        color: var(--header-fg);
+        border-color: var(--header-fg);
+        background: color-mix(in srgb, var(--header-fg) 12%, transparent);
+      }
+      .burger-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 10px);
+        min-width: 210px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 26px 60px -28px rgba(0, 0, 0, 0.6);
+        z-index: 40;
+      }
+      .burger-menu > a {
+        padding: 10px 12px;
+        border-radius: 10px;
+        color: var(--fg);
+        font-size: 0.95rem;
+      }
+      .burger-menu > a:hover {
+        background: var(--accent-soft);
+      }
+      .burger-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 6px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+      .burger-lang {
+        display: flex;
+        gap: 4px;
+      }
+      .burger-lang button {
+        min-width: 34px;
+        height: 32px;
+        padding-inline: 6px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 0.82rem;
+        cursor: pointer;
+      }
+      .burger-lang button:hover {
+        color: var(--fg);
         border-color: var(--accent);
         background: var(--accent-soft);
       }
 
-      /* page */
+      /* page — extra top padding clears the fixed floating header pill. */
       .versions {
-        padding-block: 72px 120px;
+        padding-block: 124px 120px;
       }
       h1 {
         margin: 0;
@@ -228,6 +405,10 @@ const hasText = (field) => !!localize(field, locale);
         color: var(--muted);
         max-width: 68ch;
       }
+      /* per-version download chips — one compact single-row chip per asset
+         (icon + platform + download button). One chip per architecture, so
+         macOS Apple Silicon and Intel are distinct, selectable downloads.
+         Injected client-side from the release manifest. */
       .v-downloads {
         margin-top: 18px;
         display: flex;
@@ -237,29 +418,59 @@ const hasText = (field) => !!localize(field, locale);
       .v-downloads:empty {
         margin-top: 0;
       }
-      .v-asset {
+      .dl-chip {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        padding: 8px 14px;
+        gap: 10px;
+        padding: 6px 6px 6px 14px;
         border: 1px solid var(--line);
-        border-radius: 10px;
-        font-size: 0.86rem;
-        color: var(--muted);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--fg);
         transition:
           border-color 0.15s ease,
-          color 0.15s ease,
           background 0.15s ease;
       }
-      .v-asset:hover {
-        color: var(--fg);
+      .dl-chip:hover {
         border-color: var(--accent);
         background: var(--accent-soft);
       }
-      /* the variant matching the visitor's OS reads as primary */
-      .v-asset--match {
-        color: var(--fg);
+      /* the chip matching the visitor's OS reads as primary */
+      .dl-chip--match {
         border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+      }
+      .dl-chip-ico {
+        width: 18px;
+        height: 18px;
+        display: flex;
+        flex: none;
+      }
+      .dl-chip-ico svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .dl-chip-os {
+        font-size: 0.9rem;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .dl-chip-dl {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 13px;
+        border-radius: 999px;
+        background: var(--fg);
+        color: var(--bg);
+        font-size: 0.82rem;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .dl-chip-dl svg {
+        width: 13px;
+        height: 13px;
+        display: block;
       }
 
       /* footer */
@@ -282,20 +493,64 @@ const hasText = (field) => !!localize(field, locale);
         margin-left: auto;
         color: var(--faint);
       }
+
+      /* ---------- responsive (matches landing page) ---------- */
+      /* Collapse the inline nav into the hamburger on narrow screens. */
+      @media (max-width: 820px) {
+        .nav-inline {
+          display: none;
+        }
+        .nav-burger {
+          display: block;
+        }
+      }
+      @media (max-width: 760px) {
+        .nav-cta {
+          padding: 9px 14px;
+        }
+        .footer-inner .muted {
+          margin-left: 0;
+        }
+      }
     </style>
 
     <script>
+      // Floating island header: shrink the pill once the page is scrolled
+      // (mirrors the landing page's elastic header behavior).
+      const siteHeader = document.getElementById("siteHeader");
+      if (siteHeader) {
+        const onHeaderScroll = () =>
+          siteHeader.classList.toggle("scrolled", window.scrollY > 16);
+        onHeaderScroll();
+        window.addEventListener("scroll", onHeaderScroll, { passive: true });
+      }
+    </script>
+
+    <script>
+      // Per-version download chips — one compact single-row chip per ASSET
+      // (icon + platform + download button). One chip per architecture, so
+      // macOS Apple Silicon and Intel are distinct, directly-selectable
+      // downloads. Injected from the release manifest (only versions actually
+      // published get chips; the rest of the changelog renders text-only).
       import {
         fetchManifest,
         currentOsFamily,
         osOfPlatform,
         OS_LABEL,
         VARIANT_LABEL,
-        PLATFORMS,
+        osAssets,
         formatBytes,
+        PLATFORMS,
       } from "../lib/release";
+      import { PLATFORM_ICONS } from "../lib/platform-icons";
 
       const os = currentOsFamily();
+      const downloadLabel =
+        document.querySelector<HTMLElement>("main.versions")?.dataset.tDownload ?? "Download";
+
+      // lucide download glyph for the chip's button affordance (no internal ids).
+      const DOWNLOAD_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+
       const esc = (s: string) =>
         s.replace(
           /[&<>"]/g,
@@ -304,6 +559,14 @@ const hasText = (field) => !!localize(field, locale);
               c
             ],
         );
+
+      // The Linux Tux glyph carries internal gradient ids (tux0…tuxi). Rendered
+      // more than once per page they'd collide as duplicate DOM ids, so namespace
+      // them per chip (id definitions + url(#…) refs flip together).
+      const platformIcon = (osFam: ReturnType<typeof osOfPlatform>, key: string): string => {
+        const svg = PLATFORM_ICONS[osFam];
+        return osFam === "linux" ? svg.replace(/tux/g, `tux${key}`) : svg;
+      };
 
       async function initDownloads() {
         let manifest: Awaited<ReturnType<typeof fetchManifest>> | null = null;
@@ -317,13 +580,24 @@ const hasText = (field) => !!localize(field, locale);
             `.v-downloads[data-version="${CSS.escape(r.version)}"]`,
           );
           if (!box) continue;
+          const vKey = r.version.replace(/[^a-zA-Z0-9]/g, "_");
           box.innerHTML = PLATFORMS.filter((p) => r.platforms[p])
             .map((p) => {
-              const a = r.platforms[p]!;
-              const match = osOfPlatform(p) === os ? " v-asset--match" : "";
-              const size = formatBytes(a.size);
-              const label = `${OS_LABEL[osOfPlatform(p)]} · ${VARIANT_LABEL[p]}${size ? ` · ${size}` : ""}`;
-              return `<a class="v-asset${match}" href="${esc(a.url)}" title="sha256: ${esc(a.sha256)}">${esc(label)}</a>`;
+              const asset = r.platforms[p]!;
+              const osFam = osOfPlatform(p);
+              // Show the arch/format only when the OS ships more than one build
+              // (so mac always reads "macOS · Apple Silicon" / "· Intel").
+              const multi = osAssets(r, osFam).length > 1;
+              const label = multi ? `${OS_LABEL[osFam]} · ${VARIANT_LABEL[p]}` : OS_LABEL[osFam];
+              const size = formatBytes(asset.size);
+              const match = osFam === os ? " dl-chip--match" : "";
+              const title = `${VARIANT_LABEL[p]}${size ? ` · ${size}` : ""} · sha256: ${asset.sha256}`;
+              const iconKey = `${vKey}_${p.replace(/-/g, "_")}`;
+              return `<a class="dl-chip${match}" href="${esc(asset.url)}" title="${esc(title)}">
+                  <span class="dl-chip-ico">${platformIcon(osFam, iconKey)}</span>
+                  <span class="dl-chip-os">${esc(label)}</span>
+                  <span class="dl-chip-dl">${DOWNLOAD_ICON}${esc(downloadLabel)}</span>
+                </a>`;
             })
             .join("");
         }
