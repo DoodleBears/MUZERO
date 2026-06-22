@@ -214,6 +214,7 @@ export function readingRomajiVariants(
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-23 | DoodleBear | Initial draft：纯汉字日文标题罗马音搜索（kuromoji 读音→wanakana 罗马音），与拼音并存；调研选定 `@sglkc/kuromoji`（纯 JS、浏览器/桌面不分叉、复用 wanakana）；Phase 1 可注入核心(TDD) + Phase 2 真词典打包 |
+| 2026-06-23 | DoodleBear | Phase 1 实现（`kanji-romaji.ts` + 双读音 + `setKanjiTokenizer`，41 测试）合入主 checkout。Phase 2 代码：`@sglkc/kuromoji` dep + `kuromoji-tokenizer.ts` bridge + worker 后台加载 + `vite.config` `kuromojiDictPlugin`（dev middleware + build emit）。**`vite build` 通过、`dist/kuromoji-dict/` 12 文件已 emit（base 3.96MB）** → 构建集成验证通过；runtime fetch/tokenize（dev 重启 / Electron app://）+ THIRD-PARTY-LICENSES 登记待跑 |
 
 ---
 
