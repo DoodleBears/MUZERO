@@ -1,7 +1,7 @@
 const { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, Menu, net, protocol, screen, shell, Tray } = require("electron");
+const { app, BrowserWindow, Menu, nativeImage, net, protocol, screen, shell, Tray } = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { registerElectronGlobalShortcuts } = require("./global-shortcuts.cjs");
@@ -11,6 +11,7 @@ const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs"
 const { attachDiagnosticsWindow } = require("./diagnostics.cjs");
 const { createTrayController } = require("./tray.cjs");
 const { windowPin } = require("./window-pin.cjs");
+const { resolveWindowChrome } = require("./window-chrome.cjs");
 
 const devUrl = process.env.MUZERO_ELECTRON_URL;
 const distDir = path.join(__dirname, "..", "dist");
@@ -25,6 +26,7 @@ const trayController = createTrayController({
   app,
   iconPath: appIconPath(DEFAULT_APP_ICON),
   Menu,
+  nativeImage,
   platform: process.platform,
   Tray,
 });
@@ -197,21 +199,25 @@ function persistWindowState(win) {
 
 function createWindow() {
   const savedWindowState = readWindowState();
+  // Per-platform transparency/frame/titlebar — macOS + Windows run transparent so
+  // the lyrics-only DOM can become see-through (transparent can't be toggled at
+  // runtime). See window-chrome.cjs.
+  const windowChrome = resolveWindowChrome(process.platform);
   const win = new BrowserWindow({
     autoHideMenuBar: true,
-    backgroundColor: isWindows ? "#00000000" : "#09090b",
+    backgroundColor: windowChrome.backgroundColor,
     // Default window/taskbar icon (Windows/Linux; ignored on macOS, which uses the
     // dock icon set in app.whenReady). The renderer refines it to the saved choice.
     icon: appIconPath(DEFAULT_APP_ICON),
-    frame: !isWindows,
+    frame: windowChrome.frame,
     height: savedWindowState?.height ?? defaultWindowBounds.height,
     hasShadow: true,
     minHeight: minWindowBounds.height,
     minWidth: minWindowBounds.width,
     show: false,
     title: "MUZERO",
-    titleBarStyle: isMac ? "hiddenInset" : undefined,
-    transparent: isWindows,
+    titleBarStyle: windowChrome.titleBarStyle,
+    transparent: windowChrome.transparent,
     width: savedWindowState?.width ?? defaultWindowBounds.width,
     ...(savedWindowState?.x != null && savedWindowState?.y != null
       ? { x: savedWindowState.x, y: savedWindowState.y }

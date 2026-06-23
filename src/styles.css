@@ -216,13 +216,18 @@
     overscroll-behavior: none;
   }
 
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"],
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"] body,
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"] #root {
+  /* Transparent-shell chrome (Windows + macOS): both run a transparent BrowserWindow
+     so the lyrics-only DOM can be see-through. A transparent window has no OS-painted
+     rounded-corner mask or shadow, so the corners + accent border are painted in the
+     DOM here, keyed off either platform. Windows-only bits (custom min/max/close
+     cluster, titlebar pointer-events) stay scoped to win32 further below. */
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]),
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]) body,
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]) #root {
     background-color: transparent;
   }
 
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .app-shell {
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]) .app-shell {
     border-radius: var(--electron-window-radius, 12px);
     clip-path: inset(0 round var(--electron-window-radius, 12px));
     isolation: isolate;
@@ -233,7 +238,7 @@
      Windows DPR that clip truncates the right/bottom edge by a sub-device-pixel — so any
      border living inside .app-shell loses those two edges. #root has no clip-path, so a
      fixed overlay here paints uniformly on all four edges. Inset shadow = inner border. */
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"] #root::after {
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]) #root::after {
     content: "";
     pointer-events: none;
     position: fixed;
@@ -264,18 +269,18 @@
 
   /* Maximized OR fullscreen (F key / DOM Fullscreen API): fill the screen edge-to-edge
      with no rounded corners and no accent border. */
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"]),
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"])
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]):is([data-window-maximized="true"], [data-document-fullscreen="true"]),
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]):is([data-window-maximized="true"], [data-document-fullscreen="true"])
     body,
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"])
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]):is([data-window-maximized="true"], [data-document-fullscreen="true"])
     #root,
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"])
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]):is([data-window-maximized="true"], [data-document-fullscreen="true"])
     .app-shell {
     border-radius: 0 !important;
     clip-path: none !important;
   }
 
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"])
+  html[data-desktop-shell="electron"]:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"]):is([data-window-maximized="true"], [data-document-fullscreen="true"])
     #root::after {
     box-shadow: none !important;
   }

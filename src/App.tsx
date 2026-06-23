@@ -14,6 +14,7 @@ import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynam
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
 import { HeaderNavTabs } from "@/components/shell/header-nav-tabs";
+import { MacWindowControls } from "@/components/shell/mac-window-controls";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { WindowsWindowControls } from "@/components/shell/windows-window-controls";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
@@ -25,6 +26,7 @@ import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
+import { useTransparentWindowRepaint } from "@/hooks/use-transparent-window-repaint";
 import {
   nowPlayingCoverBacklightVars,
   resolveNowPlayingCoverBacklightAppearance,
@@ -35,6 +37,7 @@ import {
   electronWindowAppearanceCssVars,
   resolveBorderColorMode,
 } from "@/lib/electron-window-appearance";
+import { resolveLyricsOverlayRevealed } from "@/lib/lyrics-overlay-reveal";
 import { navigateToTab } from "@/lib/navigate-tab";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { cn } from "@/lib/utils";
@@ -88,6 +91,7 @@ export default function App() {
   const setTab = useNavStore((s) => s.setTab);
   const init = usePlayerStore((s) => s.init);
   const clickThroughHover = useDesktopWindowStore((s) => s.clickThroughHover);
+  const windowPinMode = useDesktopWindowStore((s) => s.pinMode);
   const initDesktopWindow = useDesktopWindowStore((s) => s.init);
   const hasAmbientTrack = usePlayerStore(
     (s) => s.currentIndex >= 0 && Boolean(s.queue[s.currentIndex]),
@@ -270,6 +274,9 @@ export default function App() {
   const lyricsPlacementActive =
     isNowTab && visualizerBackgroundActive && visualizerPlacement === "lyrics";
   const lyricsOverlayPinned = lyricsPlacementActive && settings.desktopWindowPinMode === "pin";
+  // Live window lock state (pin-click-through). When locked, only the centered
+  // control-bar region may reveal the controls — see resolveLyricsOverlayRevealed.
+  const lyricsOverlayLocked = lyricsOverlayPinned && windowPinMode === "pin-click-through";
   const lyricsOnlyIdle = lyricsPlacementActive && (idle || lyricsOverlayPinned);
   const visualizerIdleOnly = idle && visualizerBackgroundActive && visualizerPlacement === "idle";
   const chromeHidden =
@@ -301,6 +308,22 @@ export default function App() {
     isNowTab,
     visualizerIdleOnly,
   });
+  const lyricsOverlayRevealed = resolveLyricsOverlayRevealed({
+    clickThroughHover,
+    idle,
+    locked: lyricsOverlayLocked,
+  });
+  // When a layer over the transparent window disappears (the ambient background
+  // tearing down on pin; the pinned lyrics control bar fading out), force a window
+  // repaint so the macOS transparent surface doesn't keep the last painted frame as
+  // a "stale ghost". No-op off the Electron desktop shell.
+  useTransparentWindowRepaint(ambientBackdropActive);
+  useTransparentWindowRepaint(
+    immersiveLyricsActive && lyricsOverlayPinned && lyricsOverlayRevealed,
+    {
+      fadeMs: 200,
+    },
+  );
 
   // The non-active tabs stay MOUNTED (display:none) to keep their subscriptions warm.
   // App re-renders on transient chrome state (idle/hover during a drag), and these
@@ -397,6 +420,7 @@ export default function App() {
             onDoubleClick={() => void toggleDesktopMaximize()}
           />
           <WindowsWindowControls />
+          <MacWindowControls />
         </header>
 
         {/* Tabs are kept MOUNTED and toggled with `hidden` (display:none) rather
@@ -451,7 +475,7 @@ export default function App() {
           <ImmersiveLyricsOverlay
             lyricsOnly={lyricsOnlyIdle}
             pinned={lyricsOverlayPinned}
-            revealed={!idle || clickThroughHover}
+            revealed={lyricsOverlayRevealed}
           />
         )}
 

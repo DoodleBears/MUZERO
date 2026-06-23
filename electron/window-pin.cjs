@@ -51,6 +51,20 @@ function createWindowPinController({
     }
   }
 
+  function setVisibleOnAllSpaces(win, enabled) {
+    if (typeof win.setVisibleOnAllWorkspaces !== "function") return;
+    try {
+      // A pinned (always-on-top) window is used as an overlay — lyrics capture for
+      // OBS, or just kept above other work — so it must FOLLOW the user across macOS
+      // Spaces and stay visible over other apps' fullscreen, not vanish onto the Space
+      // it was pinned in. Reverting to false on unpin restores normal per-Space
+      // behavior. No-op on Windows (the method does nothing there).
+      win.setVisibleOnAllWorkspaces(enabled, { visibleOnFullScreen: true });
+    } catch {
+      // Best effort: a Spaces-visibility failure must never break pinning itself.
+    }
+  }
+
   function syncMousePassthrough(win) {
     const passthrough =
       getMode(win) === "pin-click-through" &&
@@ -131,6 +145,7 @@ function createWindowPinController({
     }
 
     win.setAlwaysOnTop(mode !== "off");
+    setVisibleOnAllSpaces(win, mode !== "off");
     return mode;
   }
 
