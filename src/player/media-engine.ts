@@ -53,6 +53,9 @@ export class MediaEngine {
   /** Always-in-DOM home so the audio element is never removed/hidden. */
   private readonly host: HTMLElement | null = null;
   private hasVideo = false;
+  private videoEnabled = true;
+  private currentSource: string | null = null;
+  private currentKind: "audio" | "video" = "audio";
   private objectUrl: string | null = null;
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -170,6 +173,8 @@ export class MediaEngine {
     // Proxied stream URLs return ACAO:* so "anonymous" makes them audible; blobs/same-
     // origin use null (anonymous would needlessly force a CORS check).
     this.setMediaCrossOrigin(crossOrigin);
+    this.currentSource = src;
+    this.currentKind = kind;
     // The audio element is always the driver (it plays a video file's audio too).
     this.audioEl.src = src;
     this.audioEl.load();
@@ -178,18 +183,49 @@ export class MediaEngine {
       mediaKind: kind,
       sourceScheme: sourceScheme(src),
     });
-    this.hasVideo = kind === "video";
-    if (this.hasVideo) {
-      this.videoEl.src = src;
-      this.videoEl.load();
+    // The muted VIDEO visual is attached independently — only when video is actually
+    // shown (see setVideoEnabled). A video file played in cover mode stays audio-only,
+    // so the video element never decodes (frees the decode surfaces / VRAM).
+    this.applyVideoTrack();
+  }
+
+  /**
+   * Enable/disable the muted video VISUAL independently of the audio driver. When a
+   * video track is shown as a cover (displayMode "cover" / audio-only), this stays off
+   * so the `<video>` element is never given a src: it doesn't decode, releasing the
+   * decode surfaces (~100+ MB VRAM on a 1080p track), while the audio element keeps
+   * driving playback uninterrupted.
+   */
+  setVideoEnabled(enabled: boolean): void {
+    if (this.videoEnabled === enabled) return;
+    this.videoEnabled = enabled;
+    this.applyVideoTrack();
+  }
+
+  /** (Re)attach or detach the video element's src per the current source + videoEnabled. */
+  private applyVideoTrack(): void {
+    if (!(this.videoEl instanceof HTMLMediaElement)) return;
+    const source = this.currentSource;
+    const wantVideo = this.currentKind === "video" && this.videoEnabled && !!source;
+    this.hasVideo = wantVideo;
+    if (wantVideo && source) {
+      if (this.videoEl.getAttribute("src") !== source) {
+        this.videoEl.src = source;
+        this.videoEl.load();
+      }
+      // Re-sync to the audio driver and resume if we're mid-playback.
+      if (this.audioEl instanceof HTMLMediaElement && !this.audioEl.paused) {
+        this.videoEl.currentTime = this.audioEl.currentTime;
+        void this.videoEl.play().catch(() => {});
+      }
       this.traceMediaElementEvent("video", "source.loaded", this.videoEl, {
         phase: "start",
-        mediaKind: kind,
-        sourceScheme: sourceScheme(src),
+        mediaKind: "video",
+        sourceScheme: sourceScheme(source),
       });
     } else {
       this.videoEl.removeAttribute("src");
-      this.videoEl.load();
+      this.videoEl.load(); // detach → stops decode, releases the decode surfaces
     }
   }
 
@@ -277,6 +313,8 @@ export class MediaEngine {
     this.audioEl.load();
     this.videoEl.load();
     this.hasVideo = false;
+    this.currentSource = null;
+    this.currentKind = "audio";
     this.revoke();
   }
 

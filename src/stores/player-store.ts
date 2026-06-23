@@ -1831,6 +1831,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Display mode is a single app-wide preference (like repeat/shuffle/volume),
     // persisted to settings — NOT per-set. So switching 歌单 keeps the chosen mode.
     set({ displayMode: mode });
+    // Only decode the video element when video is actually shown. In cover mode a
+    // video track plays audio-only (the driver), so the video stops decoding and its
+    // decode surfaces / VRAM are released — toggled live without interrupting audio.
+    mediaEngine?.setVideoEnabled(mode === "video");
     try {
       await saveSettings({ displayMode: mode });
     } catch (err) {
@@ -4231,6 +4235,7 @@ async function hydratePlaybackSettings(set: (p: Partial<PlayerState>) => void): 
   const displayMode = settings.displayMode ?? "video";
   set({ repeat, shuffle, volume, displayMode });
   mediaEngine?.setVolume(volume);
+  mediaEngine?.setVideoEnabled(displayMode === "video");
   // Shuffle is materialized into the persisted queue order (playQueue.entries), so the
   // boot queue is already the last play order. The persisted natural order (for un-shuffle
   // after a relaunch) is restored in the queue watcher, synchronously with the source.

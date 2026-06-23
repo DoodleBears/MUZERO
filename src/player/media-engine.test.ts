@@ -47,6 +47,31 @@ describe("MediaEngine — audio driver stays in the document, video is the visua
     expect(engine.element.src).toBe("https://music.example.com/muzero/objects/video.mp4");
   });
 
+  it("setVideoEnabled(false) detaches the video visual so it stops decoding, then reattaches the same source", async () => {
+    const engine = new MediaEngine();
+    await engine.loadUrl("https://music.example.com/muzero/objects/clip.mp4", "video");
+    expect(engine.element.getAttribute("src")).toBe(
+      "https://music.example.com/muzero/objects/clip.mp4",
+    );
+    // Cover mode: the muted video visual is detached (no src) so the element never
+    // decodes — the audio driver keeps playing the file's audio uninterrupted.
+    engine.setVideoEnabled(false);
+    expect(engine.element.getAttribute("src")).toBeNull();
+    // Re-enabling reattaches the SAME source without a reload of the audio driver.
+    engine.setVideoEnabled(true);
+    expect(engine.element.getAttribute("src")).toBe(
+      "https://music.example.com/muzero/objects/clip.mp4",
+    );
+  });
+
+  it("setVideoEnabled never attaches a video src for an audio-only track", async () => {
+    const engine = new MediaEngine();
+    await engine.loadUrl("https://music.example.com/song.mp3", "audio");
+    engine.setVideoEnabled(true);
+    engine.setVideoEnabled(false);
+    expect(engine.element.getAttribute("src")).toBeNull();
+  });
+
   it("emits structured media diagnostics with playback trace context", async () => {
     const engine = new MediaEngine();
     engine.setDiagnosticsContext({ traceId: "ply_1", trackId: "trk_1", sessionId: "ses_1" });
