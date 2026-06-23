@@ -41,6 +41,11 @@ const mocks = vi.hoisted(() => ({
     kind: "backlight" | "thumbnail";
     trackId: string | undefined;
   }>,
+  mediaEngine: null as null | {
+    element: HTMLVideoElement;
+    mount: ReturnType<typeof vi.fn>;
+    unmount: ReturnType<typeof vi.fn>;
+  },
   pixiSrcs: [] as string[],
   galleryRows: [] as Array<{ id: string }>,
   mediaBlobUrlRows: [] as Array<string | undefined>,
@@ -124,6 +129,14 @@ vi.mock("@/hooks/use-media", () => ({
   useTrackMediaUrl: (track?: Track) => (track?.kind === "video" ? `blob:media-${track.id}` : null),
 }));
 
+vi.mock("@/stores/player-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/stores/player-store")>();
+  return {
+    ...actual,
+    getMediaEngine: () => mocks.mediaEngine,
+  };
+});
+
 vi.mock("@/visualizer/host", () => ({
   VisualizerHost: ({ style, styleId }: { style?: CSSProperties; styleId?: string }) => (
     <div data-style-id={styleId ?? "default"} data-testid="visualizer-host" style={style} />
@@ -194,6 +207,12 @@ describe("NowPlayingBackground", () => {
     mocks.galleryRows.length = 0;
     mocks.localCoverResources.clear();
     mocks.mediaBlobUrlRows.length = 0;
+    const video = document.createElement("video");
+    mocks.mediaEngine = {
+      element: video,
+      mount: vi.fn((container: HTMLElement) => container.appendChild(video)),
+      unmount: vi.fn(),
+    };
     mocks.coverDerivativeCalls.length = 0;
     mocks.pixiSrcs.length = 0;
     mocks.trackBackgroundRows.length = 0;
@@ -220,6 +239,7 @@ describe("NowPlayingBackground", () => {
       configurable: true,
       value: originalMediaPause,
     });
+    mocks.mediaEngine = null;
   });
 
   it("does not mount flow or visualizer effects when no current track is selected", () => {
@@ -299,7 +319,7 @@ describe("NowPlayingBackground", () => {
     expect(styleIds).toContain("default");
   });
 
-  it("uses the selected background effect on video tracks during normal playback by default", () => {
+  it("mounts the shared video backdrop and skips occluded Pixi during normal playback", () => {
     mocks.settings.backgroundRenderer = "noise";
     mocks.settings.flowEnabled = false;
     mocks.settings.visualizerAsBackground = false;
@@ -308,16 +328,15 @@ describe("NowPlayingBackground", () => {
       queue: [makeTrack("trk_video", { blobId: "blb_video", kind: "video" })],
     });
 
-    render(<NowPlayingBackground active />);
+    const { container } = render(<NowPlayingBackground active />);
 
-    expect(screen.getByTestId("pixi-background")).toHaveAttribute(
-      "data-src",
-      "blob:media-trk_video",
-    );
-    expect(screen.queryByRole("presentation")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pixi-background")).not.toBeInTheDocument();
+    expect(mocks.mediaEngine?.mount).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("video")).toBe(mocks.mediaEngine?.element);
+    expect(mocks.mediaEngine?.element).toHaveClass("object-cover");
   });
 
-  it("applies the blur background effect through Pixi on video tracks", () => {
+  it("skips Pixi blur when the shared video backdrop is active", () => {
     mocks.settings.backgroundRenderer = "blur";
     mocks.settings.flowEnabled = false;
     mocks.settings.visualizerAsBackground = false;
@@ -328,12 +347,8 @@ describe("NowPlayingBackground", () => {
 
     render(<NowPlayingBackground active />);
 
-    expect(screen.getByTestId("pixi-background")).toHaveAttribute("data-effect", "blur");
-    expect(screen.getByTestId("pixi-background")).toHaveAttribute("data-media-type", "video");
-    expect(screen.getByTestId("pixi-background")).toHaveAttribute(
-      "data-src",
-      "blob:media-trk_video",
-    );
+    expect(screen.queryByTestId("pixi-background")).not.toBeInTheDocument();
+    expect(mocks.mediaEngine?.mount).toHaveBeenCalledTimes(1);
   });
 
   it("uses a clean video background for immersive video tracks by default", () => {
@@ -348,10 +363,11 @@ describe("NowPlayingBackground", () => {
     const { container } = render(<NowPlayingBackground active immersive />);
 
     expect(screen.queryByTestId("pixi-background")).not.toBeInTheDocument();
-    expect(container.querySelector("video")).toHaveAttribute("src", "blob:media-trk_video");
+    expect(container.querySelector("video")).toBe(mocks.mediaEngine?.element);
+    expect(mocks.mediaEngine?.mount).toHaveBeenCalledTimes(1);
   });
 
-  it("can keep the selected background effect on immersive video tracks", () => {
+  it("still skips selected background effects on immersive video tracks when the backdrop covers them", () => {
     mocks.settings.backgroundRenderer = "noise";
     mocks.settings.flowEnabled = false;
     mocks.settings.immersiveVideoTrackBackgroundEffectsEnabled = true;
@@ -363,10 +379,8 @@ describe("NowPlayingBackground", () => {
 
     render(<NowPlayingBackground active immersive />);
 
-    expect(screen.getByTestId("pixi-background")).toHaveAttribute(
-      "data-src",
-      "blob:media-trk_video",
-    );
+    expect(screen.queryByTestId("pixi-background")).not.toBeInTheDocument();
+    expect(mocks.mediaEngine?.mount).toHaveBeenCalledTimes(1);
   });
 
   it("uses video-track dim and blur settings for video backgrounds", () => {
