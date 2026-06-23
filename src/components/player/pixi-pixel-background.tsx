@@ -28,7 +28,11 @@ export type PixiBackgroundEffect =
   | "dot"
   | "noise";
 type BackgroundMediaType = "image" | "video";
-const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 1024;
+// The ambient background uses the ORIGINAL cover (not a 1024px downscale): now that the
+// Pixi background no longer samples the full video as a texture, the cover is just a small
+// static image, so full-res costs only a few MB and keeps the backdrop sharp. The bound is
+// only a safety ceiling against a pathologically huge user-uploaded cover.
+const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 4096;
 const BACKGROUND_TEXTURE_LOAD_DELAY_MS = 180;
 // Cover→cover crossfade duration: the incoming cover fades in as a 2nd sprite under the
 // SAME resident filter, so the effect is preserved throughout and covers dissolve instead
