@@ -17,11 +17,11 @@ import { resolveBackgroundFrameSpec } from "@/lib/background-frame";
 import { FLOW_DEFAULTS, VISUALIZER_BLEND_DEFAULT } from "@/lib/flow-config";
 import { createDiagnosticLogger } from "@/lib/logger";
 import { nextSlideIndex } from "@/lib/slideshow";
-import { trackHasCover } from "@/lib/track-display";
+import { trackHasCover, trackIsPlayableVideo } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { resolveVisualizerBackgroundCompositeOptions } from "@/lib/visualizer-effect-settings";
 import { resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
-import { usePlayerStore } from "@/stores/player-store";
+import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { VisualizerHost } from "@/visualizer/host";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
 import { BackgroundFrameStack } from "./background/background-frame-stack";
@@ -101,6 +101,7 @@ function NowPlayingBackgroundContent({
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const displayMode = usePlayerStore((s) => s.displayMode);
   // Single source of truth: the ambient background reads the SAME live index as the
   // stage cover + backlight, so the three can never show different tracks. The old
   // per-surface settle debounce intentionally lagged the background onto a different
@@ -110,6 +111,11 @@ function NowPlayingBackgroundContent({
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const visualizerStyle = resolveVisualizerStyle(settings.visualizerStyle);
   const videoTrack = current?.kind === "video";
+  // Immersive video lives in the BACKGROUND now (the foreground card always shows the
+  // cover). When the set is in video mode and the current track is a playable video,
+  // the shared <video> mounts full-bleed here (NowPlayingVideoBackdrop); the existing
+  // cover-background video paths are suppressed so the file is only ever decoded once.
+  const videoBackdropActive = !!current && displayMode === "video" && trackIsPlayableVideo(current);
   const imageMaskOpacity = videoTrack
     ? (settings.videoTrackBackgroundMaskOpacity ?? 25) / 100
     : (settings.backgroundMaskOpacity ?? 25) / 100;
@@ -203,14 +209,20 @@ function NowPlayingBackgroundContent({
     videoTrack &&
     !videoTrackBackgroundEffectsEnabled &&
     settings.backgroundMode !== "none" &&
-    hasBackgroundVideoMedia;
-  const pixiMedia = resolvePixiBackgroundMedia({
+    hasBackgroundVideoMedia &&
+    !videoBackdropActive;
+  const pixiMediaRaw = resolvePixiBackgroundMedia({
     imageSource: source,
     mode: settings.backgroundMode,
     trackKind: current?.kind,
     trackStatus: current?.status,
     hasTrackMedia: hasBackgroundVideoMedia,
   });
+  // The immersive video now lives ONLY in NowPlayingVideoBackdrop. The Pixi cover-effect
+  // background must never sample the track video itself — that was a second decode that
+  // also ran in cover mode (periodic GPU-video bursts). Force it to the cover image.
+  const pixiMedia =
+    pixiMediaRaw.source === "track-video" ? { source, mediaType: "image" as const } : pixiMediaRaw;
   const pixiEffect = isPixiEffect(renderer, pixiMedia.mediaType) ? renderer : null;
   // The Pixi background uses the ORIGINAL cover (loaded below, capped at 1024px),
   // NOT a cropped 192px `backlight` derivative. The noise/pixel renderers don't blur
@@ -350,7 +362,8 @@ function NowPlayingBackgroundContent({
   );
   const backgroundUrl = source === "cover" ? loadedCoverBackground.displayUrl : slideshowUrl;
   const pixiCoverUrl = pixiMedia.source === "cover" ? backgroundCoverUrl : backgroundUrl;
-  const pixiUrl = pixiMedia.source === "track-video" ? currentVideoUrl : pixiCoverUrl;
+  const pixiUrl =
+    pixiMedia.source === "track-video" && !videoBackdropActive ? currentVideoUrl : pixiCoverUrl;
   const hasPotentialImageBackground =
     source === "cover"
       ? trackHasCover(current)
@@ -544,6 +557,11 @@ function NowPlayingBackgroundContent({
           src={effectiveRenderImageTarget.src}
         />
       ) : null}
+      {/* Immersive video background: the shared media <video>, mounted full-bleed when
+          the set is in video mode and the current track is a playable video. The
+          foreground card shows the cover; the moving picture lives here, above the
+          (occluded) cover effect and below the flow + spectrum. */}
+      <NowPlayingVideoBackdrop active={videoBackdropActive} />
       {/* PM ask: the dim layer can also blur the backdrop (image/video/Pixi below
           it) so a bright cover softens behind the foreground. This MUST be its own
           transparent layer — putting `backdrop-filter` on the opaque `bg-background`
@@ -775,6 +793,35 @@ function PlainBackgroundVideo({ src }: { src: string }) {
       className="absolute inset-0 h-full w-full object-cover"
     />
   );
+}
+
+/**
+ * Immersive full-bleed video background. Adopts the SINGLE persistent media `<video>`
+ * (the same element the audio driver is synced to) into a full-bleed layer while the
+ * set is in video mode and the current track is a playable video — so the moving
+ * picture lives behind the now-playing content with no extra decode. When inactive it
+ * releases the element back to the hidden host; the store also disables the element via
+ * setVideoEnabled in cover mode, so a video file shown as a cover stops decoding.
+ */
+function NowPlayingVideoBackdrop({ active }: { active: boolean }) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    const engine = getMediaEngine();
+    const host = hostRef.current;
+    if (!engine || !host) return;
+    engine.mount(host);
+    engine.element.className = "absolute inset-0 h-full w-full bg-black object-cover";
+    return () => {
+      const released = getMediaEngine();
+      if (!released) return;
+      released.unmount();
+      released.element.className = "pointer-events-none absolute h-0 w-0 opacity-0";
+    };
+  }, [active]);
+  return active ? (
+    <div ref={hostRef} aria-hidden className="absolute inset-0 overflow-hidden bg-black" />
+  ) : null;
 }
 
 function isPixiEffect(

@@ -49,7 +49,6 @@ export function MediaStage({
   const { t } = useTranslation();
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
-  const displayMode = usePlayerStore((s) => s.displayMode);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   // The cover/title visual follows a burst-settled track: an isolated switch is
   // instant (leading edge), but a rapid next/prev burst skips the songs it flies
@@ -78,10 +77,15 @@ export function MediaStage({
   // burst-settled snapshot); the cover/title STILL image follows `displayTrack` (burst
   // coalescing). Splitting the two is the fix for "切歌后前台只显示封面、背景却在放视频"
   // (PRD 20260621-video-stage-shows-cover-after-switch).
+  // The foreground "cover-flow" stage ALWAYS shows the cover (never the moving video):
+  // the video now lives in the immersive background (NowPlayingVideoBackdrop), gated on
+  // displayMode. Forcing "cover" here keeps the still-image geometry + handoff and means
+  // the shared <video> is never mounted to the foreground, so a video file shown as a
+  // cover doesn't decode in the card. (displayMode still drives the background.)
   const { showVideo, videoBroke, wantVideo, showCover, showTitle } = resolveStageLayers({
     liveTrack: current,
     displayTrack,
-    displayMode,
+    displayMode: "cover",
     videoError,
   });
 
@@ -129,29 +133,9 @@ export function MediaStage({
     videoError,
   ]);
 
-  // Adopt the persistent media element into this stage; release on unmount
-  // (playback keeps going while the element is detached).
-  useEffect(() => {
-    const engine = getMediaEngine();
-    const container = containerRef.current;
-    if (engine && container) engine.mount(container);
-    return () => getMediaEngine()?.unmount();
-  }, []);
-
-  // Re-adopt + resync the shared <video> whenever it BECOMES the live visual or the
-  // live track changes. The element only resumes via the audio "play" event or a
-  // mount() resync, and mount() runs once — so a switch into a video track (incl. one
-  // made while this stage was off-screen) could otherwise leave the picture paused on
-  // a stale frame while audio + the ambient background play (PRD …video-stage §2.3).
-  // mount() is idempotent: it only re-appends when the parent differs, then resyncs to
-  // the audio clock + plays only if audio is already playing — safe to call repeatedly.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: current?.id is a resync trigger, not read in the body
-  useEffect(() => {
-    if (!showVideo) return;
-    const engine = getMediaEngine();
-    const container = containerRef.current;
-    if (engine && container) engine.mount(container);
-  }, [showVideo, current?.id]);
+  // The shared <video> is no longer adopted here — the foreground always shows the
+  // cover. The immersive background (NowPlayingVideoBackdrop) mounts the video when
+  // displayMode is "video".
 
   // Reset per-track view state (decode failure + intrinsic aspect) on track change.
   // Keyed to the LIVE `current` id — the video element loads the live track's media,
@@ -182,17 +166,6 @@ export function MediaStage({
       el.removeEventListener("loadeddata", onLoaded);
     };
   }, []);
-
-  // Show/hide the video element based on the LIVE video decision (showVideo already
-  // excludes a decode error). object-cover fills the box edge-to-edge — the box
-  // already matches the video's aspect, so nothing is cropped and there are no bars.
-  useEffect(() => {
-    const el = getMediaEngine()?.element;
-    if (!el) return;
-    el.className = showVideo
-      ? "absolute inset-0 z-10 h-full w-full bg-black object-cover"
-      : "pointer-events-none absolute h-0 w-0 opacity-0";
-  }, [showVideo]);
 
   const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
   const useCoverShadow = coverEffectMode === "shadow";
