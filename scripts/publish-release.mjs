@@ -78,6 +78,39 @@ export function platformKeyFor(filename) {
   return null; // .zip / .blockmap / .yml are updater/feed artifacts, not list entries
 }
 
+/**
+ * Rewrite an electron-builder update feed (`latest.yml` / `latest-mac.yml` / `beta.yml`)
+ * so its file references point into the versioned subfolder the binaries are uploaded
+ * to (`<version>/<file>`), matching this script's upload layout.
+ *
+ * Why this is required: electron-builder writes `url:` / `path:` as BARE filenames,
+ * and the `generic` updater resolves them relative to the feed's own location — the
+ * prefix root (`…/desktop/latest.yml`). But binaries are uploaded under
+ * `…/desktop/<version>/…` (see the upload loop). So a bare reference 404s, the
+ * in-app updater fails its post-check download, and the user sees "检查更新失败".
+ * Prefixing each reference with `<version>/` makes it resolve to the real object
+ * (the derived `<url>.blockmap` then resolves too).
+ *
+ * Surgical, dependency-free line rewrite: only `url:` / `path:` scalar lines whose
+ * value is one of `knownFiles` (the binaries in the release dir) are rewritten —
+ * `version:`, `sha512:`, `releaseDate:` etc. are untouched. Idempotent: an
+ * already-prefixed value isn't a bare `knownFiles` entry, so it's left alone.
+ * Quoting style and trailing CR (CRLF feeds) are preserved.
+ */
+export function prefixFeedReferences(yamlText, version, knownFiles) {
+  const known = knownFiles instanceof Set ? knownFiles : new Set(knownFiles);
+  return yamlText
+    .split("\n")
+    .map((line) => {
+      const m = /^([ \t]*-?[ \t]*)(url|path):[ \t]+(['"]?)(.*?)\3([ \t]*\r?)$/.exec(line);
+      if (!m) return line;
+      const [, indent, key, quote, value, tail] = m;
+      if (!known.has(value)) return line;
+      return `${indent}${key}: ${quote}${version}/${value}${quote}${tail}`;
+    })
+    .join("\n");
+}
+
 function isPrerelease(version) {
   return version.includes("-");
 }
@@ -199,17 +232,28 @@ function main() {
   const dest = (key) => `${remote}${bucket}/${prefix}/${key}`;
 
   // 1. Upload every artifact in the dir (binaries + .yml feeds + .blockmap).
-  for (const name of readdirSync(dir)) {
+  // Feeds stay at the prefix root; binaries + blockmaps go under `<version>/`.
+  // Because the updater resolves a feed's bare file refs relative to the feed
+  // (root), rewrite those refs to `<version>/…` so they reach the real binaries.
+  const dirFiles = readdirSync(dir).filter((name) => statSync(join(dir, name)).isFile());
+  const binaryNames = new Set(dirFiles.filter((name) => !/\.ya?ml$/.test(name)));
+  const feedTmp = mkdtempSync(join(tmpdir(), "muzero-feed-"));
+  for (const name of dirFiles) {
     if (name === "builder-debug.yml") continue; // electron-builder debug trace, not a feed
     const full = join(dir, name);
-    if (!statSync(full).isFile()) continue;
     const isFeed = /\.ya?ml$/.test(name);
     const key = isFeed ? name : `${version}/${name}`;
     const cacheControl = isFeed
       ? "no-cache, max-age=0, must-revalidate"
       : "public, max-age=31536000, immutable";
     const contentType = isFeed ? "text/yaml" : "application/octet-stream";
-    rcloneCopyTo(full, dest(key), { contentType, cacheControl, multipart: !isFeed });
+    let source = full;
+    if (isFeed) {
+      const rewritten = prefixFeedReferences(readFileSync(full, "utf8"), version, binaryNames);
+      source = join(feedTmp, name);
+      writeFileSync(source, rewritten);
+    }
+    rcloneCopyTo(source, dest(key), { contentType, cacheControl, multipart: !isFeed });
   }
 
   // 2. Pull current manifest (if any), merge this platform's assets, push back.

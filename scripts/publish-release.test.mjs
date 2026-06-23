@@ -3,7 +3,13 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cmpVersion, emptyManifest, mergeRelease, platformKeyFor } from "./publish-release.mjs";
+import {
+  cmpVersion,
+  emptyManifest,
+  mergeRelease,
+  platformKeyFor,
+  prefixFeedReferences,
+} from "./publish-release.mjs";
 
 const ROOT = process.cwd();
 const SCRIPT = join(ROOT, "scripts/publish-release.mjs");
@@ -70,6 +76,69 @@ describe("mergeRelease (additive, per-platform)", () => {
     expect(m.releases.map((r) => r.version)).toEqual(["0.8.0-beta.1", "0.7.0"]);
     expect(m.latest).toBe("0.7.0");
     expect(m.latestBeta).toBe("0.8.0-beta.1");
+  });
+});
+
+describe("prefixFeedReferences (versioned-subfolder feed fix)", () => {
+  const WIN_FEED = [
+    "version: 1.4.1",
+    "files:",
+    "  - url: MUZERO Setup 1.4.1.exe",
+    "    sha512: abc==",
+    "    size: 128189241",
+    "path: MUZERO Setup 1.4.1.exe",
+    "sha512: abc==",
+    "releaseDate: '2026-06-22T23:12:44.088Z'",
+    "",
+  ].join("\n");
+
+  const known = new Set(["MUZERO Setup 1.4.1.exe"]);
+
+  it("prefixes url + path with <version>/ so the updater resolves the real binary", () => {
+    const out = prefixFeedReferences(WIN_FEED, "1.4.1", known);
+    expect(out).toContain("  - url: 1.4.1/MUZERO Setup 1.4.1.exe");
+    expect(out).toContain("path: 1.4.1/MUZERO Setup 1.4.1.exe");
+  });
+
+  it("leaves version, sha512, size and releaseDate untouched", () => {
+    const out = prefixFeedReferences(WIN_FEED, "1.4.1", known);
+    expect(out).toContain("version: 1.4.1");
+    expect(out).toContain("    size: 128189241");
+    expect(out).toContain("releaseDate: '2026-06-22T23:12:44.088Z'");
+    expect(out).not.toContain("1.4.1/1.4.1"); // version line must not be double-pathed
+  });
+
+  it("is idempotent — already-prefixed refs are not re-prefixed", () => {
+    const once = prefixFeedReferences(WIN_FEED, "1.4.1", known);
+    const twice = prefixFeedReferences(once, "1.4.1", known);
+    expect(twice).toBe(once);
+  });
+
+  it("preserves quoting and CRLF line endings", () => {
+    const crlf = "path: 'MUZERO Setup 1.4.1.exe'\r\nversion: 1.4.1\r\n";
+    const out = prefixFeedReferences(crlf, "1.4.1", known);
+    expect(out).toBe("path: '1.4.1/MUZERO Setup 1.4.1.exe'\r\nversion: 1.4.1\r\n");
+  });
+
+  it("rewrites every file in a mac feed listing zip + dmg", () => {
+    const macFeed = [
+      "version: 1.4.1",
+      "files:",
+      "  - url: MUZERO-1.4.1-arm64-mac.zip",
+      "    sha512: a==",
+      "  - url: MUZERO-1.4.1-arm64.dmg",
+      "    sha512: b==",
+      "path: MUZERO-1.4.1-arm64-mac.zip",
+      "",
+    ].join("\n");
+    const out = prefixFeedReferences(
+      macFeed,
+      "1.4.1",
+      new Set(["MUZERO-1.4.1-arm64-mac.zip", "MUZERO-1.4.1-arm64.dmg"]),
+    );
+    expect(out).toContain("  - url: 1.4.1/MUZERO-1.4.1-arm64-mac.zip");
+    expect(out).toContain("  - url: 1.4.1/MUZERO-1.4.1-arm64.dmg");
+    expect(out).toContain("path: 1.4.1/MUZERO-1.4.1-arm64-mac.zip");
   });
 });
 
