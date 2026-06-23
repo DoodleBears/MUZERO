@@ -3014,6 +3014,13 @@ async function ingestReferencedScannedFiles(
 }
 
 const NCM_METADATA_HYDRATION_CONCURRENCY = 2;
+// Pace the refill so a large referenced-NCM library doesn't read every `.ncm` file
+// back-to-back on startup — that flat-out re-pump saturated the disk at 100+ MB/s
+// (PRD desktop/20260623-playback-resource-optimization). Hydration is background
+// self-healing, so spreading it over a timer changes nothing the user sees (titles /
+// covers still fill in) while capping sustained read throughput. 0 in tests keeps the
+// queue synchronous so existing folder-sync specs don't need fake timers.
+const NCM_METADATA_HYDRATION_PACING_MS = import.meta.env?.MODE === "test" ? 0 : 700;
 const NCM_METADATA_PATCH_FLUSH_SIZE = 50;
 const NCM_METADATA_PATCH_FLUSH_DELAY_MS = 250;
 const pendingNcmHydrations: LazyNcmHydrationJob[] = [];
@@ -3021,6 +3028,7 @@ const pendingNcmMetadataPatches: ReferencedTrackMetadataPatch[] = [];
 const queuedNcmHydrationTrackIds = new Set<string>();
 let pendingNcmHydrationCursor = 0;
 let activeNcmHydrations = 0;
+let ncmHydrationPumpTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 let ncmMetadataPatchFlushTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
 function queueLazyNcmMetadataHydration(job: LazyNcmHydrationJob): void {
@@ -3047,6 +3055,23 @@ function compactLazyNcmHydrationQueue(): void {
   pendingNcmHydrationCursor = 0;
 }
 
+/**
+ * Refill the hydration slots after a paced gap (see NCM_METADATA_HYDRATION_PACING_MS).
+ * Coalesces concurrent completions onto a single timer so the queue drains as a gentle
+ * trickle instead of a flat-out disk-read storm. Pacing 0 (tests) pumps immediately.
+ */
+function scheduleLazyNcmMetadataPump(): void {
+  if (ncmHydrationPumpTimer !== null) return;
+  if (NCM_METADATA_HYDRATION_PACING_MS <= 0) {
+    pumpLazyNcmMetadataHydrations();
+    return;
+  }
+  ncmHydrationPumpTimer = globalThis.setTimeout(() => {
+    ncmHydrationPumpTimer = null;
+    pumpLazyNcmMetadataHydrations();
+  }, NCM_METADATA_HYDRATION_PACING_MS);
+}
+
 function pumpLazyNcmMetadataHydrations(): void {
   while (
     activeNcmHydrations < NCM_METADATA_HYDRATION_CONCURRENCY &&
@@ -3061,7 +3086,7 @@ function pumpLazyNcmMetadataHydrations(): void {
       queuedNcmHydrationTrackIds.delete(job.trackId);
       activeNcmHydrations = Math.max(0, activeNcmHydrations - 1);
       if (activeNcmHydrations === 0) compactLazyNcmHydrationQueue();
-      pumpLazyNcmMetadataHydrations();
+      scheduleLazyNcmMetadataPump();
     });
   }
 }
