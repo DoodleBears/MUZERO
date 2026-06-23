@@ -60,6 +60,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import { startPlaylistAutoSyncScheduler } from "@/stores/playlist-auto-sync";
 import { startSyncIndicator } from "@/stores/sync-indicator";
 import { useUiStore } from "@/stores/ui-store";
+import { startUpdateIndicator } from "@/stores/update-indicator";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
 import { recoverDownloadQueue } from "@/streamsrc/download-action";
 import { useTraySync } from "@/tray/use-tray-sync";
@@ -150,6 +151,12 @@ export default function App() {
   // switches stay quiet; the Dock cover spinner is the immediate feedback).
   useEffect(() => {
     startPlaybackIndicator();
+  }, []);
+
+  // Surface the desktop auto-update download + ready-to-restart in the same stack
+  // (no-op on web / Tauri). Quiet for checking/idle/error and mac's manual-required.
+  useEffect(() => {
+    startUpdateIndicator();
   }, []);
 
   // Visible per-drive R2 auto-sync scheduler. It delegates to the same
