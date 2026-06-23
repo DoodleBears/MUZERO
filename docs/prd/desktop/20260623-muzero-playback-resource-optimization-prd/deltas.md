@@ -100,6 +100,27 @@ additional safe lever found. Deferred.
 
 ---
 
+## Real 4K-video validation (user-provided track: 星降之海 4K Hi-Res Live)
+
+Confirms the disk fix holds for the heaviest case and re-confirms GPU/memory are inherent.
+Element inspection: `<video>` 1920×1080 + `<audio>` driver (both `muzfetch://local-media`;
+the `<audio>` decodes audio only, so no double *video* decode) + **3 full-window 2045×1297
+canvases** (spectrum + flow + blur background).
+
+| metric (playing, warm) | value | note |
+|---|---|---|
+| **disk read** | **~9 MB/s** | storm fixed; 53 MB/s blips = hydration backoff waves |
+| gpuVid (decode) | 3–79% | inherent 1080p hardware decode (bursty on keyframes) |
+| gpu3d | 8–23% | 3 background effect canvases + compositing |
+| memory total | 1670 MB | — |
+| GPU-proc private | 1165 MB | video frames + cover textures + Chromium GPU baseline, **not** the canvases (~10 MB each) |
+
+**Lever check:** flow-off + spectrum-off → no gpu3d change; capping canvas DPR saves ~16 MB
+(negligible vs 1.16 GB). The GPU/memory is the enabled effect stack (video + spectrum + flow +
+blur, all user-on) + the decode pipeline — no UX-invariant lever. A user-opt-in "reduce GPU /
+power-saver" (lower decorative DPR + fewer effect layers) is the only further move, and it
+trades visible quality, so it needs the user's call, not a silent change.
+
 ## Summary
 
 The user-visible complaint — **~108 MB/s disk while playing** — was the **NCM lazy-metadata
