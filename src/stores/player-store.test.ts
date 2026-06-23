@@ -91,6 +91,7 @@ afterEach(async () => {
   vi.doUnmock("@/lib/media-probe");
   vi.doUnmock("@/lib/media-metadata");
   vi.doUnmock("@/lib/video-poster-frame");
+  vi.doUnmock("@/lib/example-track");
   vi.doUnmock("@/workers/cover-client");
   vi.unstubAllGlobals();
   openedDb?.close();
@@ -929,14 +930,27 @@ describe("player-store bulk upload visibility", () => {
         },
       })),
     }));
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      const isCover = url.endsWith(".jpg");
-      return new Response(new Uint8Array(isCover ? [9, 8, 7] : [1, 2, 3]), {
-        headers: { "content-type": isCover ? "image/jpeg" : "audio/mpeg" },
-      });
+    // Stub the asset LOADER itself rather than the global `fetch`: this test is about
+    // the import orchestration (session → uploaded track → cover → active set), not
+    // about how the bytes are fetched. Mocking the loader keeps it free of any
+    // fetch/network/module-timing fragility. The fetch + URL-construction logic lives
+    // in example-track.test.ts, exercised with an explicitly injected fetch.
+    vi.doMock("@/lib/example-track", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/example-track")>("@/lib/example-track");
+      return {
+        ...actual,
+        loadExampleTrackAssets: vi.fn(async () => ({
+          audio: new File([new Uint8Array([1, 2, 3])], actual.EXAMPLE_TRACK_AUDIO_FILE_NAME, {
+            type: "audio/mpeg",
+          }),
+          cover: {
+            blob: new Blob([new Uint8Array([9, 8, 7])], { type: "image/jpeg" }),
+            mime: "image/jpeg",
+          },
+        })),
+      };
     });
-    vi.stubGlobal("fetch", fetchMock);
 
     const { db, repos, usePlayerStore } = await loadRuntime();
 
@@ -963,8 +977,6 @@ describe("player-store bulk upload visibility", () => {
     const cover = track?.coverBlobId ? await db.mediaBlobs.get(track.coverBlobId) : undefined;
     expect(media).toMatchObject({ bytes: 3, mime: "audio/mpeg", role: "media" });
     expect(cover).toMatchObject({ bytes: 3, mime: "image/jpeg", role: "cover" });
-    expect(fetchMock).toHaveBeenCalledWith("/examples/2_23_AM.mp3");
-    expect(fetchMock).toHaveBeenCalledWith("/examples/2_23_AM.jpg");
   });
 
   it("publishes completed file uploads before the whole large selection finishes", async () => {

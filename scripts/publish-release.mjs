@@ -176,13 +176,27 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function rcloneCopyTo(source, target, { contentType, cacheControl, multipart = false }) {
+function humanSize(bytes) {
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let n = bytes;
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${i === 0 ? n : n.toFixed(1)} ${units[i]}`;
+}
+
+function rcloneCopyTo(source, target, { contentType, cacheControl, multipart = false, progress = false }) {
   const args = [
     "copyto",
     source,
     target,
     ...RCLONE_RETRY_ARGS,
     ...(multipart ? RCLONE_R2_BINARY_ARGS : []),
+    // Large binaries get a live transfer bar (bytes / ETA / speed); tiny feeds +
+    // the manifest stay quiet so the output isn't a wall of instant 100% lines.
+    ...(progress ? ["--progress", "--stats", "1s"] : []),
     "--header-upload",
     `Content-Type: ${contentType}`,
     "--header-upload",
@@ -252,8 +266,10 @@ function main() {
       const rewritten = prefixFeedReferences(readFileSync(full, "utf8"), version, binaryNames);
       source = join(feedTmp, name);
       writeFileSync(source, rewritten);
+    } else {
+      process.stdout.write(`↑ ${name} (${humanSize(statSync(full).size)}) → ${prefix}/${key}\n`);
     }
-    rcloneCopyTo(source, dest(key), { contentType, cacheControl, multipart: !isFeed });
+    rcloneCopyTo(source, dest(key), { contentType, cacheControl, multipart: !isFeed, progress: !isFeed });
   }
 
   // 2. Pull current manifest (if any), merge this platform's assets, push back.
