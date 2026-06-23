@@ -28,6 +28,7 @@ import {
   playQueueSetIndex,
   prependTrackIds,
   type ReferencedTrackMetadataPatch,
+  recordNcmHydrationFailure,
   saveSettings,
   setTrackCover,
   updateReferencedTracksMetadata,
@@ -3232,6 +3233,10 @@ async function hydrateLazyNcmMetadata(job: LazyNcmHydrationJob): Promise<void> {
       await fetchAndStoreRemoteCover(job.trackId, decoded.albumPicUrl);
     }
   } catch (err) {
+    // Persist a failure tick so a permanently-undecodable / moved .ncm stops being
+    // re-read on every launch after a few attempts (success persists durationSec and
+    // leaves the pending set on its own).
+    void recordNcmHydrationFailure(job.trackId).catch(() => {});
     folderSyncLog.warn("ncm.lazy.fail", {
       traceId: job.traceId,
       category: "sync",

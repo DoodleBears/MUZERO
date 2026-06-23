@@ -164,6 +164,13 @@ export interface Track {
   /** Absolute on-disk path this track was imported from — dedup key for local-folder sync. */
   sourcePath?: string;
   /**
+   * Failed lazy `.ncm` metadata-hydration attempts (one per launch). Additive, non-indexed;
+   * absent → 0. A referenced `.ncm` placeholder is re-read each launch until its metadata
+   * lands; once this hits the attempt cap the track drops out of the pending set so a
+   * permanently-undecodable file stops re-reading the whole file on every launch.
+   */
+  ncmHydrationFailures?: number;
+  /**
    * @deprecated Superseded by the one-to-many {@link Memory} table (v4 migrates
    * any existing note into a first Memory). Kept nullable for defense; new code
    * reads/writes memories, never this. Still indexed by search if present.

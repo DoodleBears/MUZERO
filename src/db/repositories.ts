@@ -489,15 +489,41 @@ export interface PendingReferencedNcmMetadataTrack {
   sourcePath: string;
 }
 
+/**
+ * After this many failed hydration attempts (one per launch) a referenced `.ncm` track is
+ * dropped from the pending set, so a permanently-undecodable / moved file stops re-reading
+ * the whole file on every launch (the metadata, once it lands, persists and converges; this
+ * bounds the FAILURE path that never converges). Re-importing the folder resets the count.
+ */
+const MAX_NCM_HYDRATION_ATTEMPTS = 3;
+
 function isPendingReferencedNcmMetadataTrack(
   track: Track,
 ): track is Track & { sourcePath: string } {
   const sourcePath = track.sourcePath?.trim();
   if (!sourcePath || track.blobId || track.status !== "ready") return false;
+  if ((track.ncmHydrationFailures ?? 0) >= MAX_NCM_HYDRATION_ATTEMPTS) return false;
   const isNcm =
     track.mediaMetadata?.originalExtension?.toLowerCase() === "ncm" || /\.ncm$/i.test(sourcePath);
   if (!isNcm) return false;
   return track.durationSec <= 0 || track.mediaMetadata?.parser === "manual";
+}
+
+/**
+ * Bump a referenced `.ncm` track's hydration-failure counter (called once per launch on a
+ * decode/read failure). Once it reaches {@link MAX_NCM_HYDRATION_ATTEMPTS} the track is no
+ * longer "pending" so it stops being re-read. A successful hydration sets `durationSec` and
+ * leaves the pending set anyway, so the counter only ever bounds the failing path.
+ */
+export async function recordNcmHydrationFailure(
+  trackId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  const track = await db.tracks.get(trackId);
+  if (!track) return;
+  await db.tracks.update(trackId, {
+    ncmHydrationFailures: (track.ncmHydrationFailures ?? 0) + 1,
+  });
 }
 
 /**

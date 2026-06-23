@@ -41,6 +41,7 @@ import {
   listGalleryImages,
   listGlobalSearchTracks,
   listMemories,
+  listPendingReferencedNcmMetadataTracks,
   listReferencedLocalFileAccessGrants,
   listReferencedLocalFileSourcePaths,
   listTrackBackgrounds,
@@ -48,6 +49,7 @@ import {
   memoryNotesByTrack,
   playQueueSet,
   prependTrackIds,
+  recordNcmHydrationFailure,
   removeImportFolder,
   removeTracksFromSession,
   resetAllShortcuts,
@@ -750,6 +752,63 @@ describe("createUploadedTrack", () => {
     expect(grants.folderPaths).toEqual(["D:/music/recursive"]);
     expect(new Set(grants.filePaths)).toEqual(
       new Set(["D:/music/flat/top.mp3", "D:/loose/drop.mp3"]),
+    );
+  });
+
+  it("drops a referenced .ncm track from the pending set after the failed-hydration cap", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createReferencedUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "song.ncm",
+        kind: "audio",
+        mime: "",
+        durationSec: 0,
+        sourcePath: "D:/music/song.ncm",
+      },
+      db,
+    );
+    const pendingIds = async () =>
+      (await listPendingReferencedNcmMetadataTracks(db)).map((t) => t.id);
+
+    // Pending until its metadata lands (the file is re-read each launch to hydrate it).
+    expect(await pendingIds()).toContain(track.id);
+    // Each failed launch ticks the counter; below the cap it stays pending (still retried).
+    await recordNcmHydrationFailure(track.id, db);
+    await recordNcmHydrationFailure(track.id, db);
+    expect(await pendingIds()).toContain(track.id);
+    // At the cap it drops out — a permanently-undecodable file stops re-reading every launch.
+    await recordNcmHydrationFailure(track.id, db);
+    expect(await pendingIds()).not.toContain(track.id);
+    expect((await db.tracks.get(track.id))?.ncmHydrationFailures).toBe(3);
+  });
+
+  it("a hydrated .ncm track leaves the pending set despite earlier failures", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createReferencedUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "ok.ncm",
+        kind: "audio",
+        mime: "",
+        durationSec: 0,
+        sourcePath: "D:/music/ok.ncm",
+      },
+      db,
+    );
+    await recordNcmHydrationFailure(track.id, db); // one transient failure
+    // Metadata lands (real duration + a non-"manual" parser) → no longer pending.
+    await db.tracks.update(track.id, {
+      durationSec: 180,
+      mediaMetadata: {
+        originalMime: "audio/flac",
+        parser: "music-metadata",
+        parsedAt: Date.now(),
+        title: "OK",
+      },
+    });
+    expect((await listPendingReferencedNcmMetadataTracks(db)).map((t) => t.id)).not.toContain(
+      track.id,
     );
   });
 
