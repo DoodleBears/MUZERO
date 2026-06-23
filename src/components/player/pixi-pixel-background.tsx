@@ -28,11 +28,6 @@ export type PixiBackgroundEffect =
   | "dot"
   | "noise";
 type BackgroundMediaType = "image" | "video";
-// The ambient background uses the ORIGINAL cover (not a 1024px downscale): now that the
-// Pixi background no longer samples the full video as a texture, the cover is just a small
-// static image, so full-res costs only a few MB and keeps the backdrop sharp. The bound is
-// only a safety ceiling against a pathologically huge user-uploaded cover.
-const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 4096;
 const BACKGROUND_TEXTURE_LOAD_DELAY_MS = 180;
 // Cover→cover crossfade duration: the incoming cover fades in as a 2nd sprite under the
 // SAME resident filter, so the effect is preserved throughout and covers dissolve instead
@@ -298,15 +293,15 @@ async function loadBackgroundMedia(
   // Prefer an ImageBitmap texture source: createImageBitmap decodes off the main
   // thread and Pixi uploads the ImageBitmap directly — no "Image element passed,
   // converting to canvas and replacing resource" main-thread copy on the landing
-  // frame (PRD Phase 4). Phase 15 also caps only this ambient background bitmap;
-  // stage art / coverflow keep their original source quality.
+  // frame (PRD Phase 4). The ambient background now uses the ORIGINAL cover at full
+  // resolution (no cap) — it no longer samples the full video as a texture, so the cover
+  // is just a small static image and full-res costs only a few MB.
   const bitmap = await loadImageBitmapSource(src, {
     createImageBitmap:
       typeof createImageBitmap === "function"
         ? (blob, options) => createImageBitmap(blob, options)
         : undefined,
     fetchBlob: fetchTextureBlob,
-    maxDimension: BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION,
     onStage: (stage, context) =>
       bgTextureLog.debug(stage, {
         ...context,
