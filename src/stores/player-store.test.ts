@@ -836,9 +836,14 @@ describe("player-store playback resume", () => {
 
     await usePlayerStore.getState().playIndex(1);
 
-    await waitFor(async () => {
-      await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 1 });
-    });
+    // Cursor persistence is debounced 900ms; waitFor's 1000ms default leaves no slack
+    // under the full parallel suite (timer drift + fake-IndexedDB write) → bump it.
+    await waitFor(
+      async () => {
+        await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 1 });
+      },
+      { timeout: 2500 },
+    );
   });
 
   it("coalesces rapid queue cursor persistence to the final picked track", async () => {
@@ -852,9 +857,13 @@ describe("player-store playback resume", () => {
     await usePlayerStore.getState().playIndex(1);
 
     await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 0 });
-    await waitFor(async () => {
-      await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 1 });
-    });
+    // 900ms debounce needs headroom over waitFor's 1000ms default (see above).
+    await waitFor(
+      async () => {
+        await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 1 });
+      },
+      { timeout: 2500 },
+    );
   });
 
   it("persists the volume when the user changes it", async () => {
