@@ -116,10 +116,40 @@ canvases** (spectrum + flow + blur background).
 | GPU-proc private | 1165 MB | video frames + cover textures + Chromium GPU baseline, **not** the canvases (~10 MB each) |
 
 **Lever check:** flow-off + spectrum-off → no gpu3d change; capping canvas DPR saves ~16 MB
-(negligible vs 1.16 GB). The GPU/memory is the enabled effect stack (video + spectrum + flow +
-blur, all user-on) + the decode pipeline — no UX-invariant lever. A user-opt-in "reduce GPU /
-power-saver" (lower decorative DPR + fewer effect layers) is the only further move, and it
-trades visible quality, so it needs the user's call, not a silent change.
+(negligible vs 1.16 GB). At this point GPU/memory looked like the inherent enabled-effect
+stack with no UX-invariant lever.
+
+**CORRECTION (found via the redesign below):** there WAS a big hidden lever — the Pixi
+cover-effect background was sampling the **full `track-video` as a texture** (a second video
+pipeline on top of the foreground decode), which is most of the ~240 MB "Pixi" VRAM. The
+foreground-cover redesign makes the single `<video>` the only video and forces Pixi to the
+small cover image, cutting VRAM ~970 → ~520 MB on the same track — no visible change. See
+"Video display redesign" below.
+
+## Video display redesign (foreground always cover; video → background) + VRAM
+
+User-driven architecture change, implemented in 3 commits:
+1. **MediaEngine video-decode control** (`setVideoEnabled`): a video file shown as a cover
+   plays audio-only — the `<video>` element is detached so it never decodes. Measured:
+   switching to cover mode drops GPU-video **31%→2%** (audio uninterrupted).
+2. **Foreground always cover; video → immersive background** (`NowPlayingVideoBackdrop`):
+   the cover-flow card always shows the cover; `displayMode` moves the single shared
+   `<video>` full-bleed into the background. The Pixi cover-effect background is forced to
+   the **cover image** (was sampling the full `track-video` → a second decode that even ran
+   in cover mode). Cover-mode GPU-video **17%→2.9%** (no decode bursts).
+3. **Skip the occluded cover-effect background** under the video backdrop (unmounts Pixi).
+
+**VRAM delta (same 1080p MV, dedicated GPU memory, harness):**
+
+| | before redesign | after |
+|---|---|---|
+| video mode | ~970 MB | **506 MB** |
+| cover mode | ~970 MB | **545 MB** |
+
+Most of the drop is the Pixi background no longer holding the **full video as a texture**
+(it now uses the ~1024px cover), plus the single-decode + occlusion skip. Verified by
+screenshots: video mode = cover card + live video backdrop + spectrum/lyrics; cover mode =
+cover card + cover background; both pixel-correct, audio uninterrupted. 48 specs pass.
 
 ## Summary
 
