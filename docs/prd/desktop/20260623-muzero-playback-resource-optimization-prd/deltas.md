@@ -48,6 +48,22 @@ import); playback unaffected (アイドル MV still decodes, `gpuVid` active); m
 **Tunable:** raise pacing / drop concurrency to 1 to smooth the residual ~35–63 MB/s drain
 bursts further, at the cost of slower metadata fill-in. 700 ms/2 chosen as the balance.
 
+### Phase 1b — playing-aware backoff
+
+Hydration still adds background read during its (one-time) drain, which overlaps with
+listening. Make the pump pacing **playback-aware**: 2500 ms while `isPlaying`, 700 ms when
+idle/paused (`NCM_METADATA_HYDRATION_PACING_PLAYING_MS`). Still progresses during playback —
+just slower — so nothing the user sees changes; the listening session just stays quiet.
+
+| read during drain | before 1b | after 1b |
+|---|---|---|
+| **while playing** (user's scenario) | ~30–50 MB/s | **16.8 MB/s** |
+| idle/paused (drains to converge) | ~23–35 MB/s | 35.4 MB/s (faster) |
+
+Net for the reported "108 MB/s while playing": **108 → ~17 MB/s during drain → ~7 once
+converged** (−84% → −94%). folder-sync specs still pass (test mode short-circuits before the
+store read).
+
 **Note (follow-up):** genuinely failing `.ncm` hydrations (`ncm.lazy.fail`) stay pending and
 re-queue next launch; pacing keeps that gentle, but a durable "attempted/failed" marker would
 stop the re-scan entirely. Out of scope for this pass.

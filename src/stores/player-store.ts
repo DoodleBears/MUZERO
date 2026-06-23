@@ -3021,6 +3021,10 @@ const NCM_METADATA_HYDRATION_CONCURRENCY = 2;
 // covers still fill in) while capping sustained read throughput. 0 in tests keeps the
 // queue synchronous so existing folder-sync specs don't need fake timers.
 const NCM_METADATA_HYDRATION_PACING_MS = import.meta.env?.MODE === "test" ? 0 : 700;
+// Back off harder while the user is actively listening so background healing never
+// competes with the playback session's disk I/O; the idle pacing above drains faster
+// once paused/stopped. Still progresses during playback, just slower.
+const NCM_METADATA_HYDRATION_PACING_PLAYING_MS = 2500;
 const NCM_METADATA_PATCH_FLUSH_SIZE = 50;
 const NCM_METADATA_PATCH_FLUSH_DELAY_MS = 250;
 const pendingNcmHydrations: LazyNcmHydrationJob[] = [];
@@ -3066,10 +3070,18 @@ function scheduleLazyNcmMetadataPump(): void {
     pumpLazyNcmMetadataHydrations();
     return;
   }
+  // Yield harder while playing so hydration I/O never competes with the listening
+  // session; fall back to the idle pacing when the store isn't ready / not playing.
+  let pacing = NCM_METADATA_HYDRATION_PACING_MS;
+  try {
+    if (usePlayerStore.getState().isPlaying) pacing = NCM_METADATA_HYDRATION_PACING_PLAYING_MS;
+  } catch {
+    /* store not initialised yet — idle pacing is fine */
+  }
   ncmHydrationPumpTimer = globalThis.setTimeout(() => {
     ncmHydrationPumpTimer = null;
     pumpLazyNcmMetadataHydrations();
-  }, NCM_METADATA_HYDRATION_PACING_MS);
+  }, pacing);
 }
 
 function pumpLazyNcmMetadataHydrations(): void {
