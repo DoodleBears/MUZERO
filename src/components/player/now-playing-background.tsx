@@ -503,7 +503,11 @@ function NowPlayingBackgroundContent({
 
   return (
     <>
-      {useControllerBlur ? (
+      {/* The cover-effect background (Pixi / blur / image) sits BELOW the full-bleed
+          video backdrop. When the backdrop is active it's fully occluded, so skip it
+          entirely — this unmounts the Pixi WebGL renderer (~240 MB VRAM) with no visual
+          change, since the opaque video covers exactly this layer. */}
+      {videoBackdropActive ? null : useControllerBlur ? (
         // The whole cover group composites at ONE opacity (COVER_GROUP_OPACITY = 1,
         // full), with each layer at full opacity inside it. A crossfade then stays
         // fully opaque throughout — the top cover fully covers the base — so there's
