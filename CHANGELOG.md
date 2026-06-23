@@ -2,6 +2,24 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.4.2 — 2026-06-23 · Cooler playback for big local libraries
+
+A performance and release-polish update for desktop listening. MUZERO now treats lazy .ncm metadata work as a gentle background trickle instead of a disk storm, backs it off further while music is playing, and remembers files that cannot be decoded so they are not re-read on every launch. Video playback is lighter too: the cover stays in the foreground, live video moves to the immersive background, cover mode stops decoding the hidden video stream, and occluded Pixi layers are skipped. Desktop auto-updates now appear in the same notification stack as downloads, with progress and a restart action, and release feeds point at the correct versioned installer paths.
+
+### Highlights
+- **player** Playback no longer fights background .ncm scanning — Large libraries with many referenced NetEase .ncm files no longer hammer the disk at launch or while a song is playing. Metadata hydration is paced, slowed further during playback, and failed decodes are marked durably so the same unreadable file is not re-opened on every start. _(desktop)_
+
+### Added
+- **app** Desktop updates join the notification stack — When an auto-update is found or downloading, MUZERO now shows it beside download and playback activity with a real progress bar. Once the installer is ready, the notification stays visible and offers a restart-to-update action. _(desktop)_
+
+### Changed
+- **player** Video tracks use one live video path — Now Playing keeps the cover card in the foreground and moves the live video into the immersive background. The Pixi cover-effect background no longer samples the full video as a texture, and fully covered background layers are skipped, cutting duplicate video work without changing the look.
+- **player** Cover mode stops hidden video decoding — A video track shown as a cover now plays audio through the audio driver while the muted visual video element is detached. That frees decode surfaces and VRAM immediately, then resumes the visual layer when you switch back to video mode.
+- **visualizer** Sharper ambient cover backgrounds — The ambient Pixi background now uses the original cover image instead of a small downscaled derivative, so pixel, noise, CRT, and related cover effects stay sharper and avoid an extra thumbnail-generation pass.
+
+### Fixed
+- **app** Updater feeds point at the right installers — Release publishing now rewrites electron-builder update feeds so their file references include the version folder. Auto-update downloads no longer 404 after a correctly published release. _(desktop)_
+
 ## v1.4.1 — 2026-06-23 · Playback that does exactly what you see
 
 A refinement release built around one idea: the queue you see is the queue that plays. Songs now play from the playlist you're actually viewing — not wherever they were first saved — and the visible queue is the real play order, shuffle included, so 'play next' and song requests land exactly where you expect and your queue survives a restart. Background progress for downloads, song loading, and syncing collapses into a single notification stack with real, cancelable progress. Search can now find Japanese songs by romaji (type 'sakura' to find 桜), cover art looks sharper, favlist / playlist downloads are sturdier, and several Now Playing and tab-switching glitches are fixed.

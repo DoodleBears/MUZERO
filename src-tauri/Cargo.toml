@@ -1,6 +1,6 @@
 [package]
 name = "muzero"
-version = "1.4.1"
+version = "1.4.2"
 description = "MUZERO — local-first AI DJ music player"
 authors = ["MUZERO"]
 edition = "2021"
