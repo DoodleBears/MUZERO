@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 过滤词汇（union+options）+ `resolveFilterScope` 仲裁器 + 菜单/pill 渲染 + 标签 i18n | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 过滤词汇（union+options）+ `resolveFilterScope` 仲裁器 + 菜单/pill 渲染 + 标签 i18n | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 作用域门控接线（@online 跳本地 worker / @local 切在线网络） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 本地媒体类型谓词（@Video/@Audio，worker `mediaKind`） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | placeholder/hint i18n + 完整 `make check` + 性能验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -293,20 +293,20 @@ searchGlobalLocalLibrary({
 
 ## 6. Implementation Plan
 
-### Phase 1: 过滤词汇 + `resolveFilterScope` 仲裁器 + 菜单/pill 渲染
+### Phase 1: 过滤词汇 + `resolveFilterScope` 仲裁器 + 菜单/pill 渲染 ✅
 
 **Goal:** `SearchFilter` 加 `online`/`local`/`video`/`audio` 四个 kind；`FILTER_OPTIONS` 加对应 4 项（别名 §4.1）；新增**纯函数仲裁器** `resolveFilterScope`（show* + mediaKind + runsLocalWorker，穷举单测）；`FilterPill`/`FilterMenu` 用共享 `filterLabel`/`FilterGlyph` 补图标与标签 + 标签 i18n（4 语言）。行为到「能选中、能 pill 化、能清除、标签/图标正确」；门控接线在 Phase 2/3。
 
 **Tasks:**
-- [ ] [`global-search-filter.ts`](../../../../src/lib/global-search-filter.ts)：扩 `SearchFilter` + `FilterOption.id` + `FILTER_OPTIONS` 4 项 + `resolveFilterScope` 仲裁器（`FilterScope`）。
-- [ ] [`global-track-search.tsx`](../../../../src/components/search/global-track-search.tsx)：抽出共享 `filterLabel(filter,t)` + `<FilterGlyph>`（pill 与菜单复用，消除 10-深嵌套三元）；新增 4 图标（Film/AudioLines/Library/Globe）。
-- [ ] i18n：4 语言新增 `globalSearch.filterVideo/filterAudio/filterLocal/filterOnline`。
+- [x] [`global-search-filter.ts`](../../../../src/lib/global-search-filter.ts)：扩 `SearchFilter` + `FilterOption.id` + `FILTER_OPTIONS` 4 项 + `resolveFilterScope` 仲裁器（`FilterScope`）。
+- [x] [`global-track-search.tsx`](../../../../src/components/search/global-track-search.tsx)：抽出共享 `filterLabel(filter,t)` + `<FilterGlyph>`（pill 与菜单复用，消除 10-深嵌套三元）；新增 4 图标（Film/AudioLines/Library/Globe）。
+- [x] i18n：4 语言新增 `globalSearch.filterVideo/filterAudio/filterLocal/filterOnline`。
 
 ### Phase 1 Checklist
-- [ ] `@online`/`@local`/`@video`/`@audio`（含 CJK 别名 + 大写 `@Video`/`@Audio`）可在菜单出现、选中、pill 化。
-- [ ] 既有 `@track`/`@set`/`@source` 行为零回归（`resolveFilterScope` 单测对照旧 `showOnline` 仅 null/source 行为）。
-- [ ] `global-search-filter.test.ts` 覆盖 4 个新别名 + `resolveFilterScope` 全 kind（22 passed）。
-- [ ] `pnpm typecheck` + `biome check`（改动文件）通过。
+- [x] `@online`/`@local`/`@video`/`@audio`（含 CJK 别名 + 大写 `@Video`/`@Audio`）可在菜单出现、选中、pill 化。
+- [x] 既有 `@track`/`@set`/`@source` 行为零回归（`resolveFilterScope` 单测对照旧 `showOnline` 仅 null/source 行为）。
+- [x] `global-search-filter.test.ts` 覆盖 4 个新别名 + `resolveFilterScope` 全 kind（22 passed）。
+- [x] `pnpm typecheck` + `biome check`（改动文件）通过。
 
 ### Phase 2: 作用域门控接线（@online / @local）
 

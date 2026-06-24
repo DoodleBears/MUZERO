@@ -99,7 +99,11 @@
     "onlineSetName": "온라인",
     "enableOnline": "온라인 검색:",
     "linkResult": "링크에서",
-    "linkNotFound": "링크를 확인할 수 없습니다"
+    "linkNotFound": "링크를 확인할 수 없습니다",
+    "filterVideo": "영상",
+    "filterAudio": "오디오",
+    "filterLocal": "로컬",
+    "filterOnline": "온라인"
   },
   "download": {
     "setName": "다운로드",

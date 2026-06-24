@@ -99,7 +99,11 @@
     "onlineSetName": "オンライン",
     "enableOnline": "オンライン検索:",
     "linkResult": "リンクから",
-    "linkNotFound": "リンクを解決できませんでした"
+    "linkNotFound": "リンクを解決できませんでした",
+    "filterVideo": "動画",
+    "filterAudio": "音声",
+    "filterLocal": "ローカル",
+    "filterOnline": "オンライン"
   },
   "download": {
     "setName": "ダウンロード",

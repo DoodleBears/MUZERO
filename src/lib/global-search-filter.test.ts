@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchFilterOptions, parseMention } from "./global-search-filter";
+import { matchFilterOptions, parseMention, resolveFilterScope } from "./global-search-filter";
 
 describe("parseMention", () => {
   it("is inactive for empty input and plain text", () => {
@@ -44,6 +44,10 @@ describe("matchFilterOptions", () => {
       "lyrics",
       "artist",
       "album",
+      "video",
+      "audio",
+      "local",
+      "online",
       "bili",
       "netease",
       "youtube",
@@ -81,8 +85,27 @@ describe("matchFilterOptions", () => {
     expect(matchFilterOptions("qq音乐").map((o) => o.id)).toEqual(["qq"]);
   });
 
-  it("is case-insensitive", () => {
+  it("prefix-matches the new scope + media-kind aliases (latin)", () => {
+    expect(matchFilterOptions("video").map((o) => o.id)).toEqual(["video"]);
+    expect(matchFilterOptions("mv").map((o) => o.id)).toEqual(["video"]);
+    expect(matchFilterOptions("audio").map((o) => o.id)).toEqual(["audio"]);
+    expect(matchFilterOptions("local").map((o) => o.id)).toEqual(["local"]);
+    expect(matchFilterOptions("library").map((o) => o.id)).toEqual(["local"]);
+    expect(matchFilterOptions("online").map((o) => o.id)).toEqual(["online"]);
+  });
+
+  it("prefix-matches the new scope + media-kind aliases (CJK)", () => {
+    expect(matchFilterOptions("视频").map((o) => o.id)).toEqual(["video"]);
+    expect(matchFilterOptions("影片").map((o) => o.id)).toEqual(["video"]);
+    expect(matchFilterOptions("音频").map((o) => o.id)).toEqual(["audio"]);
+    expect(matchFilterOptions("本地").map((o) => o.id)).toEqual(["local"]);
+    expect(matchFilterOptions("在线").map((o) => o.id)).toEqual(["online"]);
+  });
+
+  it("is case-insensitive (incl. capitalized @Video / @Audio)", () => {
     expect(matchFilterOptions("ALB").map((o) => o.id)).toEqual(["album"]);
+    expect(matchFilterOptions("Video").map((o) => o.id)).toEqual(["video"]);
+    expect(matchFilterOptions("Audio").map((o) => o.id)).toEqual(["audio"]);
   });
 
   it("respects a pre-filtered option list (e.g. no sources off-desktop)", () => {
@@ -97,5 +120,84 @@ describe("matchFilterOptions", () => {
 
   it("returns nothing for an unmatched partial", () => {
     expect(matchFilterOptions("zzz")).toEqual([]);
+  });
+});
+
+describe("resolveFilterScope", () => {
+  it("shows every section (local + online) with no filter", () => {
+    const scope = resolveFilterScope(null, true);
+    expect(scope).toMatchObject({
+      showSets: true,
+      showTracks: true,
+      showAlbums: true,
+      showArtists: true,
+      showOnline: true,
+      runsLocalWorker: true,
+    });
+    expect(scope.mediaKind).toBeUndefined();
+  });
+
+  it("drops online when streaming is unsupported, even with no filter", () => {
+    expect(resolveFilterScope(null, false).showOnline).toBe(false);
+  });
+
+  it("@online: online only, skips the local worker", () => {
+    const scope = resolveFilterScope({ kind: "online" }, true);
+    expect(scope).toMatchObject({
+      showSets: false,
+      showTracks: false,
+      showAlbums: false,
+      showArtists: false,
+      showOnline: true,
+      runsLocalWorker: false,
+    });
+  });
+
+  it("@local: all local sections, cuts online network", () => {
+    const scope = resolveFilterScope({ kind: "local" }, true);
+    expect(scope).toMatchObject({
+      showSets: true,
+      showTracks: true,
+      showAlbums: true,
+      showArtists: true,
+      showOnline: false,
+      runsLocalWorker: true,
+    });
+    expect(scope.mediaKind).toBeUndefined();
+  });
+
+  it("@video / @audio: local songs only, kind predicate, no online", () => {
+    const video = resolveFilterScope({ kind: "video" }, true);
+    expect(video).toMatchObject({
+      showSets: false,
+      showTracks: true,
+      showAlbums: false,
+      showArtists: false,
+      showOnline: false,
+      runsLocalWorker: true,
+      mediaKind: "video",
+    });
+    expect(resolveFilterScope({ kind: "audio" }, true).mediaKind).toBe("audio");
+  });
+
+  it("@source (e.g. @bili): one online source, skips the local worker", () => {
+    const scope = resolveFilterScope({ kind: "source", source: "bili" }, true);
+    expect(scope.showOnline).toBe(true);
+    expect(scope.runsLocalWorker).toBe(false);
+    expect(scope.showTracks).toBe(false);
+  });
+
+  it("preserves existing facet behavior (@track shows only the songs section, no online)", () => {
+    // Mirrors the original gating: online showed only for `null` / `source`, so a
+    // local facet like @track suppresses the online section.
+    const scope = resolveFilterScope({ kind: "track" }, true);
+    expect(scope).toMatchObject({
+      showSets: false,
+      showTracks: true,
+      showAlbums: false,
+      showArtists: false,
+      showOnline: false,
+      runsLocalWorker: true,
+    });
   });
 });

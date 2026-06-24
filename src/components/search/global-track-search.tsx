@@ -1,9 +1,13 @@
 import { useLiveQuery } from "dexie-react-hooks";
+import type { TFunction } from "i18next";
 import {
+  AudioLines,
   Captions,
   CornerDownLeft,
   Download,
+  Film,
   Globe,
+  Library,
   ListMusic,
   ListPlus,
   Music,
@@ -81,6 +85,65 @@ const SOURCE_LABEL: Partial<Record<StreamSourceId, string>> = {
   youtube: "YouTube",
   qq: "QQ 音乐",
 };
+
+/** Display label for a filter — shared by the active pill and the `@` menu. */
+function filterLabel(filter: SearchFilter, t: TFunction): string {
+  switch (filter.kind) {
+    case "source":
+      return SOURCE_LABEL[filter.source] ?? filter.source;
+    case "track":
+      return t("globalSearch.songs");
+    case "set":
+      return t("gallery.modeSets");
+    case "lyrics":
+      return t("dock.lyrics");
+    case "artist":
+      return t("gallery.modeArtists");
+    case "album":
+      return t("gallery.modeAlbums");
+    case "video":
+      return t("globalSearch.filterVideo");
+    case "audio":
+      return t("globalSearch.filterAudio");
+    case "local":
+      return t("globalSearch.filterLocal");
+    case "online":
+      return t("globalSearch.filterOnline");
+  }
+}
+
+/** Glyph for a filter kind — shared by the pill (smaller) and the `@` menu. */
+function FilterGlyph({
+  filter,
+  iconClass,
+  discSize,
+}: {
+  filter: SearchFilter;
+  iconClass: string;
+  discSize: number;
+}) {
+  switch (filter.kind) {
+    case "track":
+      return <Music className={iconClass} />;
+    case "set":
+      return <ListMusic className={iconClass} />;
+    case "lyrics":
+      return <Captions className={iconClass} />;
+    case "album":
+      return <Disc3Icon size={discSize} />;
+    case "artist":
+      return <User className={iconClass} />;
+    case "video":
+      return <Film className={iconClass} />;
+    case "audio":
+      return <AudioLines className={iconClass} />;
+    case "local":
+      return <Library className={iconClass} />;
+    case "source":
+    case "online":
+      return <Globe className={iconClass} />;
+  }
+}
 
 const EMPTY_TRACKS: Track[] = [];
 const EMPTY_TRACK_BY_ID = new Map<string, Track>();
@@ -904,34 +967,10 @@ function GlobalSetRow({
 /** The active `@` scope, shown as a removable pill left of the input. */
 function FilterPill({ filter, onClear }: { filter: SearchFilter; onClear: () => void }) {
   const { t } = useTranslation();
-  const label =
-    filter.kind === "source"
-      ? (SOURCE_LABEL[filter.source] ?? filter.source)
-      : filter.kind === "track"
-        ? t("globalSearch.songs")
-        : filter.kind === "set"
-          ? t("gallery.modeSets")
-          : filter.kind === "lyrics"
-            ? t("dock.lyrics")
-            : filter.kind === "artist"
-              ? t("gallery.modeArtists")
-              : t("gallery.modeAlbums");
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary bg-accent px-2 py-0.5 text-foreground text-xs">
-      {filter.kind === "track" ? (
-        <Music className="size-3.5" />
-      ) : filter.kind === "set" ? (
-        <ListMusic className="size-3.5" />
-      ) : filter.kind === "lyrics" ? (
-        <Captions className="size-3.5" />
-      ) : filter.kind === "album" ? (
-        <Disc3Icon size={13} />
-      ) : filter.kind === "artist" ? (
-        <User className="size-3.5" />
-      ) : (
-        <Globe className="size-3.5" />
-      )}
-      {label}
+      <FilterGlyph filter={filter} iconClass="size-3.5" discSize={13} />
+      {filterLabel(filter, t)}
       <button
         type="button"
         onClick={onClear}
@@ -957,14 +996,6 @@ function FilterMenu({
   onSelect: (opt: FilterOption) => void;
 }) {
   const { t } = useTranslation();
-  const labelFor = (opt: FilterOption): string => {
-    if (opt.id === "track") return t("globalSearch.songs");
-    if (opt.id === "set") return t("gallery.modeSets");
-    if (opt.id === "lyrics") return t("dock.lyrics");
-    if (opt.id === "artist") return t("gallery.modeArtists");
-    if (opt.id === "album") return t("gallery.modeAlbums");
-    return opt.filter.kind === "source" ? (SOURCE_LABEL[opt.filter.source] ?? opt.id) : opt.id;
-  };
   return (
     <div className="absolute inset-x-3 top-full z-20 mt-1 overflow-hidden rounded-xl border border-white/12 bg-popover/95 p-1 shadow-2xl ring-1 ring-black/10">
       <p className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wide">
@@ -985,20 +1016,8 @@ function FilterMenu({
             i === index ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
           )}
         >
-          {opt.id === "track" ? (
-            <Music className="size-4 text-muted-foreground" />
-          ) : opt.id === "set" ? (
-            <ListMusic className="size-4 text-muted-foreground" />
-          ) : opt.id === "lyrics" ? (
-            <Captions className="size-4 text-muted-foreground" />
-          ) : opt.id === "artist" ? (
-            <User className="size-4 text-muted-foreground" />
-          ) : opt.id === "album" ? (
-            <Disc3Icon size={16} />
-          ) : (
-            <Globe className="size-4 text-muted-foreground" />
-          )}
-          <span>{labelFor(opt)}</span>
+          <FilterGlyph filter={opt.filter} iconClass="size-4 text-muted-foreground" discSize={16} />
+          <span>{filterLabel(opt.filter, t)}</span>
         </button>
       ))}
     </div>

@@ -7,20 +7,44 @@
  * copy, mirroring `library-index` → `entity-labels`).
  */
 
-import type { StreamSourceId } from "@/db/types";
+import type { StreamSourceId, TrackKind } from "@/db/types";
 
-/** A chosen scope. `source` forces an ad-hoc search of one online source. */
+/**
+ * A chosen scope. The overlay keeps this SINGLE-SELECT (one filter at a time).
+ * - facet (`track`/`set`/`lyrics`/`artist`/`album`): narrow to one local section.
+ * - `source`: ad-hoc search of one online source.
+ * - `online` / `local`: scope axis — online-only vs local-only.
+ * - `video` / `audio`: LOCAL media-kind — narrow local songs by `Track.kind`
+ *   (never affects online; see the scope-media-filters PRD).
+ */
 export type SearchFilter =
   | { kind: "track" }
   | { kind: "set" }
   | { kind: "lyrics" }
   | { kind: "artist" }
   | { kind: "album" }
-  | { kind: "source"; source: StreamSourceId };
+  | { kind: "source"; source: StreamSourceId }
+  | { kind: "online" }
+  | { kind: "local" }
+  | { kind: "video" }
+  | { kind: "audio" };
 
 export interface FilterOption {
   /** Stable id (menu key + label switch). */
-  id: "track" | "set" | "lyrics" | "artist" | "album" | "bili" | "netease" | "youtube" | "qq";
+  id:
+    | "track"
+    | "set"
+    | "lyrics"
+    | "artist"
+    | "album"
+    | "video"
+    | "audio"
+    | "local"
+    | "online"
+    | "bili"
+    | "netease"
+    | "youtube"
+    | "qq";
   /** The filter this option produces when chosen. */
   filter: SearchFilter;
   /** Latin + CJK aliases (lowercased) the `@token` prefix-matches against. */
@@ -54,6 +78,29 @@ export const FILTER_OPTIONS: FilterOption[] = [
     aliases: ["artist", "artists", "ar", "歌手", "singer"],
   },
   { id: "album", filter: { kind: "album" }, aliases: ["album", "albums", "al", "专辑"] },
+  // Media-kind (LOCAL only) — narrow local songs by Track.kind. `@Video` / `@Audio`
+  // are case-insensitive (matched lowercased), so the capitalized forms work too.
+  {
+    id: "video",
+    filter: { kind: "video" },
+    aliases: ["video", "videos", "mv", "视频", "影片", "影像"],
+  },
+  {
+    id: "audio",
+    filter: { kind: "audio" },
+    aliases: ["audio", "sound", "music", "音频", "音乐", "声音"],
+  },
+  // Scope axis — local-only vs online-only.
+  {
+    id: "local",
+    filter: { kind: "local" },
+    aliases: ["local", "library", "device", "本地", "本机", "离线"],
+  },
+  {
+    id: "online",
+    filter: { kind: "online" },
+    aliases: ["online", "web", "stream", "在线", "线上", "网络"],
+  },
   {
     id: "bili",
     filter: { kind: "source", source: "bili" },
@@ -116,4 +163,51 @@ export function matchFilterOptions(
   return options.filter((opt) =>
     opt.aliases.some((alias) => alias.toLowerCase().startsWith(needle)),
   );
+}
+
+/**
+ * Which sections + worker/online the active (single-select) filter permits — the
+ * one arbiter the overlay reads (mirrors `resolveStageContent` / `resolveFlowColors`).
+ * Pure + exhaustively unit-tested so the gating never drifts across the heavy component.
+ *
+ * - `runsLocalWorker`: false for `online` / `source` (online-only) and `lyrics`
+ *   (its own full-text path) — so the overlay can skip `db.tracks.toArray()`.
+ * - `showOnline`: requires streaming support; false for every local-scoped filter
+ *   (`local` / `video` / `audio`) so the online network hook gets an empty query.
+ * - `mediaKind`: only `video` / `audio` — pushed into the local worker as a `Track.kind`
+ *   predicate. LOCAL only; online results are never kind-filtered.
+ */
+export interface FilterScope {
+  showSets: boolean;
+  showTracks: boolean;
+  showLyrics: boolean;
+  showAlbums: boolean;
+  showArtists: boolean;
+  showOnline: boolean;
+  /** Local-worker media-kind predicate (`@video` / `@audio` only). */
+  mediaKind?: TrackKind;
+  /** Whether the local library worker should run for this filter at all. */
+  runsLocalWorker: boolean;
+}
+
+export function resolveFilterScope(
+  filter: SearchFilter | null,
+  streamingSupported: boolean,
+): FilterScope {
+  const kind = filter?.kind ?? null;
+  // Local sections that participate in the kind concept narrow to songs only for
+  // `@video` / `@audio`; `@local` shows every local section; facets show their own.
+  const isMediaKind = kind === "video" || kind === "audio";
+  const isLocalScope = kind === "local";
+  const localAll = kind === null || isLocalScope;
+  return {
+    showSets: localAll || kind === "set",
+    showTracks: localAll || kind === "track" || isMediaKind,
+    showLyrics: kind === "lyrics",
+    showAlbums: localAll || kind === "album",
+    showArtists: localAll || kind === "artist",
+    showOnline: streamingSupported && (kind === null || kind === "online" || kind === "source"),
+    mediaKind: kind === "video" ? "video" : kind === "audio" ? "audio" : undefined,
+    runsLocalWorker: kind !== "online" && kind !== "source" && kind !== "lyrics",
+  };
 }

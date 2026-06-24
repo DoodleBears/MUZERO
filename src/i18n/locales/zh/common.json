@@ -99,7 +99,11 @@
     "onlineSetName": "在线",
     "enableOnline": "在线搜索:",
     "linkResult": "来自链接",
-    "linkNotFound": "无法解析该链接"
+    "linkNotFound": "无法解析该链接",
+    "filterVideo": "视频",
+    "filterAudio": "音频",
+    "filterLocal": "本地",
+    "filterOnline": "在线"
   },
   "download": {
     "setName": "下载",

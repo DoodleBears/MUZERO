@@ -106,7 +106,11 @@
     "onlineSetName": "Online",
     "enableOnline": "Online search:",
     "linkResult": "From link",
-    "linkNotFound": "Couldn't resolve that link"
+    "linkNotFound": "Couldn't resolve that link",
+    "filterVideo": "Video",
+    "filterAudio": "Audio",
+    "filterLocal": "Local",
+    "filterOnline": "Online"
   },
   "download": {
     "setName": "Downloads",
