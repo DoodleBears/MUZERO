@@ -97,6 +97,14 @@ export interface AudienceRequestRuntimeDeps {
   now?: () => number;
   getCurrentTrackId?: () => string | undefined | Promise<string | undefined>;
   getActiveSessionId?: () => string | undefined | Promise<string | undefined>;
+  /**
+   * Track ids of the LIVE play queue (the "current playlist" as the user sees it).
+   * Used by `active-set` scope when the context has no DjSession — online-playlist /
+   * system-playlist / entity / library all play without a `contextSetId`, so the only
+   * notion of "this playlist" is the play queue itself (GAP2). Falls back to the
+   * persisted `getPlayQueue` entries when not injected (e.g. unit tests).
+   */
+  getActiveQueueTrackIds?: () => string[] | Promise<string[]>;
   hasConfiguredOnlineSources?: (settings: AppSettings) => boolean;
   onlineFallback?: (
     input: OnlineAudienceRequestFallbackInput,
@@ -261,9 +269,20 @@ export function createAudienceRequestRuntime(
   async function tracksForScope(scope: AudienceRequestIntakeSettings["searchScope"]) {
     if (scope === "all-library") return listAllTracks(db);
     const activeSessionId = await resolveActiveSessionId();
-    if (!activeSessionId) return [];
-    const session = await getSession(activeSessionId, db);
-    return getTracksByIds(session?.trackIds ?? [], db);
+    if (activeSessionId) {
+      const session = await getSession(activeSessionId, db);
+      if (session) return getTracksByIds(session.trackIds, db);
+    }
+    // No DjSession context (online-playlist / system-playlist / entity / library) — the
+    // "current playlist" is the live play queue itself. Searching it keeps `active-set`
+    // working off-set instead of silently matching an empty set (GAP2).
+    return getTracksByIds(await resolveActiveQueueTrackIds(), db);
+  }
+
+  async function resolveActiveQueueTrackIds(): Promise<string[]> {
+    const injected = await deps.getActiveQueueTrackIds?.();
+    if (injected) return injected;
+    return (await getPlayQueue(db)).entries.map((entry) => entry.trackId);
   }
 
   async function resolveActiveSessionId(): Promise<string | undefined> {

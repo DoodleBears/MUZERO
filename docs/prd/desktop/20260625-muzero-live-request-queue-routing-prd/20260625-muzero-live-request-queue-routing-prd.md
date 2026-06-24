@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 0 | 排查（Investigation，本文档） | ✅ Completed | [本节](#3-investigation-findings排查结论) |
-| 1 | active-set 搜索域覆盖非-set 上下文（online / system / entity） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | active-set 搜索域覆盖非-set 上下文（online / system / entity） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 三种「曲子来源」语义统一 + online 命中始终落「点歌歌单」 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 空闲态起播 + 不可播提示 + 切换竞态兜底与可观测 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -234,21 +234,22 @@ runtime 的 `currentTrackId()`（用于 `avoidCurrentTrackId`，避免把「正�
 
 > **不在范围**：单曲循环吞点歌（by design，Q1 不修，见 §3.2）。
 
-### Phase 1: active-set 搜索域覆盖非-set 上下文（GAP 2，HIGH）
+### Phase 1: active-set 搜索域覆盖非-set 上下文（GAP 2，HIGH）✅
 
 **Goal:** 「当前歌单」搜索域在 online-playlist / system-playlist / entity / library 上下文也能搜到当前在播曲目；同时（Q4）让 runtime 用真实 store 光标解析当前 trackId。
 
 **Tasks:**
-- [ ] runtime 注入 `getActiveQueueTrackIds()`（来自 `getPlayQueue(db).entries` 或 store），`tracksForScope("active-set")` 在无 `contextSetId` 时回退到 live 队列曲目（[`audience-request-runtime.ts:261`](../../../../src/live-requests/audience-request-runtime.ts)）。
-- [ ] 同批注入 `getCurrentTrackId`（真实 store 光标），`avoidCurrentTrackId` 不再读滞后 DB 光标（Q4）。
-- [ ] 控制器单例补注入（[`live-request-controller.ts:258`](../../../../src/live-requests/live-request-controller.ts)），保持单测不注时走 DB 回退。
-- [ ] 单测：online-playlist 上下文 active-set 命中队列内曲；set 上下文行为不变；avoidCurrent 用真实光标。
+- [x] runtime 注入 `getActiveQueueTrackIds()`（来自 `getPlayQueue(db).entries` 或 store），`tracksForScope("active-set")` 在无 `contextSetId` 时回退到 live 队列曲目（[`audience-request-runtime.ts`](../../../../src/live-requests/audience-request-runtime.ts) `tracksForScope` / `resolveActiveQueueTrackIds`）。
+- [x] 同批注入 `getCurrentTrackId`（真实 store 光标），`avoidCurrentTrackId` 不再读滞后 DB 光标（Q4）。
+- [x] 控制器单例补注入（[`live-request-controller.ts`](../../../../src/live-requests/live-request-controller.ts) `ensureSingleton`：`getActiveQueueTrackIds`/`getCurrentTrackId` 来自 store），保持单测不注时走 DB 回退。
+- [x] 单测：online-playlist 上下文 active-set 命中队列内曲（DB 回退 + 注入路径）；set 上下文行为不变；controller 透传到默认 runtime。
 
 ### Phase 1 Checklist
-- [ ] online 歌单 + active-set 域：点队列内曲能命中本地（不再误走联网）
-- [ ] system-playlist / entity / library 上下文同样命中
-- [ ] 默认 all-library 路径无回归
-- [ ] 切歌后避让的是真正的「当前曲」
+- [x] online 歌单 + active-set 域：点队列内曲能命中本地（不再误走联网）
+- [x] system-playlist / entity / library 上下文同样命中（同一非-set 回退路径）
+- [x] 默认 all-library 路径无回归（16 runtime + 15 controller 测试绿）
+- [x] 切歌后避让的是真正的「当前曲」（store 光标注入）
+- [ ] 真实 Electron 端到端复测（并入 Phase 3 harness 矩阵）
 
 ### Phase 2: 三种来源语义统一 + online 命中始终落「点歌歌单」（GAP 3，Q3）
 

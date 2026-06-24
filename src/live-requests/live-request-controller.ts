@@ -59,6 +59,10 @@ export interface LiveRequestControllerDeps {
   runtime?: AudienceRequestRuntime;
   playNow?: (track: Track) => Promise<void>;
   playNext?: (track: Track) => Promise<void>;
+  /** Live play-queue track ids (store-authoritative) for `active-set` scope off-session (GAP2). */
+  getActiveQueueTrackIds?: () => string[] | Promise<string[]>;
+  /** The track actually playing now (store cursor, not the debounced DB cursor) — Q4. */
+  getCurrentTrackId?: () => string | undefined | Promise<string | undefined>;
   /** Notified after a matched track is played / queued (production: a toast). */
   onRequestPlayed?: (input: { track: Track; action: AudienceRequestPlaybackAction }) => void;
   now?: () => number;
@@ -135,6 +139,8 @@ export function createLiveRequestController(
       playNow: deps.playNow,
       playNext: deps.playNext,
       onRequestPlayed: deps.onRequestPlayed,
+      getActiveQueueTrackIds: deps.getActiveQueueTrackIds,
+      getCurrentTrackId: deps.getCurrentTrackId,
     });
   const captures = new Map<string, CapturedPayload[]>();
   let unsubscribe: (() => void) | null = null;
@@ -266,6 +272,19 @@ function ensureSingleton(): LiveRequestController {
       const { usePlayerStore } = await import("@/stores/player-store");
       // Queue after the playing track (store-cursor-relative) — keep the host's playlist.
       await usePlayerStore.getState().playRequestNext(track);
+    },
+    // active-set scope off-session (online-playlist / system-playlist / entity / library):
+    // the store's live queue IS the "current playlist" (GAP2).
+    getActiveQueueTrackIds: async () => {
+      const { usePlayerStore } = await import("@/stores/player-store");
+      return usePlayerStore.getState().queue.map((t) => t.id);
+    },
+    // Avoid re-matching the song actually playing — read the store cursor, not the
+    // debounced DB cursor that lags a switch by ~900ms (Q4).
+    getCurrentTrackId: async () => {
+      const { usePlayerStore } = await import("@/stores/player-store");
+      const s = usePlayerStore.getState();
+      return s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined;
     },
     // Confirm the request landed with a top-left toast (title + artist · album).
     onRequestPlayed: ({ track, action }) => notifyAudienceRequestPlayed(track, action),

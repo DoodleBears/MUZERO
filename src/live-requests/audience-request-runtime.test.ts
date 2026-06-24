@@ -153,6 +153,57 @@ describe("AudienceRequestRuntime direct search route", () => {
     expect(item.status).toBe("ignored");
   });
 
+  it("active-set scope falls back to the live play queue when the context has no DjSession (online playlist)", async () => {
+    // Mimic activateExplicitQueue (online-playlist / system-playlist / entity / library):
+    // a play queue with entries but NO contextSetId. The requested song is IN that queue.
+    const homeSession = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const current = await track(homeSession.id, "Now Playing");
+    const target = await track(homeSession.id, "晴天");
+    const tail = await track(homeSession.id, "Tail Song");
+    // Note: no prependTrackIds → homeSession.trackIds stays empty; the queue is the source of truth.
+    await playQueueSet([current.id, target.id, tail.id], { currentIndex: 0 }, db); // no contextSetId
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          searchScope: "active-set",
+        },
+      },
+      db,
+    );
+    const runtime = createAudienceRequestRuntime({ db });
+
+    const item = await runtime.handle(request("晴天"));
+
+    // Before the fix this returned [] → "ignored"; now active-set sees the live queue.
+    expect(item).toMatchObject({ status: "completed", matchedTrackId: target.id });
+  });
+
+  it("active-set scope can use an injected live-queue resolver (store cursor) without a session", async () => {
+    const homeSession = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const current = await track(homeSession.id, "Now Playing");
+    const target = await track(homeSession.id, "晴天");
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          searchScope: "active-set",
+        },
+      },
+      db,
+    );
+    // DB play queue is empty; the store-injected resolver is the authoritative "current playlist".
+    const runtime = createAudienceRequestRuntime({
+      db,
+      getActiveQueueTrackIds: () => [current.id, target.id],
+      getCurrentTrackId: () => current.id,
+    });
+
+    const item = await runtime.handle(request("晴天"));
+
+    expect(item).toMatchObject({ status: "completed", matchedTrackId: target.id });
+  });
+
   it("matches direct library-search requests by song title instead of notes", async () => {
     const { current, tail } = await seedQueue();
     await setTrackNote(tail.id, "Plastic Love memory", db);
