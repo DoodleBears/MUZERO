@@ -10,6 +10,14 @@ export interface GlobalSearchLocalInput {
   includeTracks: boolean;
   query: string;
   resultLimit: number;
+  /**
+   * LOCAL media-kind filter (`@Video` / `@Audio`). Narrows the songs list to
+   * `Track.kind === mediaKind`. Applied during the in-memory `readyTracks` pass —
+   * BEFORE `slice(resultLimit)` — so the top-N never gets short-changed by a
+   * post-filter (see the scope-media-filters PRD §5.3). No Dexie index: the worker
+   * already loads every row, so this is a free predicate on the existing pass.
+   */
+  mediaKind?: "audio" | "video";
 }
 
 export interface GlobalSearchLocalResults {
@@ -27,7 +35,12 @@ export function buildGlobalSearchLocalResults(
   const query = input.query.trim();
   const resultLimit = Math.max(1, input.resultLimit);
   const readyTracks = input.includeTracks
-    ? tracks.filter((track) => track.status === "ready").sort((a, b) => b.createdAt - a.createdAt)
+    ? tracks
+        .filter(
+          (track) =>
+            track.status === "ready" && (!input.mediaKind || track.kind === input.mediaKind),
+        )
+        .sort((a, b) => b.createdAt - a.createdAt)
     : [];
   const memoryNotes = input.includeTracks
     ? memoryNotesByTrack(memories)

@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 过滤词汇（union+options）+ `resolveFilterScope` 仲裁器 + 菜单/pill 渲染 + 标签 i18n | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 作用域门控接线（@online 跳本地 worker / @local 切在线网络） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 本地媒体类型谓词（@Video/@Audio，worker `mediaKind`） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 本地媒体类型谓词（@Video/@Audio，worker `mediaKind`） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | placeholder/hint i18n + 完整 `make check` + 性能验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > **Phase 排序说明**：作用域门控（Phase 2）先于媒体谓词（Phase 3）——`@video`/`@audio` 需要先把"只显示本地歌曲区 + 切断在线"接通（靠 `resolveFilterScope`），`mediaKind` 谓词才有意义；否则 `@video` 中间态会因旧 include 逻辑显示空。
@@ -322,19 +322,20 @@ searchGlobalLocalLibrary({
 - [x] `@local` 显示全部本地区段；`@video`/`@audio` 仅显示本地歌曲区 —— `scope.show*` 单测覆盖。
 - [x] 既有 facet/source 行为零回归 —— `pnpm typecheck` 0 错；`resolveFilterScope` 单测对照旧 `showOnline` 仅 null/source 行为。
 
-### Phase 3: 本地媒体类型谓词（@Video / @Audio）
+### Phase 3: 本地媒体类型谓词（@Video / @Audio）✅
 
 **Goal:** `mediaKind` 贯通 worker，本地歌曲按 `Track.kind` 过滤（方案 B），谓词在 `slice` 之前应用。
 
 **Tasks:**
-- [ ] [`global-search-local-core.ts`](../../../../src/workers/global-search-local-core.ts)：`GlobalSearchLocalInput.mediaKind`；在 `readyTracks` 过滤、`slice(resultLimit)` **之前**应用 `track.kind === mediaKind`。
-- [ ] [`global-search-local-client.ts`](../../../../src/workers/global-search-local-client.ts)：透传 `mediaKind`（含 inline 回退路径）。
-- [ ] 浮层：把 `scope.mediaKind` 传入 `searchGlobalLocalLibrary`；`@video`/`@audio` 空 query 时也请求 worker（browse 模式，参照 album/artist）。
+- [x] [`global-search-local-core.ts`](../../../../src/workers/global-search-local-core.ts)：`GlobalSearchLocalInput.mediaKind`；在 `readyTracks` 过滤、`slice(resultLimit)` **之前**应用 `track.kind === mediaKind`。
+- [x] [`global-search-local-client.ts`](../../../../src/workers/global-search-local-client.ts)：无需改——`mediaKind` 随 `GlobalSearchLocalInput` 经 worker `postMessage` 与 inline 回退 `buildGlobalSearchLocalResults` 自动透传（类型流贯通）。
+- [x] 浮层：`scope.mediaKind` 传入 `searchGlobalLocalLibrary`（+ effect deps）；`@video`/`@audio` 空 query 也请求 worker（`scope.mediaKind != null`，browse 模式）。
 
 ### Phase 3 Checklist
-- [ ] `@Video` 只出本地 `kind==="video"`；`@Audio` 只出本地 `kind==="audio"`。
-- [ ] 谓词在 slice 前应用：构造 >resultLimit 个 video 行，验证返回数 = resultLimit（不被前置过滤砍空）。
-- [ ] `global-search-local-core.test.ts` 新增 mediaKind 谓词用例。
+- [x] `@Video` 只出本地 `kind==="video"`；`@Audio` 只出本地 `kind==="audio"`（`global-search-local-core.test.ts` 单测）。
+- [x] 谓词在 slice 前应用：4 个更新的 audio + 6 个 video、resultLimit=4、`mediaKind:"video"` → 返回 4 个最新 video id（若 slice 后过滤会得 0）——单测通过。
+- [x] `global-search-local-core.test.ts` 新增 mediaKind 谓词用例（3 passed；全套 25 passed）。
+- [x] `pnpm typecheck` + `biome check` 通过。
 
 ### Phase 4: i18n + 提示 + 测试 + 性能验收
 

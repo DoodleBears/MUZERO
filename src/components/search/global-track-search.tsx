@@ -255,7 +255,12 @@ export function GlobalTrackSearch({
     open &&
     !needsLyricTracks &&
     scope.runsLocalWorker &&
-    (deferredSearchText.length > 0 || filter?.kind === "album" || filter?.kind === "artist");
+    // @video / @audio browse the whole local library even with no query (like the
+    // album/artist facets), so "show me my videos" works on an empty box.
+    (deferredSearchText.length > 0 ||
+      filter?.kind === "album" ||
+      filter?.kind === "artist" ||
+      scope.mediaKind != null);
   const localWorkerQuery = useBurstSettledValue(
     deferredSearchText,
     GLOBAL_SEARCH_LOCAL_WORKER_QUERY_SETTLE_MS,
@@ -273,13 +278,21 @@ export function GlobalTrackSearch({
       includeTracks: showTrackResults,
       query: localWorkerQuery,
       resultLimit: Math.max(MAX_SONG_RESULTS, MAX_ENTITY_RESULTS),
+      mediaKind: scope.mediaKind,
     }).then((results) => {
       if (!cancelled) setLocalResults(results);
     });
     return () => {
       cancelled = true;
     };
-  }, [localWorkerQuery, localWorkerRequested, showAlbums, showArtists, showTrackResults]);
+  }, [
+    localWorkerQuery,
+    localWorkerRequested,
+    showAlbums,
+    showArtists,
+    showTrackResults,
+    scope.mediaKind,
+  ]);
 
   const localTrackIdsKey = localResults.trackIds.join("|");
   const trackResultsLive = usePausedLiveQuery(
