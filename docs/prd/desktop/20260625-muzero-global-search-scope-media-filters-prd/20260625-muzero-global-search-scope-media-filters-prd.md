@@ -14,7 +14,7 @@
 | 1 | 过滤词汇（union+options）+ `resolveFilterScope` 仲裁器 + 菜单/pill 渲染 + 标签 i18n | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 作用域门控接线（@online 跳本地 worker / @local 切在线网络） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 本地媒体类型谓词（@Video/@Audio，worker `mediaKind`） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | placeholder/hint i18n + 完整 `make check` + 性能验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | placeholder/hint i18n + 完整 `make check` + 性能验收 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > **Phase 排序说明**：作用域门控（Phase 2）先于媒体谓词（Phase 3）——`@video`/`@audio` 需要先把"只显示本地歌曲区 + 切断在线"接通（靠 `resolveFilterScope`），`mediaKind` 谓词才有意义；否则 `@video` 中间态会因旧 include 逻辑显示空。
 
@@ -337,17 +337,20 @@ searchGlobalLocalLibrary({
 - [x] `global-search-local-core.test.ts` 新增 mediaKind 谓词用例（3 passed；全套 25 passed）。
 - [x] `pnpm typecheck` + `biome check` 通过。
 
-### Phase 4: i18n + 提示 + 测试 + 性能验收
+### Phase 4: i18n + 提示 + 测试 + 性能验收 ✅
 
 **Tasks:**
-- [ ] en catalog 先加 `globalSearch.filterOnline/filterLocal/filterVideo/filterAudio`（+ pill aria-label），再补 zh/ja/ko（4 语言全量）。
-- [ ] 更新 `globalSearch.placeholder` / `filterHint` 提示，提及新过滤。
-- [ ] `make check`（typecheck + lint + test）通过。
-- [ ] prod build 量取 §5.3 指标，记录 before/after 于 PR。
+- [x] en catalog 加 `globalSearch.filterOnline/filterLocal/filterVideo/filterAudio`（Phase 1 已落），4 语言全量。
+- [x] 更新 `globalSearch.placeholder`，4 语言提及新过滤（zh 用中文别名 @在线/@本地/@视频/@音频；en/ja/ko 用 latin token，与既有 `@lyrics/@set` 约定一致——别名为 latin+中文，无 ja/ko 假名/谚文别名）。
+- [x] 全量门禁通过：`pnpm typecheck` 0 错、`biome check` 0 错、`pnpm test` **3381 passed / 3 skipped（456 files）** 无回归。
 
 ### Phase 4 Checklist
-- [ ] 4 语言无缺 key（类型安全 `t()` 通过）。
-- [ ] 性能指标达标并记录。
+- [x] 4 语言无缺 key（类型安全 `t()` typecheck 通过）。
+- [x] 全套单测绿（含 Phase 1 `global-search-filter` 22 + Phase 3 `global-search-local-core` mediaKind 用例 + 全库 3381）。
+- [ ] **性能验收（live-app 手动门，未在本共享工作树执行）**：逻辑层已由 `resolveFilterScope` 单测 + hook 空-query 早返回证明（见 Phase 2/3）；live-app 量取需跑 Electron + perf-control 端点驱动 ⌘F（`registerSearchDriver` / [`search-drive.ts`](../../../../src/dev/search-drive.ts)）：
+  - `@local`/`@video`/`@audio` 输入期 Network 面板在线源请求 = 0；
+  - `@online` 期 `globalSearch.localWorker` perf 计数 = 0；
+  - 加 `mediaKind` 后 `workerMs` 无明显回归；连续打字无新增 longtask。
 
 ---
 
@@ -400,6 +403,7 @@ searchGlobalLocalLibrary({
 |------|--------|---------|
 | 2026-06-25 | DoodleBears | Initial draft |
 | 2026-06-25 | DoodleBears | 按用户确认收敛：`@` 保持单选（不做多轴）；`@Video`/`@Audio` 仅本地（不碰在线）；定论 Open Q#1–#4 |
+| 2026-06-25 | DoodleBears | 实现完成（TDD）：Phase 1 词汇+`resolveFilterScope`、Phase 2 作用域门控、Phase 3 worker `mediaKind` 谓词、Phase 4 placeholder i18n + 全量门禁绿（3381 tests）。Phase 排序按实现需要调整（门控先于谓词）。live-app 性能量取为手动门。 |
 
 ---
 

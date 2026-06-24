@@ -85,7 +85,7 @@
   },
   "globalSearch": {
     "title": "検索",
-    "placeholder": "曲・歌詞・セットを検索 — @lyrics / @set…",
+    "placeholder": "曲・歌詞・セットを検索 — @online / @local / @video / @audio…",
     "empty": "一致するものがありません。",
     "songs": "曲",
     "filterHint": "絞り込み",

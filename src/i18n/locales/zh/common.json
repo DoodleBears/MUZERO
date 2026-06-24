@@ -85,7 +85,7 @@
   },
   "globalSearch": {
     "title": "搜索",
-    "placeholder": "搜索歌曲、歌词和歌单 —— @歌词 / @歌单…",
+    "placeholder": "搜索歌曲、歌词、歌单 —— 试试 @在线 / @本地 / @视频 / @音频…",
     "empty": "没有匹配项。",
     "songs": "歌曲",
     "filterHint": "筛选",
