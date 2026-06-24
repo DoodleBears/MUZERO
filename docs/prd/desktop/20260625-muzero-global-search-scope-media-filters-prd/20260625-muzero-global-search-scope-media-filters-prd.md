@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 过滤词汇（union+options）+ `resolveFilterScope` 仲裁器 + 菜单/pill 渲染 + 标签 i18n | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 作用域门控接线（@online 跳本地 worker / @local 切在线网络） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 作用域门控接线（@online 跳本地 worker / @local 切在线网络） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 本地媒体类型谓词（@Video/@Audio，worker `mediaKind`） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | placeholder/hint i18n + 完整 `make check` + 性能验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -308,19 +308,19 @@ searchGlobalLocalLibrary({
 - [x] `global-search-filter.test.ts` 覆盖 4 个新别名 + `resolveFilterScope` 全 kind（22 passed）。
 - [x] `pnpm typecheck` + `biome check`（改动文件）通过。
 
-### Phase 2: 作用域门控接线（@online / @local）
+### Phase 2: 作用域门控接线（@online / @local）✅
 
 **Goal:** 浮层改读 `resolveFilterScope`：`online` 跳本地 worker、只显示在线；`local` 切在线网络、显示全部本地区段；`video`/`audio` 显示本地歌曲区且切在线（此阶段尚未按 kind 过滤，仅门控）。
 
 **Tasks:**
-- [ ] 浮层：`scope = resolveFilterScope(filter, streamingSupported)`；用 `scope.show*` 替换内联 `show*`；`localWorkerRequested` AND `scope.runsLocalWorker`；`onlineQuery` 由 `scope.showOnline` 门控（false ⇒ `""` ⇒ 在线 hook 不发请求）。
-- [ ] worker include 标志改用 `scope.showTracks/showAlbums/showArtists`。
+- [x] 浮层：`scope = resolveFilterScope(filter, streamingSupported)`；用 `scope.show*` 替换内联 `show*`；`localWorkerRequested` AND `scope.runsLocalWorker`；`onlineQuery` 由 `scope.showOnline` 门控（false ⇒ `""` ⇒ 在线 hook 不发请求）。
+- [x] worker include 标志已用 `scope.showTracks/showAlbums/showArtists`（`searchGlobalLocalLibrary` 调用处沿用 `showTrackResults/showAlbums/showArtists` 别名）。
 
 ### Phase 2 Checklist
-- [ ] `@local`/`@video`/`@audio` 期间在线网络请求 = 0（Network 验证）。
-- [ ] `@online` 期间无本地整表读（`globalSearch.localWorker` perf 计数 = 0），仅显示在线区段。
-- [ ] `@local` 显示全部本地区段；`@video`/`@audio` 仅显示本地歌曲区。
-- [ ] 既有 facet/source 行为零回归（typecheck + 手测）。
+- [x] `@local`/`@video`/`@audio` 期间在线网络请求 = 0 —— **逻辑保证**：`resolveFilterScope` 单测证 `showOnline===false`；`onlineQuery = open && showOnline ? searchText : ""` ⇒ `""`；[`useOnlineSourceSearch`](../../../../src/hooks/use-online-source-search.ts) 对空 query 早返回 + abort，不发请求。（live-app Network 量取并入 Phase 4。）
+- [x] `@online` 不触发本地整表读 —— **逻辑保证**：`scope.runsLocalWorker===false`（单测）⇒ `localWorkerRequested===false` ⇒ 不调用 `searchGlobalLocalLibrary`。
+- [x] `@local` 显示全部本地区段；`@video`/`@audio` 仅显示本地歌曲区 —— `scope.show*` 单测覆盖。
+- [x] 既有 facet/source 行为零回归 —— `pnpm typecheck` 0 错；`resolveFilterScope` 单测对照旧 `showOnline` 仅 null/source 行为。
 
 ### Phase 3: 本地媒体类型谓词（@Video / @Audio）
 

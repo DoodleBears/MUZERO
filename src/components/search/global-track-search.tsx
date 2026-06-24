@@ -53,6 +53,7 @@ import {
   type FilterOption,
   matchFilterOptions,
   parseMention,
+  resolveFilterScope,
   type SearchFilter,
 } from "@/lib/global-search-filter";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
@@ -238,18 +239,22 @@ export function GlobalTrackSearch({
   const enterDownloadsVideo = settings.enterDownloadsVideo !== false;
   const transliterationReady = useTransliterationReady();
 
-  // Which sections the active filter shows. No filter → fast library facets +
-  // songs; heavyweight full-lyrics search is opt-in via @lyrics.
-  const showSets = filter === null || filter.kind === "set";
-  const showTrackResults = filter === null || filter.kind === "track";
-  const showLyricResults = filter?.kind === "lyrics";
-  const showAlbums = filter === null || filter.kind === "album";
-  const showArtists = filter === null || filter.kind === "artist";
-  const showOnline = streamingSupported && (filter === null || filter.kind === "source");
+  // Which sections + worker/online the active filter shows — the single arbiter
+  // (resolveFilterScope) so the gating never drifts. No filter → fast library
+  // facets + songs + online; heavyweight full-lyrics search is opt-in via @lyrics.
+  // @online skips the local worker; @local/@video/@audio cut the online network.
+  const scope = resolveFilterScope(filter, streamingSupported);
+  const showSets = scope.showSets;
+  const showTrackResults = scope.showTracks;
+  const showLyricResults = scope.showLyrics;
+  const showAlbums = scope.showAlbums;
+  const showArtists = scope.showArtists;
+  const showOnline = scope.showOnline;
   const forcedSource = filter?.kind === "source" ? filter.source : undefined;
   const localWorkerRequested =
     open &&
     !needsLyricTracks &&
+    scope.runsLocalWorker &&
     (deferredSearchText.length > 0 || filter?.kind === "album" || filter?.kind === "artist");
   const localWorkerQuery = useBurstSettledValue(
     deferredSearchText,
