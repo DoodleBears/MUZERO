@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 0 | 排查（Investigation，本文档） | ✅ Completed | [本节](#3-investigation-findings排查结论) |
 | 1 | active-set 搜索域覆盖非-set 上下文（online / system / entity） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 三种「曲子来源」语义统一 + online 命中始终落「点歌歌单」 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 三种「曲子来源」语义统一 + online 命中始终落「点歌歌单」 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 空闲态起播 + 不可播提示 + 切换竞态兜底与可观测 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -251,23 +251,23 @@ runtime 的 `currentTrackId()`（用于 `avoidCurrentTrackId`，避免把「正�
 - [x] 切歌后避让的是真正的「当前曲」（store 光标注入）
 - [ ] 真实 Electron 端到端复测（并入 Phase 3 harness 矩阵）
 
-### Phase 2: 三种来源语义统一 + online 命中始终落「点歌歌单」（GAP 3，Q3）
+### Phase 2: 三种来源语义统一 + online 命中始终落「点歌歌单」（GAP 3，Q3）✅
 
 **Goal:** 本地（当前/其它歌单）命中复用本地 Track；online 搜索命中**始终**落到固定的「点歌歌单」。
 
 **Tasks:**
-- [ ] 复用本地：确认（加测）情况 ①②（已在当前 / 其它本地歌单）始终复用本地 Track、不复制、不联网。
-- [ ] `resolveOnlineTargetSession`（[`audience-request-runtime.ts:447`](../../../../src/live-requests/audience-request-runtime.ts)）改为**始终**返回专用「点歌歌单」（去掉「活动 session 优先」分支），唯一裁决收敛在此函数。
-- [ ] 决定承载 set：复用 `streamOnlineSetId` 定位为「点歌歌单」 **或** 新增 `liveRequestSetId`（见 Q3 子选项）；命名/i18n 跟上。
-- [ ] 回退路径复用 `playStreamedHit` 的封面/落盘缓存（best-effort）。
-- [ ] 通知文案「已加入点歌歌单并播放」（i18n 四语）。
-- [ ] 单测：①②复用本地无重复行；③ online 命中恒落点歌歌单（无论有无活动 set）。
+- [x] 复用本地：加测确认情况 ①②（已在当前 / 其它本地歌单）始终复用本地 Track、不复制、不联网（"routes a confident match from another set by reusing its track id"）。
+- [x] 抽出 `resolveLiveRequestOnlineSetId(db, settings)`（module-level export，[`audience-request-runtime.ts`](../../../../src/live-requests/audience-request-runtime.ts)）→ **始终**返回专用「点歌歌单」（去掉「活动 session 优先」分支），`defaultOnlineFallback` 调用它，唯一裁决收敛于此。
+- [x] Q3b 承载 set：**复用 `streamOnlineSetId`** 定位为「点歌歌单」（最简，零新 schema 字段；存在即用、悬挂/缺失则建并持久化）。
+- [x] 回退路径复用封面缓存（`cacheStreamTrackCover`，best-effort、fire-and-forget，镜像 `playStreamedHit`）。
+- [x] 单测：①②复用本地无重复行；③ `resolveLiveRequestOnlineSetId` 恒落点歌歌单（忽略活动 set）+ 建/持久化 + 悬挂重建。
+- [ ] （deferred·polish）通知文案区分「已加入点歌歌单」——需把「是否 online 回退」透传进 `notifyAudienceRequestPlayed` + i18n 四语；当前通知已 action-aware 确认播放，归入后续。
 
 ### Phase 2 Checklist
-- [ ] 点歌命中本地（当前/其它歌单）→ 复用、无重复行、不联网
-- [ ] online 命中 → 恒落「点歌歌单」，归属稳定可解释
-- [ ] 封面/缓存与手动播放在线曲一致
-- [ ] 通知文案 i18n 四语
+- [x] 点歌命中本地（当前/其它歌单）→ 复用、无重复行、不联网
+- [x] online 命中 → 恒落「点歌歌单」（`streamOnlineSetId`），归属稳定可解释
+- [x] 封面/缓存与手动播放在线曲一致（best-effort）
+- [ ] 通知文案 i18n 四语（deferred·polish，非阻塞）
 
 ### Phase 3: 空闲态起播（Q2） + 不可播提示 + 切换竞态兜底与可观测
 
