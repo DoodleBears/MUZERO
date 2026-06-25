@@ -14,7 +14,7 @@
 | 0 | 排查（Investigation，本文档） | ✅ Completed | [本节](#3-investigation-findings排查结论) |
 | 1 | active-set 搜索域覆盖非-set 上下文（online / system / entity） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 三种「曲子来源」语义统一 + online 命中始终落「点歌歌单」 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 空闲态起播 + 不可播提示 + 切换竞态兜底与可观测 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 空闲态起播（Q2，核心）+ 不可播提示；切换竞态/harness 延后 | ✅ Core done | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -269,22 +269,22 @@ runtime 的 `currentTrackId()`（用于 `avoidCurrentTrackId`，避免把「正�
 - [x] 封面/缓存与手动播放在线曲一致（best-effort）
 - [ ] 通知文案 i18n 四语（deferred·polish，非阻塞）
 
-### Phase 3: 空闲态起播（Q2） + 不可播提示 + 切换竞态兜底与可观测
+### Phase 3: 空闲态起播（Q2） + 不可播提示 + 切换竞态兜底与可观测 ✅（核心）
 
 **Goal:** 没在放也能点歌起播；边角竞态/不可播不静默失败。
 
 **Tasks:**
-- [ ] **空闲态起播（Q2）**：`currentIndex<0` 时 play-next/append 降级为「插入并 `playIndex(landed)` 起播」（[`player-store.ts:1582`](../../../../src/stores/player-store.ts) `playRequestNext` / runtime `executePlayback`）。
-- [ ] 切换竞态：live-request 处理串行排在在途 `setActiveSession` 之后，或 mutation 内重读权威光标。
-- [ ] 被 `nextStreamSkipIndex` 自动跳过的 `requested` 条目发「该点歌曲目暂不可播放」通知（与 `notifyAudienceRequestPlayed` 对称，§3.7）。
-- [ ]（可选）单曲循环下有 `requested` 排队时给被动提示「退出单曲循环即播」（§3.2 末，纯可观测）。
-- [ ] 用 `scripts/live-request-drive.mjs` + 控制端点（[[perf-control-endpoint-harness]]）跑真实 Electron 端到端，矩阵 {repeat off/all/one × shuffle × set/online-playlist × 切换中途}。
+- [x] **空闲态起播（Q2）**：`currentIndex<0`（空队列/没在放）时 `playRequestNext` 降级为 `playRequestNow`（插入并 `playIndex` 起播），不再静默入队一个永不推进的队列（[`player-store.ts`](../../../../src/stores/player-store.ts) `playRequestNext`）。**注**：非空队列即使持久化 `currentIndex:-1` 也会被 watcher `clampIndex` 夹成 0，故真正的 `currentIndex<0` 仅在**空队列**成立——这正是「没在放」的语义。append 维持「加到末尾」语义不变。
+- [x] 不可播命中曲已有提示（**非静默**）：streamed 解析失败的自动跳过级联（[`player-store.ts:4741`](../../../../src/stores/player-store.ts) `recordStreamSkipFailure`）**每个 skip-run 已发一次 toast**（`player.streamNeedsAccess` / `player.playbackError`），点歌命中的 VIP/下架曲被跳时用户即收到通知。§3.7「静默跳过」前提其实不成立。
+- [ ] （deferred·polish）把上面的通用 toast 针对 `requested` 条目改成「该点歌曲目暂不可播放」专文案——需在 skip 路径读 play queue entry 的 `requested` 标记 + i18n 四语；价值边际，归后续。
+- [ ] （deferred·very-low-prob）切换竞态：live-request 串行排在在途 `setActiveSession` 之后——属 `setActiveSession`(replace entries)与 store 光标 `set()` 的极小窗口，无法确定性单测，需真实 Electron 压测复现后再加守卫。
+- [ ] （deferred·real-Electron）`scripts/live-request-drive.mjs` + 控制端点（[[perf-control-endpoint-harness]]）矩阵 {repeat off/all/one × shuffle × set/online-playlist × 切换中途}（repeat-one 断言「请求入队但不自动播」=预期，见 §3.2）。本环境无法起 Electron，留人工验证。
 
 ### Phase 3 Checklist
-- [ ] 空闲态点歌：真的起播，不静等
-- [ ] 切换中途点歌不丢、不错位
-- [ ] 不可播命中曲有提示，不静默跳
-- [ ] 端到端 harness 覆盖 online 歌单 × 各模式
+- [x] 空闲态点歌：真的起播，不静等（player-store 集成测试绿）
+- [x] 不可播命中曲有提示，不静默跳（既有 skip-run toast 覆盖）
+- [ ] 切换中途点歌不丢、不错位（deferred，需真实 Electron 复现）
+- [ ] 端到端 harness 覆盖 online 歌单 × 各模式（deferred，需真实 Electron）
 
 ---
 
