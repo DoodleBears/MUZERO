@@ -1,7 +1,7 @@
 {
   "name": "muzero",
   "private": true,
-  "version": "1.4.2",
+  "version": "1.5.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "description": "MUZERO — your private, local-first music museum. Sync & play MV and music across every device, with friends. No account, no cloud; everything lives on your device. Electron desktop + Tauri mobile.",

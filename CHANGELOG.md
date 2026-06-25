@@ -2,6 +2,19 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.5.0 — 2026-06-25 · Live song requests land where they should
+
+Live chat song requests (弹幕点歌) now route reliably no matter what you are playing. In online playlists (like NetEase imports) and other non-DJ playlists, a viewer's 'play next' request finds the song and queues it right after the current track — under shuffle, repeat-all, and when you switch playlists mid-stream. Songs matched online always land in one dedicated request playlist (with the cover cached for offline) instead of drifting into whichever set was playing; songs you already own are reused instead of re-downloaded; and a request that arrives while nothing is playing now starts playback immediately. Single-track repeat intentionally keeps looping the current song and holds requests until you move on.
+
+### Highlights
+- **player** Live requests queue correctly in online & other playlists — When you are listening to an online playlist (e.g. imported from NetEase) or any non-DJ playlist, a viewer's 'play next' request now reliably finds the song and queues it right after the current track — including while shuffle or repeat-all is on, and when you switch playlists mid-stream. Previously, a request made while playing certain playlists could silently match nothing and never play. _(desktop)_
+
+### Changed
+- **player** Requests start playing when nothing is on — If nothing is playing when a 'play next' request comes in, MUZERO now starts playing it right away, instead of quietly adding it to an idle queue that never advances. _(desktop)_
+
+### Fixed
+- **streaming** Online-matched requests land in one dedicated request playlist — When a requested song is not in your library and is matched online, it now always goes into one dedicated request playlist (with its cover cached for offline), instead of drifting into whichever set happened to be playing. Requests for songs you already have reuse your local copy — no duplicate downloads or second versions. _(desktop)_
+
 ## v1.4.2 — 2026-06-23 · Cooler playback for big local libraries
 
 A performance and release-polish update for desktop listening. MUZERO now treats lazy .ncm metadata work as a gentle background trickle instead of a disk storm, backs it off further while music is playing, and remembers files that cannot be decoded so they are not re-read on every launch. Video playback is lighter too: the cover stays in the foreground, live video moves to the immersive background, cover mode stops decoding the hidden video stream, and occluded Pixi layers are skipped. Desktop auto-updates now appear in the same notification stack as downloads, with progress and a restart action, and release feeds point at the correct versioned installer paths.
