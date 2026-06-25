@@ -2,6 +2,13 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.5.2 — 2026-06-26 · Background effects now apply to your videos
+
+When a video plays as your Now Playing background, the selected background effect — pixel, CRT, dot, ASCII, cross-hatch, noise, or blur — now renders over the moving picture, not just cover art. It samples the video you're already watching (no extra decode), so there's no added battery or memory cost. Keep a clean video backdrop with the existing 'Show background effects on video tracks' toggle.
+
+### Highlights
+- **player** Background effects apply to live video — Previously the moving video background always showed raw, ignoring your chosen effect. Now pixel / CRT / dot / ASCII / cross-hatch / noise / blur render over the live video itself. It reuses the same video you're playing as the texture source — one decode, no extra GPU video cost — and falls back to the plain video if the effect can't initialize. Controlled by the existing per-mode toggles (effects on for normal playback by default; immersive stays clean).
+
 ## v1.5.1 — 2026-06-25 · Scope your search: @online, @local, @video, @audio
 
 Global search (⌘/Ctrl+F) gains four quick filters. Type @ and pick: @online searches only your enabled streaming sources, @local searches only your device library, and @video / @audio narrow your local library to just videos or just audio. Local-scoped filters skip the network entirely, so searching your own library never waits on online sources.
