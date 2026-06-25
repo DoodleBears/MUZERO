@@ -47,8 +47,8 @@ export function LyricsCandidateList({
             onClick={() => onPick(hit)}
             className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-card/55 px-3 py-2 text-left text-sm transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <span className="min-w-0">
-              <span className="block truncate font-medium">{hit.matched.trackName}</span>
+            <span className="min-w-0 flex-1">
+              <span className="line-clamp-2 break-words font-medium">{hit.matched.trackName}</span>
               <span className="block truncate text-muted-foreground text-xs">
                 {hit.matched.artistName} · {formatDuration(hit.matched.durationSec)}
               </span>
