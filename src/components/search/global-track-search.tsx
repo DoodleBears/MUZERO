@@ -197,13 +197,27 @@ export function GlobalTrackSearch({
   const searchText = (mention.active ? mention.before : query).trim();
   const needsLyricTracks = filter?.kind === "lyrics" && searchText.length > 0;
 
-  // DEV-only: expose open/type to the perf-control endpoint so the search-perf
-  // scenario can script the ⌘F overlay (its open + query are component-local state,
-  // unreachable through the store/action surface). Synchronous register (no async
-  // import race); the call is behind import.meta.env.DEV so it tree-shakes out of prod.
+  // DEV-only: expose open/type/filter/snapshot to the perf-control endpoint so the
+  // search scenario can script the ⌘F overlay (its open + query + filter are
+  // component-local state, unreachable through the store/action surface). snapshot
+  // reads a ref updated each render with the latest results. Behind import.meta.env.DEV
+  // so it tree-shakes out of prod.
+  const driverSnapshotRef = useRef<() => unknown>(() => null);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    registerSearchDriver({ setOpen: onOpenChange, setQuery });
+    registerSearchDriver({
+      setOpen: onOpenChange,
+      setQuery,
+      setFilter: (filterId) => {
+        if (filterId === null || filterId === "" || filterId === "clear") {
+          setFilter(null);
+          return;
+        }
+        const opt = FILTER_OPTIONS.find((o) => o.id === filterId);
+        if (opt) setFilter(opt.filter);
+      },
+      snapshot: () => driverSnapshotRef.current(),
+    });
     return () => registerSearchDriver(null);
   }, [onOpenChange]);
   const deferredSearchText = useDeferredValue(searchText);
@@ -301,9 +315,13 @@ export function GlobalTrackSearch({
     open && localResults.trackIds.length > 0,
     EMPTY_TRACKS,
   );
+  // Gate by showTrackResults (mirrors albumResults/artistResults): a paused liveQuery
+  // RETAINS its last value when the worker is gated off, so without this the previous
+  // filter's songs leak into navItems under @online/@set/@album/@artist (hidden in the
+  // UI but still keyboard-selectable). Found by the live filter E2E (10/11 → 11/11).
   const trackResults = useMemo(
-    () => trackResultsLive.slice(0, MAX_SONG_RESULTS),
-    [trackResultsLive],
+    () => (showTrackResults ? trackResultsLive.slice(0, MAX_SONG_RESULTS) : []),
+    [trackResultsLive, showTrackResults],
   );
   const entityCoverTrackIdsKey = localResults.coverTrackIds.join("|");
   const entityCoverTracksLive = usePausedLiveQuery(
@@ -471,6 +489,33 @@ export function GlobalTrackSearch({
   const albumStart = lyricStart + lyricResults.length;
   const artistStart = albumStart + albumResults.length;
   const onlineStart = onlineFirst ? 0 : artistStart + artistResults.length;
+
+  // DEV-only: keep the snapshot ref pointing at the latest resolved scope + result
+  // counts so the perf-control endpoint can read what the active filter actually
+  // produced (the scope/media-filter E2E). Constant condition → tree-shaken in prod.
+  if (import.meta.env.DEV) {
+    driverSnapshotRef.current = () => ({
+      filterKind: filter?.kind ?? null,
+      scope: {
+        mediaKind: scope.mediaKind ?? null,
+        showOnline: scope.showOnline,
+        runsLocalWorker: scope.runsLocalWorker,
+        showSets: scope.showSets,
+        showTracks: scope.showTracks,
+        showAlbums: scope.showAlbums,
+        showArtists: scope.showArtists,
+      },
+      counts: {
+        sets: setResults.length,
+        tracks: trackResults.length,
+        lyrics: lyricResults.length,
+        albums: albumResults.length,
+        artists: artistResults.length,
+        online: onlineHits.length,
+      },
+      songKinds: trackResults.map((track) => track.kind),
+    });
+  }
 
   // `@` filter menu — sources dropped where streaming is unavailable.
   const filterOptions = streamingSupported

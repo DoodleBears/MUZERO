@@ -408,6 +408,12 @@ export function startPerfControlBridge(): void {
         case "type":
           driver.setQuery(query ?? "");
           return null;
+        case "filter":
+          // `query` carries the FilterOption id (e.g. "video"/"local"/"online"); "" / "clear" clears.
+          driver.setFilter?.(query ?? null);
+          return null;
+        case "snapshot":
+          return driver.snapshot?.() ?? null;
         default:
           throw new Error(`unknown search action: ${action}`);
       }

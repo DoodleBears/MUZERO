@@ -10,6 +10,14 @@
 export interface SearchDriver {
   setOpen: (open: boolean) => void;
   setQuery: (query: string) => void;
+  /**
+   * Apply a single-select filter by its `FilterOption.id` (e.g. "video" / "local" /
+   * "online"), or `null` to clear — for the scope/media-filter E2E (a `@token` typed
+   * into the box is just free text; the filter only applies when picked from the menu).
+   */
+  setFilter?: (filterId: string | null) => void;
+  /** Snapshot the overlay's current resolved scope + per-section result counts + song kinds. */
+  snapshot?: () => unknown;
 }
 
 let driver: SearchDriver | null = null;

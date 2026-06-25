@@ -347,10 +347,12 @@ searchGlobalLocalLibrary({
 ### Phase 4 Checklist
 - [x] 4 语言无缺 key（类型安全 `t()` typecheck 通过）。
 - [x] 全套单测绿（含 Phase 1 `global-search-filter` 22 + Phase 3 `global-search-local-core` mediaKind 用例 + 全库 3381）。
-- [ ] **性能验收（live-app 手动门，未在本共享工作树执行）**：逻辑层已由 `resolveFilterScope` 单测 + hook 空-query 早返回证明（见 Phase 2/3）；live-app 量取需跑 Electron + perf-control 端点驱动 ⌘F（`registerSearchDriver` / [`search-drive.ts`](../../../../src/dev/search-drive.ts)）：
-  - `@local`/`@video`/`@audio` 输入期 Network 面板在线源请求 = 0；
-  - `@online` 期 `globalSearch.localWorker` perf 计数 = 0；
-  - 加 `mediaKind` 后 `workerMs` 无明显回归；连续打字无新增 longtask。
+- [x] **Live E2E 通过（real library，Electron + perf-control 端点）**：扩展 dev harness（`SearchDriver.setFilter`/`snapshot` + bridge `filter`/`snapshot` action）+ [`scripts/search-filter-drive.mjs`](../../../../scripts/search-filter-drive.mjs) 驱动真实 ⌘F overlay，**11/11 通过**：
+  - `@video` → `scope.mediaKind="video"`、`showOnline=false`、`online=0`、songKinds 全 `video`（8/8）；
+  - `@audio` → `mediaKind="audio"`、`online=0`、songKinds 全 `audio`（8/8）；
+  - `@local` → `showOnline=false`、`online=0`、`runsLocalWorker=true`、四个本地区段全开；
+  - `@online` → `runsLocalWorker=false`、本地 tracks/albums/artists 全 0。
+- [x] **E2E 抓到并修复一个真 bug**：`trackResults` 未像 `albumResults`/`artistResults` 那样被 `showTrackResults` 门控——paused liveQuery 在 worker 关掉后**保留上一过滤的结果**，使 `@online` 下旧的本地歌曲泄漏进 `navItems`（UI 隐藏但仍可键盘选中）。已加门控（`showTrackResults ? … : []`），E2E 由 10/11→11/11。单测无法覆盖（属组件派生层），live harness 才暴露。
 
 ---
 
@@ -403,7 +405,8 @@ searchGlobalLocalLibrary({
 |------|--------|---------|
 | 2026-06-25 | DoodleBears | Initial draft |
 | 2026-06-25 | DoodleBears | 按用户确认收敛：`@` 保持单选（不做多轴）；`@Video`/`@Audio` 仅本地（不碰在线）；定论 Open Q#1–#4 |
-| 2026-06-25 | DoodleBears | 实现完成（TDD）：Phase 1 词汇+`resolveFilterScope`、Phase 2 作用域门控、Phase 3 worker `mediaKind` 谓词、Phase 4 placeholder i18n + 全量门禁绿（3381 tests）。Phase 排序按实现需要调整（门控先于谓词）。live-app 性能量取为手动门。 |
+| 2026-06-25 | DoodleBears | 实现完成（TDD）：Phase 1 词汇+`resolveFilterScope`、Phase 2 作用域门控、Phase 3 worker `mediaKind` 谓词、Phase 4 placeholder i18n + 全量门禁绿（3381 tests）。Phase 排序按实现需要调整（门控先于谓词）。 |
+| 2026-06-25 | DoodleBears | Live E2E（Electron + perf-control harness 扩展 `SearchDriver.setFilter/snapshot` + `scripts/search-filter-drive.mjs`）11/11 通过；E2E 抓到并修复 `trackResults` 未门控导致的本地结果泄漏（paused liveQuery 保留旧值）。 |
 
 ---
 
