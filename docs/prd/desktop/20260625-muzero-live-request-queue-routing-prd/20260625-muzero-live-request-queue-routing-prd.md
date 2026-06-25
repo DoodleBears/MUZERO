@@ -1,6 +1,6 @@
 # PRD: 弹幕点歌「下一首」入队在 online / 各种歌单下的可靠性排查与修复
 
-**Status:** Draft
+**Status:** Implemented (Phase 1–3 core, TDD) — 真实 Electron 端到端 harness 验证 pending
 **Created:** 2026-06-25
 **Author:** DoodleBears / Claude
 **Module:** Live Requests（弹幕点歌） × Play Queue（播放列表） — `src/live-requests/` + `src/stores/player-store.ts` + `src/player/`
@@ -337,6 +337,7 @@ runtime 的 `currentTrackId()`（用于 `avoidCurrentTrackId`，避免把「正�
 |------|--------|---------|
 | 2026-06-25 | DoodleBears / Claude | 初稿：端到端排查弹幕点歌「下一首」在 online/各种歌单 × 循环/随机/切换下的入队可靠性，定位 repeat-one 吞点歌 + GAP2（active-set 漏非-set 上下文）+ GAP3（online 缓存归属/重复联网）+ GAP4/5（切换竞态、空闲态、滞后光标）+ §3.7（不可播静默跳） |
 | 2026-06-25 | 用户拍板 | Q1 单曲循环吞点歌**不修**（by design）→ 撤掉对应 phase；Q2 空闲态点歌**起播**；Q3 online 命中**始终落「点歌歌单」**；Q4 按 best practice 统一真实 store 光标。修复计划收敛为 3 phase |
+| 2026-06-25 | Claude | TDD 实现 Phase 1（`f5ea8dc8` active-set 回退 live queue + 真实光标）/ Phase 2（`1c7f6979` `resolveLiveRequestOnlineSetId` 恒落点歌歌单 + 复用本地 + 封面缓存）/ Phase 3 核心（`3540442b` 空闲起播）。+8 单测，170 测试绿。§3.7 既有 skip-run toast 已覆盖（非静默）；切换竞态 + tailored 文案 + 真实 Electron harness 矩阵 deferred |
 
 ---
 
