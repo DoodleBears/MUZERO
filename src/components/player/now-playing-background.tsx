@@ -224,6 +224,15 @@ function NowPlayingBackgroundContent({
   const pixiMedia =
     pixiMediaRaw.source === "track-video" ? { source, mediaType: "image" as const } : pixiMediaRaw;
   const pixiEffect = isPixiEffect(renderer, pixiMedia.mediaType) ? renderer : null;
+  // When a playable video is the backdrop AND the user keeps background effects on for
+  // video, sample the SHARED MediaEngine <video> through Pixi so the selected filter
+  // applies to the MOVING picture (a single decode — the element is already decoded for
+  // playback). `renderer` is already gated by videoTrackBackgroundEffectsEnabled: when
+  // effects are off it's "image", which isPixiEffect rejects for video, so the raw
+  // NowPlayingVideoBackdrop shows instead. Immersive defaults effects off → clean video.
+  const videoFilterEffect =
+    videoBackdropActive && isPixiEffect(renderer, "video") ? renderer : null;
+  const sharedVideoElement = videoFilterEffect ? (getMediaEngine()?.element ?? null) : null;
   // The Pixi background uses the ORIGINAL cover (loaded below, capped at 1024px),
   // NOT a cropped 192px `backlight` derivative. The noise/pixel renderers don't blur
   // the cover — they lay an effect over it — so a tiny upscaled texture looks soft,
@@ -506,7 +515,8 @@ function NowPlayingBackgroundContent({
       {/* The cover-effect background (Pixi / blur / image) sits BELOW the full-bleed
           video backdrop. When the backdrop is active it's fully occluded, so skip it
           entirely — this unmounts the Pixi WebGL renderer (~240 MB VRAM) with no visual
-          change, since the opaque video covers exactly this layer. */}
+          change, since the opaque video covers exactly this layer. (Live-video Pixi
+          filtering, when enabled, is a SEPARATE layer mounted above the backdrop below.) */}
       {videoBackdropActive ? null : useControllerBlur ? (
         // The whole cover group composites at ONE opacity (COVER_GROUP_OPACITY = 1,
         // full), with each layer at full opacity inside it. A crossfade then stays
@@ -564,8 +574,27 @@ function NowPlayingBackgroundContent({
       {/* Immersive video background: the shared media <video>, mounted full-bleed when
           the set is in video mode and the current track is a playable video. The
           foreground card shows the cover; the moving picture lives here, above the
-          (occluded) cover effect and below the flow + spectrum. */}
+          (occluded) cover effect and below the flow + spectrum. This is ALSO the decode
+          anchor for the live-video Pixi filter below: keeping it mounted guarantees the
+          element keeps decoding, and the opaque filter layer simply paints over it (one
+          decode). When the filter can't init you gracefully see the raw video instead. */}
       <NowPlayingVideoBackdrop active={videoBackdropActive} />
+      {/* Live-video Pixi filter: when background effects stay ON for the video, sample
+          the SAME shared <video> as a texture and render the selected filter (crt / pixel
+          / noise / blur / …) OPAQUE over the raw backdrop above — so the moving picture
+          itself is filtered, with no second decode. Sits below the dim/flow/spectrum. */}
+      {videoFilterEffect && sharedVideoElement ? (
+        <PixiPixelBackground
+          key="pixi-video"
+          className="opacity-100"
+          effect={videoFilterEffect}
+          effectSettings={effectSettings}
+          mediaType="video"
+          pixelSize={pixelSize}
+          src={null}
+          videoElement={sharedVideoElement}
+        />
+      ) : null}
       {/* PM ask: the dim layer can also blur the backdrop (image/video/Pixi below
           it) so a bright cover softens behind the foreground. This MUST be its own
           transparent layer — putting `backdrop-filter` on the opaque `bg-background`

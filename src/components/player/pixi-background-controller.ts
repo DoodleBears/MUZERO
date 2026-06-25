@@ -119,6 +119,19 @@ export interface PixiBackgroundDeps {
   ): Promise<unknown>;
   /** Only invoked for video media; image backgrounds never touch this. */
   attachVideo?: AttachVideo;
+  /**
+   * Wire an EXTERNALLY-owned `<video>` (the shared MediaEngine element) into the
+   * layer ticker WITHOUT controlling its playback — the player engine already
+   * drives play/seek/sync. Used by {@link PixiBackgroundController.setVideoElement}.
+   */
+  attachSharedVideo?: AttachVideo;
+  /**
+   * Build a Pixi texture sampling an external `<video>` WITHOUT taking over its
+   * playback — `VideoSource` defaults to autoPlay/autoLoad ON, which would fight the
+   * player engine that owns the shared element. The component wires the real
+   * `VideoSource` (autoPlay/autoLoad off); tests fall back to `Texture.from`.
+   */
+  createSharedVideoTexture?(pixi: PixiModuleLike, element: HTMLVideoElement): unknown;
   onError?(error: unknown): void;
   /**
    * Schedule the next animation frame for the cover→cover crossfade tween. Injected so
@@ -163,6 +176,17 @@ export interface WindowSlotSource {
 export interface PixiBackgroundController {
   /** Swap the background to `src`. A null src is a transient state — keep the current layer. */
   setSource(src: string | null, mediaType: BackgroundMediaType): Promise<void>;
+  /**
+   * Sample an EXTERNALLY-owned `<video>` (the shared MediaEngine element) as the
+   * background texture — the filter then applies to the moving picture with a
+   * SINGLE decode (the element is already decoded for playback). The controller
+   * never controls the element's playback nor disposes it: it only uploads frames
+   * + runs the ticker while it progresses. A null element tears the video sprite
+   * down, leaving the element to its owner. A track change swaps the element's src
+   * under the player engine; the live video texture follows automatically, so the
+   * caller only re-invokes this when the element identity changes.
+   */
+  setVideoElement(element: HTMLVideoElement | null): Promise<void>;
   /** Mount the drag-follow overlay cover (image only; null tears it down). */
   setDragCover(src: string | null, mediaType: BackgroundMediaType): Promise<void>;
   /** Drive the drag overlay's opacity 0→1 as the finger moves (off the React path). */
@@ -199,6 +223,11 @@ interface CurrentMedia {
   width: number;
   height: number;
   unload?: () => void;
+  /**
+   * The element is owned ELSEWHERE (the shared MediaEngine `<video>`). `disposeMedia`
+   * then only drops our texture reference and never pauses / detaches the element.
+   */
+  external?: boolean;
 }
 
 export function createPixiBackgroundController(
@@ -239,7 +268,11 @@ export function createPixiBackgroundController(
   let appPromise: Promise<void> | null = null;
   let pendingLoadAbort: AbortController | null = null;
   let seq = 0;
+  let videoElementSeq = 0;
   let lastSource: { src: string; mediaType: BackgroundMediaType } | null = null;
+  // The shared `<video>` currently sampled via setVideoElement (if any) — re-applied
+  // after a GPU-loss recover() so the live filter survives a context loss.
+  let lastExternalElement: HTMLVideoElement | null = null;
   let recoverAttempts = 0;
   const stats = { appInits: 0, textureSwaps: 0 };
 
@@ -836,6 +869,9 @@ export function createPixiBackgroundController(
   }
 
   function disposeMedia(media: CurrentMedia): void {
+    // The shared MediaEngine `<video>` is owned by the player engine — never pause /
+    // detach it here (that would stop playback). Drop only our texture reference.
+    if (media.external) return;
     if (media.type === "video") {
       const video = media.element as HTMLVideoElement;
       try {
@@ -1024,6 +1060,7 @@ export function createPixiBackgroundController(
     }
 
     lastSource = { src, mediaType };
+    lastExternalElement = null; // a string source supersedes any shared-video sampling
     recoverAttempts = 0; // a fresh frame landed — allow recovery again
     stats.textureSwaps += 1;
     options.onApplied?.();
@@ -1045,6 +1082,78 @@ export function createPixiBackgroundController(
       textureMs: roundMs(textureMs),
       textureSwaps: stats.textureSwaps,
     });
+  }
+
+  // Sample the shared MediaEngine `<video>` as a live texture (single decode). The
+  // controller treats the element as read-only: it builds a video texture from it,
+  // runs the ticker while playback progresses (via deps.attachSharedVideo), and never
+  // pauses / seeks / detaches it. A null element drops the video sprite + texture but
+  // leaves the element running for its owner.
+  async function setVideoElement(element: HTMLVideoElement | null): Promise<void> {
+    if (destroyed) return;
+    const token = ++videoElementSeq;
+    // Replacing or clearing the external video tears down its prior ticker wiring.
+    currentVideoTeardown?.();
+    currentVideoTeardown = undefined;
+    if (!element) {
+      lastExternalElement = null;
+      finalizeCrossfade();
+      if (sprite && currentMedia?.external) {
+        const tex = sprite.texture as PixiTextureLike | undefined;
+        layerRoot?.removeChild(sprite);
+        sprite.destroy?.({ children: false, texture: false });
+        tex?.destroy?.(true);
+        sprite = null;
+      }
+      if (currentMedia?.external) currentMedia = null;
+      app?.render();
+      return;
+    }
+    lastExternalElement = element;
+    try {
+      await ensureApp();
+    } catch (error) {
+      deps.onError?.(error);
+      return;
+    }
+    if (destroyed || token !== videoElementSeq || !app || !pixi || !layerRoot) return;
+
+    // A fresh swap supersedes any in-flight cover crossfade.
+    finalizeCrossfade();
+    const texture = (deps.createSharedVideoTexture?.(pixi, element) ??
+      pixi.Texture.from(element, true)) as PixiTextureLike;
+    texture.source.scaleMode = "nearest";
+    const width = Math.max(1, element.videoWidth || 16);
+    const height = Math.max(1, element.videoHeight || 9);
+
+    const previousSprite = sprite;
+    const previousTexture = previousSprite?.texture as PixiTextureLike | undefined;
+    const previousMedia = currentMedia;
+    const next = new pixi.Sprite(texture);
+    next.alpha = 1;
+    layerRoot.addChild(next);
+    sprite = next;
+    currentMedia = { type: "video", element, width, height, external: true };
+    if (previousSprite) {
+      layerRoot.removeChild(previousSprite);
+      previousSprite.destroy?.({ children: false, texture: false });
+    }
+    if (previousTexture && previousTexture !== texture) previousTexture.destroy(true);
+    if (previousMedia) disposeMedia(previousMedia);
+    lastSource = null; // an external element isn't a string source
+
+    if (deps.attachSharedVideo) {
+      const teardown = await deps.attachSharedVideo({
+        app,
+        video: element,
+        render: () => app?.render(),
+      });
+      if (destroyed || token !== videoElementSeq) teardown();
+      else currentVideoTeardown = teardown;
+    }
+    recoverAttempts = 0;
+    stats.textureSwaps += 1;
+    resize();
   }
 
   async function recover(): Promise<void> {
@@ -1092,7 +1201,12 @@ export function createPixiBackgroundController(
     filter = null;
     pixi = null;
     appPromise = null;
-    if (windowSlots) {
+    const externalElement = lastExternalElement;
+    if (externalElement) {
+      // The lost context dropped the video texture; re-sample the shared element so
+      // the live filter resumes on the rebuilt app.
+      await setVideoElement(externalElement);
+    } else if (windowSlots) {
       windowActive = false; // let setWindow re-arm it cleanly on the rebuilt app
       await setWindow(windowSlots);
       setWindowOffset(windowOffsetSteps);
@@ -1132,6 +1246,7 @@ export function createPixiBackgroundController(
 
   return {
     setSource,
+    setVideoElement,
     setDragCover,
     setDragProgress,
     releaseDrag,

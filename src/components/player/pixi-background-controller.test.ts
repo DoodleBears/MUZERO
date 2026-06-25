@@ -691,6 +691,91 @@ describe("createPixiBackgroundController", () => {
 // Window mode loads textures fire-and-forget; flush the microtask/timer queue.
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+function fakeVideoElement(): HTMLVideoElement {
+  const el = document.createElement("video");
+  Object.defineProperty(el, "videoWidth", { value: 1920, configurable: true });
+  Object.defineProperty(el, "videoHeight", { value: 1080, configurable: true });
+  el.pause = vi.fn();
+  return el;
+}
+
+function makeSharedVideoController(
+  attachSharedVideo = vi.fn(
+    (_ctx: { app: unknown; video: HTMLVideoElement; render: () => void }) => {
+      return () => {};
+    },
+  ),
+) {
+  const module = fakeModule();
+  const controller = createPixiBackgroundController({
+    host: document.createElement("div"),
+    effect: "noise",
+    effectOptions: {} as never,
+    pixelSize: 12,
+    preference: "webgl",
+    powerPreference: "low-power",
+    deps: {
+      loadPixi: async () => module,
+      loadMedia: async (_pixi, _src): Promise<LoadedBackgroundMedia> => ({
+        type: "image",
+        element: document.createElement("img"),
+        width: 100,
+        height: 100,
+      }),
+      loadFilter: async () => null,
+      attachSharedVideo,
+    },
+  });
+  return { module, controller, attachSharedVideo };
+}
+
+describe("createPixiBackgroundController — shared <video> texture", () => {
+  it("samples an external element and wires the ticker without controlling playback", async () => {
+    const { module, controller, attachSharedVideo } = makeSharedVideoController();
+    const video = fakeVideoElement();
+
+    await controller.setVideoElement(video);
+
+    // One sprite for the live video; the app is built once.
+    expect(module.apps.length).toBe(1);
+    expect(controller.stats.textureSwaps).toBe(1);
+    // The ticker wiring is delegated to attachSharedVideo with the SAME element.
+    expect(attachSharedVideo).toHaveBeenCalledTimes(1);
+    expect(attachSharedVideo.mock.calls[0][0].video).toBe(video);
+    // The controller must never pause / detach the shared element — the player owns it.
+    expect(video.pause).not.toHaveBeenCalled();
+    controller.destroy();
+    expect(video.pause).not.toHaveBeenCalled();
+  });
+
+  it("a track change is a no-op for the controller — the live texture follows the element", async () => {
+    const { controller, attachSharedVideo } = makeSharedVideoController();
+    const video = fakeVideoElement();
+    await controller.setVideoElement(video);
+    // Re-invoking with the SAME element does not happen in practice (the effect deps
+    // are stable), but clearing + re-applying must not leak teardowns.
+    await controller.setVideoElement(null);
+    await controller.setVideoElement(video);
+    expect(attachSharedVideo).toHaveBeenCalledTimes(2);
+    controller.destroy();
+  });
+
+  it("recover() re-samples the external element on the rebuilt app", async () => {
+    const { module, controller } = makeSharedVideoController();
+    const video = fakeVideoElement();
+    await controller.setVideoElement(video);
+    expect(module.apps.length).toBe(1);
+
+    await controller.recover();
+
+    // A fresh app is built and the live video is re-applied (not a stale string source).
+    expect(module.apps.length).toBe(2);
+    expect(controller.stats.appInits).toBe(2);
+    expect(video.pause).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+});
+
 describe("createPixiBackgroundController — lockstep cover window", () => {
   it("loads one texture per window src without rebuilding the app", async () => {
     const { module, controller } = makeController();

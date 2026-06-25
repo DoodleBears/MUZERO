@@ -76,6 +76,87 @@ const attachVideo: AttachVideo = async ({ app, video, render }) => {
   };
 };
 
+/**
+ * Wire the SHARED MediaEngine `<video>` as a live texture WITHOUT controlling its
+ * playback — the player engine already drives play/seek/sync to the audio driver.
+ * We only run the layer ticker while it's progressing, and repaint once on a paused
+ * seek / fresh frame so a frozen background tracks the new frame. Returns a teardown.
+ */
+const attachSharedVideo: AttachVideo = ({ app, video, render }) => {
+  const { isPlaying } = usePlayerStore.getState();
+  syncLayerTicker({ app, media: video }, isPlaying);
+  if (!isPlaying) render();
+  const repaintWhenPaused = () => {
+    if (!usePlayerStore.getState().isPlaying) render();
+  };
+  video.addEventListener("seeked", repaintWhenPaused);
+  video.addEventListener("loadeddata", repaintWhenPaused);
+  const unsubscribe = usePlayerStore.subscribe((state, prev) => {
+    if (state.isPlaying !== prev.isPlaying) {
+      syncLayerTicker({ app, media: video }, state.isPlaying);
+      if (!state.isPlaying) render();
+    }
+  });
+  return () => {
+    unsubscribe();
+    video.removeEventListener("seeked", repaintWhenPaused);
+    video.removeEventListener("loadeddata", repaintWhenPaused);
+  };
+};
+
+/**
+ * Build a Pixi texture sampling the SHARED MediaEngine `<video>` without taking over
+ * its playback. `VideoSource` defaults to autoPlay + autoLoad ON — autoPlay would
+ * resume a user-paused video (desyncing it from the audio driver) and autoLoad would
+ * re-`load()` the element (resetting its position). Both OFF: the element is already
+ * loaded and driven by MediaEngine; Pixi only re-uploads the current frame each render
+ * while it's playing (updateFPS 0 = every frame).
+ */
+function createSharedVideoTexture(
+  Pixi: typeof import("pixi.js"),
+  element: HTMLVideoElement,
+): import("pixi.js").Texture {
+  // autoLoad MUST stay on (default): VideoSource.load() is what attaches the play/seeked
+  // listeners and starts the per-frame texture upload (rVFC) — without it the texture
+  // freezes on the first frame. It does NOT reset the element here: load() only calls
+  // `element.load()` when the element isn't yet valid, and we only sample an already-
+  // loaded+playing element (the component waits for dimensions first). autoPlay stays OFF
+  // so Pixi never resumes a user-paused video (the player engine owns play/pause).
+  const source = new Pixi.VideoSource({
+    autoPlay: false,
+    resource: element,
+    updateFPS: 0,
+  });
+  // CRITICAL: Pixi's VideoSource.destroy() runs `resource.pause(); resource.src = "";
+  // resource.load()` — which would RESET the shared MediaEngine <video> (owned by the
+  // player engine, NOT Pixi) and fire a MEDIA_ELEMENT_ERROR + stop playback. Detach the
+  // element before Pixi's teardown: disable autoUpdate first so the ticker/rVFC unhook
+  // cleanly from the REAL element, then null `resource` so destroy() skips the element
+  // teardown entirely (it guards on `if (source)`). The shared element keeps playing.
+  const patchable = source as unknown as {
+    resource: HTMLVideoElement | null;
+    autoUpdate: boolean;
+    destroy: () => void;
+  };
+  const baseDestroy = patchable.destroy.bind(source);
+  patchable.destroy = () => {
+    patchable.autoUpdate = false;
+    if (patchable.resource === element) patchable.resource = null;
+    baseDestroy();
+  };
+  return new Pixi.Texture({ source });
+}
+
+/** Wait for the shared element's intrinsic size before we cover-fit its sprite. */
+async function ensureVideoDimensions(video: HTMLVideoElement): Promise<void> {
+  if (video.videoWidth && video.videoHeight) return;
+  await Promise.race([
+    waitForEvent(video, "loadedmetadata"),
+    waitForEvent(video, "loadeddata"),
+    delay(500),
+  ]);
+}
+
 export function PixiPixelBackground({
   className,
   effect = "pixel",
@@ -83,6 +164,7 @@ export function PixiPixelBackground({
   mediaType = "image",
   pixelSize,
   src,
+  videoElement,
 }: {
   className?: string;
   effect?: PixiBackgroundEffect;
@@ -90,6 +172,12 @@ export function PixiPixelBackground({
   mediaType?: BackgroundMediaType;
   pixelSize: number;
   src: string | null;
+  /**
+   * The shared MediaEngine `<video>` to sample as a live texture (single decode).
+   * When set with `mediaType="video"`, the filter applies to the moving picture and
+   * `src` is ignored. Omitted everywhere else (cover/image backgrounds use `src`).
+   */
+  videoElement?: HTMLVideoElement | null;
 }) {
   const settings = useSettings();
   const gpuBackend = useMemo(
@@ -133,6 +221,9 @@ export function PixiPixelBackground({
         loadFilter: (_pixi, fx, opts) =>
           createPixiFilter(fx, opts as ReturnType<typeof resolvePixiBackgroundEffectOptions>),
         attachVideo,
+        attachSharedVideo,
+        createSharedVideoTexture: (pixiMod, element) =>
+          createSharedVideoTexture(pixiMod as unknown as typeof import("pixi.js"), element),
         onError: (err) => log.warn("background", "Pixi background failed", err),
       },
     });
@@ -157,6 +248,27 @@ export function PixiPixelBackground({
     if (!controller) return;
     void controller.setSource(src, mediaType);
   }, [controller, src, mediaType]);
+
+  // Live-video path: sample the SHARED MediaEngine `<video>` as the texture so the
+  // filter applies to the moving picture with a single decode. A track change swaps
+  // the element's src under the player engine and the live texture follows, so this
+  // only re-runs when the element identity (or media kind) changes. Null tears it down.
+  useEffect(() => {
+    if (!controller) return;
+    if (mediaType !== "video" || !videoElement) {
+      void controller.setVideoElement(null);
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      await ensureVideoDimensions(videoElement);
+      if (alive) await controller.setVideoElement(videoElement);
+    })();
+    return () => {
+      alive = false;
+      void controller.setVideoElement(null);
+    };
+  }, [controller, videoElement, mediaType]);
 
   // Lockstep cover window: mirror the foreground coverflow. While the shared cover
   // window is active, reconcile the controller's sprite RING to the window slots and
