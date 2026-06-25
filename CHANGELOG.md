@@ -2,6 +2,13 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.5.1 — 2026-06-25 · Scope your search: @online, @local, @video, @audio
+
+Global search (⌘/Ctrl+F) gains four quick filters. Type @ and pick: @online searches only your enabled streaming sources, @local searches only your device library, and @video / @audio narrow your local library to just videos or just audio. Local-scoped filters skip the network entirely, so searching your own library never waits on online sources.
+
+### Highlights
+- **search** Four new @ filters in global search — In the ⌘/Ctrl+F search box, type @ to scope your search. @online looks only at your enabled online sources; @local stays on your device library; @video and @audio show only videos or only audio from your library. @local / @video / @audio never touch the network, so local searches stay instant. (CJK aliases work too — e.g. @视频 / @在线.)
+
 ## v1.5.0 — 2026-06-25 · Live song requests land where they should
 
 Live chat song requests (弹幕点歌) now route reliably no matter what you are playing. In online playlists (like NetEase imports) and other non-DJ playlists, a viewer's 'play next' request finds the song and queues it right after the current track — under shuffle, repeat-all, and when you switch playlists mid-stream. Songs matched online always land in one dedicated request playlist (with the cover cached for offline) instead of drifting into whichever set was playing; songs you already own are reused instead of re-downloaded; and a request that arrives while nothing is playing now starts playback immediately. Single-track repeat intentionally keeps looping the current song and holds requests until you move on.
