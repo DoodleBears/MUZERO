@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { saveSettings } from "@/db/repositories";
+import { createSession, createUploadedTrack, saveSettings } from "@/db/repositories";
 import {
   type AudienceRequestSource,
   DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
   DEFAULT_AUDIENCE_REQUEST_SOURCE,
+  type Track,
 } from "@/db/types";
 import type {
   AudienceRequestHandleOverride,
@@ -97,6 +98,20 @@ const source = (over: Partial<AudienceRequestSource>): AudienceRequestSource => 
 
 const payload = (body: string) => ({ body, receivedAt: 1 });
 
+async function uploadedTrack(sessionId: string, title: string): Promise<Track> {
+  return createUploadedTrack(
+    {
+      sessionId,
+      title,
+      kind: "audio",
+      blob: new Blob(["audio"], { type: "audio/mpeg" }),
+      mime: "audio/mpeg",
+      durationSec: 180,
+    },
+    db,
+  );
+}
+
 describe("live-request-controller pipeline", () => {
   it("routes a parsed message through normalize → runtime.handle", async () => {
     await enableIntake();
@@ -157,6 +172,34 @@ describe("live-request-controller pipeline", () => {
 
     expect(handle).toHaveBeenCalledTimes(1);
     expect(handle.mock.calls[0][0]).toMatchObject({ normalizedQuery: "lofi beats" });
+  });
+
+  it("threads getActiveQueueTrackIds + getCurrentTrackId into the default runtime (active-set off-session)", async () => {
+    // active-set scope + no DjSession context → the runtime must search the injected
+    // live-queue ids (GAP2 / Q4). No injected runtime → controller builds the real one.
+    const home = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const current = await uploadedTrack(home.id, "Now Playing");
+    const target = await uploadedTrack(home.id, "晴天");
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          enabled: true,
+          searchScope: "active-set",
+        },
+      },
+      db,
+    );
+    const controller = createLiveRequestController({
+      db,
+      controls: fakeControls(),
+      getActiveQueueTrackIds: () => [current.id, target.id],
+      getCurrentTrackId: () => current.id,
+    });
+
+    const item = await controller.drive({ query: "晴天" });
+
+    expect(item).toMatchObject({ status: "completed", matchedTrackId: target.id });
   });
 });
 

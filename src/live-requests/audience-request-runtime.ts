@@ -24,6 +24,7 @@ import {
 } from "@/db/types";
 import i18n from "@/i18n/i18n";
 import { newId } from "@/lib/id";
+import { cacheStreamTrackCover } from "@/streamsrc/playlist-cover-cache";
 import { resolveEnabledStreamSources } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { createStreamedTrack, hitToStreamedInput } from "@/streamsrc/streamed-track-repo";
@@ -97,6 +98,14 @@ export interface AudienceRequestRuntimeDeps {
   now?: () => number;
   getCurrentTrackId?: () => string | undefined | Promise<string | undefined>;
   getActiveSessionId?: () => string | undefined | Promise<string | undefined>;
+  /**
+   * Track ids of the LIVE play queue (the "current playlist" as the user sees it).
+   * Used by `active-set` scope when the context has no DjSession — online-playlist /
+   * system-playlist / entity / library all play without a `contextSetId`, so the only
+   * notion of "this playlist" is the play queue itself (GAP2). Falls back to the
+   * persisted `getPlayQueue` entries when not injected (e.g. unit tests).
+   */
+  getActiveQueueTrackIds?: () => string[] | Promise<string[]>;
   hasConfiguredOnlineSources?: (settings: AppSettings) => boolean;
   onlineFallback?: (
     input: OnlineAudienceRequestFallbackInput,
@@ -261,9 +270,20 @@ export function createAudienceRequestRuntime(
   async function tracksForScope(scope: AudienceRequestIntakeSettings["searchScope"]) {
     if (scope === "all-library") return listAllTracks(db);
     const activeSessionId = await resolveActiveSessionId();
-    if (!activeSessionId) return [];
-    const session = await getSession(activeSessionId, db);
-    return getTracksByIds(session?.trackIds ?? [], db);
+    if (activeSessionId) {
+      const session = await getSession(activeSessionId, db);
+      if (session) return getTracksByIds(session.trackIds, db);
+    }
+    // No DjSession context (online-playlist / system-playlist / entity / library) — the
+    // "current playlist" is the live play queue itself. Searching it keeps `active-set`
+    // working off-set instead of silently matching an empty set (GAP2).
+    return getTracksByIds(await resolveActiveQueueTrackIds(), db);
+  }
+
+  async function resolveActiveQueueTrackIds(): Promise<string[]> {
+    const injected = await deps.getActiveQueueTrackIds?.();
+    if (injected) return injected;
+    return (await getPlayQueue(db)).entries.map((entry) => entry.trackId);
   }
 
   async function resolveActiveSessionId(): Promise<string | undefined> {
@@ -437,29 +457,17 @@ export function createAudienceRequestRuntime(
     );
     const hit = results.flat()[0];
     if (!hit) return null;
-    const sessionId = await resolveOnlineTargetSession(input.settings);
-    if (!sessionId) return null;
+    // Q3: online matches ALWAYS land in the dedicated 点歌/online set — never the
+    // currently-active set — so the audience-request library has one stable home.
+    const sessionId = await resolveLiveRequestOnlineSetId(db, input.settings);
     const track = await createStreamedTrack(hitToStreamedInput(sessionId, hit), db);
     await prependTrackIds(sessionId, [track.id], db);
-    return { trackId: track.id };
-  }
-
-  async function resolveOnlineTargetSession(settings: AppSettings): Promise<string | null> {
-    const activeSessionId = await resolveActiveSessionId();
-    if (activeSessionId) return activeSessionId;
-    if (settings.streamOnlineSetId && (await getSession(settings.streamOnlineSetId, db))) {
-      return settings.streamOnlineSetId;
+    // Pull the cover into a local blob so the 点歌歌单 renders art offline — best-effort,
+    // fire-and-forget, mirroring the store's playStreamedHit (only on shells with muzfetch).
+    if (track.remoteCoverUrl && !track.coverBlobId) {
+      void cacheStreamTrackCover({ trackId: track.id, coverUrl: track.remoteCoverUrl });
     }
-    const session = await createSession(
-      {
-        name: i18n.t("globalSearch.onlineSetName"),
-        seedPrompt: "",
-        config: { autoExtend: false },
-      },
-      db,
-    );
-    await saveSettings({ streamOnlineSetId: session.id }, db);
-    return session.id;
+    return { trackId: track.id };
   }
 
   return {
@@ -484,6 +492,27 @@ export function createAudienceRequestRuntime(
     }
     return item;
   }
+}
+
+/**
+ * The stable home set for online-matched audience requests (Q3): the dedicated
+ * 点歌/online set, NOT whatever set happens to be playing. Returns the persisted
+ * `streamOnlineSetId` when it still resolves to a real session, otherwise creates one
+ * and persists it. Module-level + db-injected so it is unit-testable in isolation.
+ */
+export async function resolveLiveRequestOnlineSetId(
+  db: MuzeroDB,
+  settings: AppSettings,
+): Promise<string> {
+  if (settings.streamOnlineSetId && (await getSession(settings.streamOnlineSetId, db))) {
+    return settings.streamOnlineSetId;
+  }
+  const session = await createSession(
+    { name: i18n.t("globalSearch.onlineSetName"), seedPrompt: "", config: { autoExtend: false } },
+    db,
+  );
+  await saveSettings({ streamOnlineSetId: session.id }, db);
+  return session.id;
 }
 
 function createItem(

@@ -2274,3 +2274,39 @@ describe("player-store live request play-now de-dupe", () => {
     expect(mediaEngineMock.play).toHaveBeenCalled();
   });
 });
+
+// Q2: with NOTHING playing (empty/idle queue, currentIndex < 0), "play next" has no
+// anchor track to queue after — so a live request should START playing it rather than
+// silently appending into a queue that never advances.
+describe("player-store live request idle play-next (Q2)", () => {
+  it("starts playing the requested track when the queue is empty (idle, currentIndex < 0)", async () => {
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
+    const requested = track("trk_idle_req", session.id, "Requested");
+    await db.tracks.bulkAdd([requested]);
+    const blobId = `blb_${requested.id}`;
+    await db.mediaBlobs.put({
+      id: blobId,
+      trackId: requested.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+    });
+    await db.tracks.update(requested.id, { status: "ready", blobId });
+    // Empty play queue → nothing playing (currentIndex stays -1).
+    usePlayerStore.getState().init();
+    await waitFor(() => expect(usePlayerStore.getState().currentIndex).toBe(-1));
+    mediaEngineMock.play.mockClear();
+
+    await usePlayerStore.getState().playRequestNext(requested);
+
+    // Before the fix this just appended (currentIndex stayed -1, nothing played).
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.currentIndex).toBeGreaterThanOrEqual(0);
+      expect(s.queue[s.currentIndex]?.id).toBe(requested.id);
+    });
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+});

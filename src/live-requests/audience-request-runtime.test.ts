@@ -4,6 +4,9 @@ import {
   createSession,
   createUploadedTrack,
   getPlayQueue,
+  getSession,
+  getSettings,
+  listAllTracks,
   playQueueSet,
   prependTrackIds,
   saveSettings,
@@ -11,7 +14,10 @@ import {
 } from "@/db/repositories";
 import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, type Track } from "@/db/types";
 import type { AudienceRequestAiDjQueue } from "./audience-request-ai-dj";
-import { createAudienceRequestRuntime } from "./audience-request-runtime";
+import {
+  createAudienceRequestRuntime,
+  resolveLiveRequestOnlineSetId,
+} from "./audience-request-runtime";
 import type { NormalizedAudienceRequest } from "./audience-request-schema";
 
 let db: MuzeroDB;
@@ -153,6 +159,57 @@ describe("AudienceRequestRuntime direct search route", () => {
     expect(item.status).toBe("ignored");
   });
 
+  it("active-set scope falls back to the live play queue when the context has no DjSession (online playlist)", async () => {
+    // Mimic activateExplicitQueue (online-playlist / system-playlist / entity / library):
+    // a play queue with entries but NO contextSetId. The requested song is IN that queue.
+    const homeSession = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const current = await track(homeSession.id, "Now Playing");
+    const target = await track(homeSession.id, "晴天");
+    const tail = await track(homeSession.id, "Tail Song");
+    // Note: no prependTrackIds → homeSession.trackIds stays empty; the queue is the source of truth.
+    await playQueueSet([current.id, target.id, tail.id], { currentIndex: 0 }, db); // no contextSetId
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          searchScope: "active-set",
+        },
+      },
+      db,
+    );
+    const runtime = createAudienceRequestRuntime({ db });
+
+    const item = await runtime.handle(request("晴天"));
+
+    // Before the fix this returned [] → "ignored"; now active-set sees the live queue.
+    expect(item).toMatchObject({ status: "completed", matchedTrackId: target.id });
+  });
+
+  it("active-set scope can use an injected live-queue resolver (store cursor) without a session", async () => {
+    const homeSession = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const current = await track(homeSession.id, "Now Playing");
+    const target = await track(homeSession.id, "晴天");
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          searchScope: "active-set",
+        },
+      },
+      db,
+    );
+    // DB play queue is empty; the store-injected resolver is the authoritative "current playlist".
+    const runtime = createAudienceRequestRuntime({
+      db,
+      getActiveQueueTrackIds: () => [current.id, target.id],
+      getCurrentTrackId: () => current.id,
+    });
+
+    const item = await runtime.handle(request("晴天"));
+
+    expect(item).toMatchObject({ status: "completed", matchedTrackId: target.id });
+  });
+
   it("matches direct library-search requests by song title instead of notes", async () => {
     const { current, tail } = await seedQueue();
     await setTrackNote(tail.id, "Plastic Love memory", db);
@@ -198,6 +255,23 @@ describe("AudienceRequestRuntime direct search route", () => {
     expect(online).toBeTruthy();
     expect(queue.entries.map((entry) => entry.trackId)).toEqual([current.id, online!.id, tail.id]);
     expect(item.matchedTrackId).toBe(online!.id);
+  });
+
+  it("routes a confident match from another set by reusing its track id (no online, no copy)", async () => {
+    // Case ①②: the requested song lives in a DIFFERENT local set — all-library scope
+    // finds it and we route THAT exact track, never re-fetching a fresh online copy.
+    await seedQueue();
+    const otherSet = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const elsewhere = await track(otherSet.id, "Plastic Love");
+    const before = (await listAllTracks(db)).length;
+    const onlineFallback = vi.fn();
+    const runtime = createAudienceRequestRuntime({ db, onlineFallback });
+
+    const item = await runtime.handle(request("Plastic Love"));
+
+    expect(item).toMatchObject({ status: "completed", matchedTrackId: elsewhere.id });
+    expect(onlineFallback).not.toHaveBeenCalled(); // reused local — did not go online
+    expect((await listAllTracks(db)).length).toBe(before); // no duplicate track row
   });
 
   it("routes AI DJ requests into the injected AI queue and links the chat session", async () => {
@@ -323,6 +397,42 @@ describe("AudienceRequestRuntime per-source route override", () => {
     expect(item.routeMode).toBe("ai-dj");
     // Immediately-resolving mock may already be "completed"; either proves the route override took.
     expect(["queued", "completed"]).toContain(item.status);
+  });
+});
+
+describe("resolveLiveRequestOnlineSetId (Q3 — online matches always land in the 点歌/online set)", () => {
+  it("always resolves the dedicated online set, ignoring any active session", async () => {
+    const active = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const online = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await saveSettings({ streamOnlineSetId: online.id }, db);
+    // Mid-playback in a different set: the online match's home must STILL be the online set.
+    await playQueueSet([], { contextSetId: active.id, currentIndex: -1 }, db);
+    const settings = await getSettings(db);
+
+    const target = await resolveLiveRequestOnlineSetId(db, settings);
+
+    expect(target).toBe(online.id);
+    expect(target).not.toBe(active.id);
+  });
+
+  it("creates and persists a dedicated online set when none exists yet", async () => {
+    const settings = await getSettings(db); // no streamOnlineSetId
+
+    const target = await resolveLiveRequestOnlineSetId(db, settings);
+
+    expect(target).toBeTruthy();
+    expect((await getSettings(db)).streamOnlineSetId).toBe(target);
+    expect(await getSession(target, db)).toBeTruthy();
+  });
+
+  it("re-creates the online set when the persisted id is dangling", async () => {
+    await saveSettings({ streamOnlineSetId: "ses_ghost_deleted" }, db);
+    const settings = await getSettings(db);
+
+    const target = await resolveLiveRequestOnlineSetId(db, settings);
+
+    expect(target).not.toBe("ses_ghost_deleted");
+    expect(await getSession(target, db)).toBeTruthy();
   });
 });
 

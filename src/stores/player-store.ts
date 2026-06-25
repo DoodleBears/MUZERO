@@ -1581,6 +1581,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async playRequestNext(track) {
     log.debug("player", "playRequestNext", { trackId: track.id });
+    // Q2: idle (empty queue, nothing playing) — "next" has no anchor to queue after, so a
+    // request would silently sit in a queue that never advances. Start playing it instead.
+    if (get().currentIndex < 0) {
+      await get().playRequestNow(track);
+      return;
+    }
     // Queue into the FIFO request block after the slot that's ACTUALLY playing (store
     // cursor), NOT the persisted DB cursor — which can lag by one in the post-switch
     // debounce window and drop the request behind the playing track. We don't switch the
