@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DirEntryLike, FolderFs } from "@/lib/folder-import";
 import { encodeNcm } from "@/lib/ncm-fixture";
 
-const FOLDER_SYNC_COVER_TEST_TIMEOUT_MS = 15_000;
+// Generous headroom for CPU starvation under the parallel suite — see the note
+// on FOLDER_SYNC_TEST_TIMEOUT_MS in folder-sync.test.ts.
+const FOLDER_SYNC_COVER_TEST_TIMEOUT_MS = 30_000;
 
 vi.mock("@/player/media-engine", () => ({
   MediaEngine: class {

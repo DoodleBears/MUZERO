@@ -40,5 +40,15 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}", "scripts/**/*.test.mjs"],
     css: false,
+    // The full suite (450+ files, each jsdom + fake-indexeddb) saturated all
+    // cores under the default forks pool, starving the async IndexedDB-backed
+    // store tests past their timeouts (flaky CI/pre-push failures). Cap workers
+    // to leave CPU headroom so heavy tests still get scheduled, and give a small
+    // global timeout cushion. The percentage is portable: ~1 worker on low-core
+    // CI runners, ~9 on a 16-core dev box.
+    pool: "forks",
+    maxWorkers: "60%",
+    testTimeout: 15000,
+    hookTimeout: 15000,
   },
 });

@@ -3,7 +3,12 @@ import type { DesktopBridge } from "@/lib/desktop/bridge";
 import type { DirEntryLike, FolderFs } from "@/lib/folder-import";
 import { encodeNcm } from "@/lib/ncm-fixture";
 
-const FOLDER_SYNC_TEST_TIMEOUT_MS = 15_000;
+// Heavy integration tests: each does vi.resetModules() + a full dynamic
+// re-import of the player-store graph, then real fake-indexeddb work. Under the
+// parallel suite this can drift past 15s purely from CPU starvation (false
+// timeout, not slow logic), so give generous headroom; the vitest fork cap
+// keeps actual contention bounded.
+const FOLDER_SYNC_TEST_TIMEOUT_MS = 30_000;
 
 // player-store imports the MediaEngine at module load; we never call init()/play()
 // here, so a no-op stub keeps the import side-effect free.
