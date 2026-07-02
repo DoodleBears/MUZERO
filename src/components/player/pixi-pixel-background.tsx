@@ -147,14 +147,30 @@ function createSharedVideoTexture(
   return new Pixi.Texture({ source });
 }
 
-/** Wait for the shared element's intrinsic size before we cover-fit its sprite. */
-async function ensureVideoDimensions(video: HTMLVideoElement): Promise<void> {
-  if (video.videoWidth && video.videoHeight) return;
-  await Promise.race([
-    waitForEvent(video, "loadedmetadata"),
-    waitForEvent(video, "loadeddata"),
-    delay(500),
-  ]);
+/**
+ * Wait until the shared element can be sampled as a texture: intrinsic size (to
+ * cover-fit its sprite) AND a DECODED, presentable frame.
+ *
+ * WebGPU's `copyExternalImageToTexture` REJECTS a `<video>` that has no current frame
+ * ("doesn't have back resource") — where WebGL silently uploads a black frame — so
+ * attaching + force-rendering (setVideoElement → resize → render) before the first
+ * frame decodes throws an unhandled rejection on the WebGPU backend at boot / first
+ * mount (worst on a cold start, when the blob decodes slowly). It's harmless — playback
+ * is MediaEngine-driven and the very next render uploads fine — but noisy. Gating the
+ * attach on a presented frame closes it; afterwards Pixi's VideoSource only re-uploads
+ * on rVFC (real frames), so ongoing renders can't hit a frameless element. Every wait is
+ * bounded (mirrors {@link prepareVideoFrame}) so a stalled source can't hang the effect.
+ */
+async function ensureVideoTextureReady(video: HTMLVideoElement): Promise<void> {
+  if (!video.videoWidth || !video.videoHeight) {
+    await Promise.race([
+      waitForEvent(video, "loadedmetadata"),
+      waitForEvent(video, "loadeddata"),
+      delay(500),
+    ]);
+  }
+  await waitForVideoData(video); // readyState >= HAVE_CURRENT_DATA (a renderable frame)
+  await waitForPresentedFrame(video); // the compositor actually holds a decoded frame (rVFC)
 }
 
 export function PixiPixelBackground({
@@ -261,7 +277,7 @@ export function PixiPixelBackground({
     }
     let alive = true;
     void (async () => {
-      await ensureVideoDimensions(videoElement);
+      await ensureVideoTextureReady(videoElement);
       if (alive) await controller.setVideoElement(videoElement);
     })();
     return () => {
