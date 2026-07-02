@@ -35,6 +35,12 @@ vi.mock("@tanstack/react-virtual", () => ({
     measureElement: () => {},
   }),
 }));
+// Scroll chrome (Lenis + hover scrollbar) isn't under test here — it's shared with the
+// set-detail list and needs real layout/RAF that jsdom lacks.
+vi.mock("@/lib/smooth-scroll/use-smooth-scroll", () => ({
+  useSmoothScroll: () => ({ lenisRef: { current: null } }),
+}));
+vi.mock("@/components/library/hover-scrollbar", () => ({ HoverScrollbar: () => null }));
 
 import { DownloadCenter } from "./download-center";
 

@@ -3,6 +3,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { Download } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { HoverScrollbar } from "@/components/library/hover-scrollbar";
+import { rafObserveElementOffset } from "@/components/library/raf-scroll-offset";
 import { db } from "@/db/muzero-db";
 import type { DownloadJob } from "@/db/types";
 import { hasStreamingSources } from "@/lib/desktop/bridge";
@@ -12,6 +14,7 @@ import {
   orderDownloadJobs,
   summarizeDownloadCenter,
 } from "@/lib/download-center";
+import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { clearFinishedDownloads } from "@/streamsrc/download-action";
@@ -56,11 +59,23 @@ export function DownloadCenter() {
   };
 
   const parentRef = useRef<HTMLDivElement>(null);
+  // Same scroll chrome as the set-detail track list (VirtualTrackList): Lenis smooth
+  // scroll + a hover-reveal overlay scrollbar (native bar hidden via `no-scrollbar`).
+  const { lenisRef } = useSmoothScroll(parentRef);
+  const scrollToTop = useCallback(
+    (top: number) => {
+      if (lenisRef.current) lenisRef.current.scrollTo(top, { immediate: true });
+      else parentRef.current?.scrollTo({ top });
+    },
+    [lenisRef],
+  );
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => DOWNLOAD_ROW_ESTIMATE,
     getItemKey: (index) => rows[index]?.id ?? index,
+    // Coalesce native wheel-rate scroll into one recompute per frame (matches VirtualTrackList).
+    observeElementOffset: rafObserveElementOffset,
     overscan: 8,
   });
 
@@ -149,8 +164,9 @@ export function DownloadCenter() {
         <div
           ref={parentRef}
           data-testid="download-center-list"
-          className="chrome-fade min-h-0 flex-1 overflow-y-auto px-2 pb-chrome-bottom [--chrome-fade-top:0.5rem]"
+          className="group/list chrome-fade no-scrollbar relative min-h-0 flex-1 overflow-y-auto px-2 pb-chrome-bottom [--chrome-fade-top:0.5rem]"
         >
+          <HoverScrollbar scrollRef={parentRef} scrollToTop={scrollToTop} />
           <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
             {virtualizer.getVirtualItems().map((vr) => (
               <div
