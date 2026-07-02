@@ -137,6 +137,14 @@
     "copyError": "오류 세부정보 복사",
     "errorCopied": "오류 세부정보를 복사함"
   },
+  "downloadCenter": {
+    "filterAll": "전체",
+    "filterActive": "진행 중",
+    "filterDone": "완료",
+    "filterFailed": "실패",
+    "emptyWeb": "다운로드는 데스크톱 앱이 필요합니다.",
+    "emptyFiltered": "이 필터에 해당하는 다운로드가 없습니다."
+  },
   "playlistSync": {
     "title": "구독한 플레이리스트",
     "freqManual": "수동",
@@ -1375,6 +1383,7 @@
     "modeAlbums": "앨범",
     "modeArtists": "아티스트",
     "modeOnline": "발견",
+    "modeDownloads": "다운로드",
     "searchAlbums": "앨범 검색…",
     "searchArtists": "아티스트 검색…",
     "searchInSet": "이 세트에서 검색…",
@@ -1442,6 +1451,7 @@
       "navGalleryTabAlbums": "라이브러리 탭: 앨범",
       "navGalleryTabArtists": "라이브러리 탭: 아티스트",
       "navGalleryTabOnline": "라이브러리 탭: 발견",
+      "navGalleryTabDownloads": "라이브러리 탭: 다운로드",
       "searchOpenGlobal": "검색 열기",
       "libraryFocusPrev": "포커스 위로",
       "libraryFocusNext": "포커스 아래로",

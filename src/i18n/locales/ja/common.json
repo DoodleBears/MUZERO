@@ -137,6 +137,14 @@
     "copyError": "エラー詳細をコピー",
     "errorCopied": "エラー詳細をコピーしました"
   },
+  "downloadCenter": {
+    "filterAll": "すべて",
+    "filterActive": "進行中",
+    "filterDone": "完了",
+    "filterFailed": "失敗",
+    "emptyWeb": "ダウンロードはデスクトップ版が必要です。",
+    "emptyFiltered": "この絞り込みに一致するダウンロードはありません。"
+  },
   "playlistSync": {
     "title": "登録したプレイリスト",
     "freqManual": "手動",
@@ -1376,6 +1384,7 @@
     "modeAlbums": "アルバム",
     "modeArtists": "アーティスト",
     "modeOnline": "発見",
+    "modeDownloads": "ダウンロード",
     "searchAlbums": "アルバムを検索…",
     "searchArtists": "アーティストを検索…",
     "searchInSet": "このセット内を検索…",
@@ -1443,6 +1452,7 @@
       "navGalleryTabAlbums": "ライブラリタブ：アルバム",
       "navGalleryTabArtists": "ライブラリタブ：アーティスト",
       "navGalleryTabOnline": "ライブラリタブ：発見",
+      "navGalleryTabDownloads": "ライブラリタブ：ダウンロード",
       "searchOpenGlobal": "検索を開く",
       "libraryFocusPrev": "フォーカスを上へ",
       "libraryFocusNext": "フォーカスを下へ",

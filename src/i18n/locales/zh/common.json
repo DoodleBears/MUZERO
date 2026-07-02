@@ -137,6 +137,14 @@
     "copyError": "复制错误详情",
     "errorCopied": "已复制错误详情"
   },
+  "downloadCenter": {
+    "filterAll": "全部",
+    "filterActive": "进行中",
+    "filterDone": "已完成",
+    "filterFailed": "失败",
+    "emptyWeb": "下载功能需要桌面版。",
+    "emptyFiltered": "没有符合该筛选的下载。"
+  },
   "playlistSync": {
     "title": "订阅的歌单",
     "freqManual": "手动",
@@ -1376,6 +1384,7 @@
     "modeAlbums": "专辑",
     "modeArtists": "歌手",
     "modeOnline": "发现",
+    "modeDownloads": "下载",
     "searchAlbums": "搜索专辑…",
     "searchArtists": "搜索歌手…",
     "searchInSet": "在此歌单中搜索…",
@@ -1443,6 +1452,7 @@
       "navGalleryTabAlbums": "媒体库标签：专辑",
       "navGalleryTabArtists": "媒体库标签：歌手",
       "navGalleryTabOnline": "媒体库标签：发现",
+      "navGalleryTabDownloads": "媒体库标签：下载",
       "searchOpenGlobal": "打开搜索",
       "libraryFocusPrev": "上移焦点",
       "libraryFocusNext": "下移焦点",

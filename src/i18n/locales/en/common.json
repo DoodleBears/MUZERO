@@ -146,6 +146,14 @@
     "copyError": "Copy error details",
     "errorCopied": "Error details copied"
   },
+  "downloadCenter": {
+    "filterAll": "All",
+    "filterActive": "In progress",
+    "filterDone": "Completed",
+    "filterFailed": "Failed",
+    "emptyWeb": "Downloads need the desktop app.",
+    "emptyFiltered": "No downloads match this filter."
+  },
   "playlistSync": {
     "title": "Subscribed playlists",
     "freqManual": "Manual",
@@ -1397,6 +1405,7 @@
     "modeAlbums": "Albums",
     "modeArtists": "Artists",
     "modeOnline": "Discover",
+    "modeDownloads": "Downloads",
     "searchAlbums": "Search albums…",
     "searchArtists": "Search artists…",
     "searchInSet": "Search in this set…",
@@ -1465,6 +1474,7 @@
       "navGalleryTabAlbums": "Library tab: Albums",
       "navGalleryTabArtists": "Library tab: Artists",
       "navGalleryTabOnline": "Library tab: Discover",
+      "navGalleryTabDownloads": "Library tab: Downloads",
       "searchOpenGlobal": "Open search",
       "libraryFocusPrev": "Move focus up",
       "libraryFocusNext": "Move focus down",

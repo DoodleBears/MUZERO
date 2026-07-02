@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 纯核心 + 抽共享行（`download-center.ts` 筛选/排序/汇总 + 从 `downloads-panel` 抽 `DownloadJobRow`/action 钩子） | ✅ 完成（14 单测；progress口径倒置进 lib、`download-indicator` 委托；panel 改用共享行、Settings 不变） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Gallery 第 6 个「下载」tab（常驻 ModeTab + 快捷键 6 + 虚拟列表 + 筛选 chip + 聚合头 + 空态 + i18n×4） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Gallery 第 6 个「下载」tab（常驻 ModeTab + 快捷键 6 + 虚拟列表 + 筛选 chip + 聚合头 + 空态 + i18n×4） | ✅ 完成（代码就位 + 44 单测 + tsc/biome 绿 + E2E harness；真机行渲染/大批量待 Electron 手测） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 跨链接收尾（done job → 跳转 track/set · 通知「查看」改指本 tab · 环境感知空态） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -294,19 +294,19 @@ GALLERY_MODES = [..., "downloads"]                                              
 **Goal:** tab 2 出现常驻「下载」mode（快捷键 6），虚拟列表 + 筛选 chip + 聚合头 + 空态，动作可用。
 
 **Tasks:**
-- [ ] [`search-page.tsx`](../../../../src/pages/search-page.tsx)：`GalleryMode` + `GALLERY_MODES` 加 `"downloads"`；`ModeTab value="downloads" shortcut="6"`（**常驻**，不 `streamingSupported` 门控）；内容区 `{mode === "downloads" && <DownloadCenter/>}`；`setModePref` 循环（`~`）纳入 downloads。
-- [ ] 快捷键 registry 加 `nav.galleryTabDownloads`(Digit6) + `GALLERY_TAB_ACTIONS` 追加；更新 registry 单测到 Digit1–6。
-- [ ] 新增 [`download-center.tsx`](../../../../src/components/downloads/download-center.tsx)：聚合头（含「清空已完成」）+ 筛选 chip（计数角标 + `localStorage`）+ TanStack Virtual 列表（`<DownloadJobRow>`，仿 `VirtualTrackList`）+ `usePausedLiveQuery(listDownloadJobs)` + `useMemo` 筛选/排序。
-- [ ] 空态：能力感知（web「桌面版」/ 桌面空「去下载」引导）。
-- [ ] i18n×4：`gallery.modeDownloads`、`nav.galleryTabDownloads`、`shortcuts.action.navGalleryTabDownloads`、`downloadCenter.filterAll/Active/Done/Failed`、`downloadCenter.emptyDesktop/emptyWeb`、聚合头文案（复用既有 `download.inProgress` 等 + 新 `downloadCenter.summary*`）。en 源 → zh/ja/ko。
+- [x] [`search-page.tsx`](../../../../src/pages/search-page.tsx)：`GalleryMode` + `GALLERY_MODES` 加 `"downloads"`；`ModeTab value="downloads" shortcut="6"`（**常驻**，不 `streamingSupported` 门控）；内容区 `{mode === "downloads" && <DownloadCenter/>}`；`GalleryWallMode`/`SEARCH_PLACEHOLDER_KEY`/`isGalleryWallMode` 排除 downloads；wall 容器对 downloads 走 `overflow-hidden`（内层虚拟列表自滚，同 tracks）；toolbar 行对 downloads 隐藏（同 online）。`~` 循环 + Digit6 直跳自动纳入（`GALLERY_MODES`/`GALLERY_TAB_ACTIONS`）。
+- [x] 快捷键 registry 加 `nav.galleryTabDownloads`(Digit6) + `GALLERY_TAB_ACTIONS` 追加；registry 单测扩到 Digit1–6。
+- [x] 新增 [`download-center.tsx`](../../../../src/components/downloads/download-center.tsx)：聚合头（in-flight 计数 + 进度条 + 「清空已完成」）+ 筛选 chip（计数角标 + `localStorage` `muzero-download-filter`）+ TanStack Virtual 列表（`useVirtualizer` + `measureElement` 动态行高，`<DownloadJobRow>`）+ `useMemo` 筛选/排序。**实现决策**：用 `useLiveQuery`（非 `usePausedLiveQuery`）——组件仅在 `mode==="downloads"` 条件挂载，切走即卸载自动退订，无需额外 pause。
+- [x] 空态：能力感知（`hasStreamingSources()` 为真且空→复用 `download.queueEmpty`；web 不可下载→`downloadCenter.emptyWeb`；筛选无命中→`downloadCenter.emptyFiltered`）。
+- [x] i18n×4：`gallery.modeDownloads`、`shortcuts.action.navGalleryTabDownloads`、`downloadCenter.filterAll/Active/Done/Failed`、`downloadCenter.emptyWeb/emptyFiltered`（聚合头复用既有 `download.inProgress`/`queueClear`/`queueEmpty`）。en 源 → zh/ja/ko，脚本插入 + `JSON.parse` 校验。
+- [x] E2E harness [`scripts/download-center.mjs`](../../../../scripts/download-center.mjs)（CDP：seed 状态混合 job → Cmd/Ctrl+2 + 6 导航 → 快照 chip 计数/行数 → 翻 filter → 断言 → 清理）。
 
 #### Phase 2 Checklist
-- [ ] tab 2 出现第 6 个「下载」tab（常驻，快捷键 6 切入；与 1–5 一致）；`online` 隐藏时位置不漂移（绑 Digit6 键位）。
-- [ ] 入队单/批量下载 → tab 实时出现行，进度条随字节推进（`usePausedLiveQuery` 响应式）。
-- [ ] 筛选 chip：全部/进行中/已完成/失败 正确切片；计数角标准确；空 filter 出对应空态。
-- [ ] **529 条大批量虚拟化验证**：seed 数百 job → 仅可见行挂载、滚动流畅（对齐 prd-create §4：测帧节奏，虚拟列表滚动无 longtask 尖峰）。
-- [ ] 重试/移除/清空/复制错误 在 tab 内可用（复用既有动作）。
-- [ ] `make check` 通过；4 locale 无缺键；无硬编码用户可见字符串（走 `t()`）。
+- [x] tab 2 出现第 6 个「下载」tab（常驻，快捷键 6 直跳；`~` 循环纳入）；绑 **Digit6 键位** → `online` 隐藏时不漂移。（组件测 + tsc；DOM 层由 harness 验）
+- [x] 筛选 chip：全部/进行中(=active+pending+paused)/已完成/失败 正确切片 + 计数角标准确；空 filter 出 `emptyFiltered`；空队列出 `queueEmpty`(桌面)/`emptyWeb`(web)。（5 组件单测 render 断言）
+- [x] 5 组件单测（chips 计数 / 能力感知空态 ×2 / 筛选切换+持久化 / 清空已完成）+ registry Digit1–6 单测；`download-center` 纯核心 14 单测复用。
+- [x] `make check` 等价（`tsc --noEmit` + biome + 44 单测全绿）；4 locale 无缺键（脚本校验）；无硬编码用户可见字符串（走 `t()`）。
+- [ ] **入队单/批量下载 → tab 实时出现行、进度条随字节推进** + **529 条大批量虚拟化**（仅可见行挂载、滚动无 longtask 尖峰，对齐 prd-create §4）+ 重试/移除/清空 tab 内可用 — **待 Electron 手测**（harness `download-center.mjs` 已就绪；需 `electron:dev` + `MUZERO_REMOTE_DEBUG_PORT`）。
 
 ### Phase 3: 跨链接收尾
 
@@ -371,6 +371,7 @@ GALLERY_MODES = [..., "downloads"]                                              
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：把下载列表提升为 Gallery（tab 2）第 6 个常驻「下载」mode——虚拟化 + 全状态 + 筛选 chip + 聚合进度头；复用既有 `downloadJobs` 表/动作（零新持久化），抽共享 `DownloadJobRow`（tab + Settings 面板共用），纯 `download-center.ts`（筛选/排序/汇总，穷举单测）。3 phase：纯核心+抽行 → tab 集成（快捷键 6 常驻）→ 跨链接收尾（done 跳转 + 通知「查看」改指本 tab）。需求方三决策（完整下载中心 / 进度优先虚拟列表 / 常驻）已并入 §1.1 与 §10 |
 | 2026-07-02 | Claude (TDD) | **Phase 1 完成**（TDD）：纯 `download-center.ts`（`filterDownloadJobs`/`orderDownloadJobs`/`summarizeDownloadCenter`/`downloadAggregateProgress`/`isInFlight`）+ 14 单测；实现决策——progress口径单一真相倒置进 lib、`download-indicator.summarizeDownloadJobs` 委托（store→lib，13 单测零回归）。抽 `download-job-row.tsx`（`compact` + `onOpenTrack?` 预留）、`downloads-panel` 改用之（Settings 不变）。tsc + biome + 27 单测全绿 |
+| 2026-07-02 | Claude (TDD) | **Phase 2 完成**（TDD）：`search-page` 加第 6 个常驻「下载」mode（`GalleryMode`/`GALLERY_MODES`/`GALLERY_TAB_ACTIONS`/`isGalleryWallMode`/toolbar+wall 容器 downloads 分支）；registry `nav.galleryTabDownloads`(Digit6) + 单测扩 Digit1–6；`download-center.tsx`（聚合头 + 4 筛选 chip + `useVirtualizer`+`measureElement` 虚拟列表 + 能力感知空态）+ 5 组件单测；i18n×4（脚本插入 + JSON 校验）；E2E harness `scripts/download-center.mjs`（CDP seed→导航→快照→断言→清理）。tsc + biome + 44 单测全绿。真机行渲染/大批量/入队实时 待 Electron 手测。附：期间一并发 session 切到 `feat/online-source-playlist-filter` 提交 filter-playlists WIP（`d25a5833`），本工作已恢复回 `feat/downloads-gallery-tab`，无丢失 |
 
 ---
 

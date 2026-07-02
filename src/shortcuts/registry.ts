@@ -331,6 +331,14 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     keywords: ["gallery", "tab", "discover", "online", "发现", "推荐"],
   },
   {
+    id: "nav.galleryTabDownloads",
+    scope: "global",
+    category: "navigation",
+    labelKey: "shortcuts.action.navGalleryTabDownloads",
+    defaultBindings: [key("global", "Digit6", "6")],
+    keywords: ["gallery", "tab", "downloads", "queue", "下载", "队列"],
+  },
+  {
     id: "search.openGlobal",
     scope: "global",
     category: "search",

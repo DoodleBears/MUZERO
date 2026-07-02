@@ -129,13 +129,14 @@ describe("SHORTCUT_ACTIONS registry", () => {
     );
   });
 
-  it("binds bare Digit1–5 to the five library tabs (no clash with Cmd+1/2/3)", () => {
+  it("binds bare Digit1–6 to the six library tabs (no clash with Cmd+1/2/3)", () => {
     const tabs = [
       ["nav.galleryTabSets", "Digit1"],
       ["nav.galleryTabTracks", "Digit2"],
       ["nav.galleryTabAlbums", "Digit3"],
       ["nav.galleryTabArtists", "Digit4"],
       ["nav.galleryTabOnline", "Digit5"],
+      ["nav.galleryTabDownloads", "Digit6"],
     ] as const;
     for (const [id, code] of tabs) {
       const action = SHORTCUT_ACTIONS_BY_ID[id];

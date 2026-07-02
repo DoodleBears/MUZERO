@@ -20,6 +20,7 @@ import { SourceAttributionChip } from "@/components/cloud/source-attribution-chi
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { OnlineDiscoverTab } from "@/components/discover/online-discover-tab";
 import { OnlinePlaylistDetail } from "@/components/discover/online-playlist-detail";
+import { DownloadCenter } from "@/components/downloads/download-center";
 import { AlphabetIndex } from "@/components/library/alphabet-index";
 import { CollapsibleSearch } from "@/components/library/collapsible-search";
 import { CoverContextMenu } from "@/components/library/cover-context-menu";
@@ -153,18 +154,21 @@ import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 
 type GalleryView = "list" | "grid";
 // "online" is the 发现 (Discover) tab — desktop + streaming only (see hasStreamingSources).
-type GalleryMode = "sets" | "tracks" | "albums" | "artists" | "online";
+// "downloads" is the 下载 tab — always visible, its own virtualized download center.
+type GalleryMode = "sets" | "tracks" | "albums" | "artists" | "online" | "downloads";
 // Card walls with list/grid + A–Z fast-jump + hover scrollbar. Excludes tracks
-// (master/detail) and online (Discover's own card gallery, no view toggle).
-type GalleryWallMode = Exclude<GalleryMode, "tracks" | "online">;
-const GALLERY_MODES: GalleryMode[] = ["sets", "tracks", "albums", "artists", "online"];
-/** Direct-jump shortcut action → gallery tab (bare 1/2/3/4/5 on the wall). */
+// (master/detail), online (Discover's own card gallery), and downloads (its own
+// virtualized list) — none of which use the shared wall view toggle.
+type GalleryWallMode = Exclude<GalleryMode, "tracks" | "online" | "downloads">;
+const GALLERY_MODES: GalleryMode[] = ["sets", "tracks", "albums", "artists", "online", "downloads"];
+/** Direct-jump shortcut action → gallery tab (bare 1/2/3/4/5/6 on the wall). */
 const GALLERY_TAB_ACTIONS: ReadonlyArray<readonly [string, GalleryMode]> = [
   ["nav.galleryTabSets", "sets"],
   ["nav.galleryTabTracks", "tracks"],
   ["nav.galleryTabAlbums", "albums"],
   ["nav.galleryTabArtists", "artists"],
   ["nav.galleryTabOnline", "online"],
+  ["nav.galleryTabDownloads", "downloads"],
 ];
 // Discover has no text search box, so it carries no placeholder (the toolbar search
 // row is hidden for it).
@@ -173,7 +177,7 @@ const SEARCH_PLACEHOLDER_KEY = {
   tracks: "gallery.searchTracksGlobalHint",
   albums: "gallery.searchAlbums",
   artists: "gallery.searchArtists",
-} as const satisfies Record<Exclude<GalleryMode, "online">, string>;
+} as const satisfies Record<Exclude<GalleryMode, "online" | "downloads">, string>;
 
 function isFolderImportBusy(progress: FolderImportProgress | null) {
   return (
@@ -242,7 +246,7 @@ function savedGalleryView(mode: GalleryWallMode): GalleryView {
 }
 
 function isGalleryWallMode(mode: GalleryMode): mode is GalleryWallMode {
-  return mode !== "tracks" && mode !== "online";
+  return mode !== "tracks" && mode !== "online" && mode !== "downloads";
 }
 
 function useDelayedInactiveUnmount(active: boolean, delayMs: number): boolean {
@@ -1641,12 +1645,15 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
                     {t("gallery.modeOnline")}
                   </ModeTab>
                 )}
+                <ModeTab value="downloads" shortcut="6">
+                  {t("gallery.modeDownloads")}
+                </ModeTab>
               </TabsList>
             </Tabs>
           </TooltipProvider>
 
-          {/* Discover has no text search / view toggle, so the toolbar row is hidden for it. */}
-          {mode !== "online" && (
+          {/* Discover / Downloads have no text search / view toggle → hide the toolbar row. */}
+          {mode !== "online" && mode !== "downloads" && (
             <div className="flex items-center gap-2 px-4">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1693,9 +1700,9 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
           }}
           className={cn(
             "group/list no-scrollbar flex min-h-0 flex-1 flex-col px-1 pt-3",
-            // Tracks mode: a clipped, non-scrolling frame so the two panes inside are
-            // capped to the viewport and scroll themselves. Other walls scroll here.
-            mode === "tracks"
+            // Tracks + Downloads: a clipped, non-scrolling frame so the inner virtualized
+            // list is capped to the viewport and scrolls itself. Other walls scroll here.
+            mode === "tracks" || mode === "downloads"
               ? "overflow-hidden pb-0"
               : "chrome-fade overflow-y-auto pb-chrome-bottom [--chrome-fade-top:1.25rem]",
           )}
@@ -1991,6 +1998,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
             </>
           )}
           {mode === "online" && <OnlineDiscoverTab onOpenPlaylist={setSelectedOnlinePlaylist} />}
+          {mode === "downloads" && <DownloadCenter />}
         </div>
       </RenderTraceBoundary>
     </div>
