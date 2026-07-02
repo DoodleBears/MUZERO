@@ -142,6 +142,7 @@
     "filterActive": "进行中",
     "filterDone": "已完成",
     "filterFailed": "失败",
+    "clearAll": "清空全部",
     "emptyWeb": "下载功能需要桌面版。",
     "emptyFiltered": "没有符合该筛选的下载。"
   },

@@ -215,6 +215,7 @@ export interface DownloadJobRowProps {
 | 重试失败 | `retryDownload(id)` | [`download-action.ts`](../../../../src/streamsrc/download-action.ts) |
 | 移除/取消（非 active）| `removeDownload(id)` | 同上 |
 | 清空已完成 | `clearFinishedDownloadJobs()` | [`download-job-repo.ts`](../../../../src/db/download-job-repo.ts) |
+| 清空全部 | `clearAllDownloadJobs()`（`toCollection().delete()`；in-flight 后台完成，runner 对已删 id `update` 为 no-op） | [`download-job-repo.ts`](../../../../src/db/download-job-repo.ts) |
 | 复制错误详情 | 面板既有 clipboard 逻辑 | [`downloads-panel.tsx`](../../../../src/components/downloads/downloads-panel.tsx) |
 | （Phase 3）跳转到歌曲/所在集 | `useNavStore().openSet(sessionId)` / 定位 `trackId` | [`nav-store.ts`](../../../../src/stores/nav-store.ts) |
 
@@ -256,7 +257,7 @@ GALLERY_MODES = [..., "downloads"]                                              
 ### 5.2 UI Components
 
 - **`DownloadCenter`（新，tab 内容）**：自上而下
-  1. **聚合头**：`summarizeDownloadCenter` → 「N 进行中 · M 已完成 · K 失败」+（有 progress 时）总进度条；右侧「清空已完成」按钮（`clearFinishedDownloadJobs`）。
+  1. **聚合头**：`summarizeDownloadCenter` → 「N 进行中 · M 已完成 · K 失败」+（有 progress 时）总进度条；右侧「清空已完成」（`done>0` 时显示）+「清空全部」（`total>0` 时显示，hover 变 destructive 色）两个按钮。
   2. **筛选 chip 行**：`全部 | 进行中 | 已完成 | 失败`（`DownloadFilter`），本地 `useState` + `localStorage`（视图偏好，非行为 flag，允许；cf. 规则 3 与既有 `MODE_KEY` 同纪律）。带计数角标。
   3. **虚拟列表**：`orderDownloadJobs(filterDownloadJobs(jobs, filter))` → TanStack Virtual（镜像 [`VirtualTrackList`](../../../../src/components/library/virtual-track-list.tsx)），行 = `<DownloadJobRow>`（完整密度）。**滚动/滚动条样式与歌单详情列表一致**：`group/list no-scrollbar chrome-fade` 容器（隐藏原生滚动条）+ [`HoverScrollbar`](../../../../src/components/library/hover-scrollbar.tsx) 悬停浮层拇指 + [`useSmoothScroll`](../../../../src/lib/smooth-scroll/use-smooth-scroll.ts)（Lenis，`scrollToTop` 经 lenis）+ 虚拟器 `observeElementOffset: rafObserveElementOffset`（逐帧合并 wheel）。
   4. **空态**：无能力壳层（web，`hasDownloadCapability()`/无 bridge writeMediaStorageBlob）→「下载需要桌面版」；有能力但空 →「暂无下载 · 去在线源/收藏夹下载」引导。
@@ -375,6 +376,7 @@ GALLERY_MODES = [..., "downloads"]                                              
 | 2026-07-02 | Claude (TDD) | **Phase 2 完成**（TDD）：`search-page` 加第 6 个常驻「下载」mode（`GalleryMode`/`GALLERY_MODES`/`GALLERY_TAB_ACTIONS`/`isGalleryWallMode`/toolbar+wall 容器 downloads 分支）；registry `nav.galleryTabDownloads`(Digit6) + 单测扩 Digit1–6；`download-center.tsx`（聚合头 + 4 筛选 chip + `useVirtualizer`+`measureElement` 虚拟列表 + 能力感知空态）+ 5 组件单测；i18n×4（脚本插入 + JSON 校验）；E2E harness `scripts/download-center.mjs`（CDP seed→导航→快照→断言→清理）。tsc + biome + 44 单测全绿。真机行渲染/大批量/入队实时 待 Electron 手测。附：期间一并发 session 切到 `feat/online-source-playlist-filter` 提交 filter-playlists WIP（`d25a5833`），本工作已恢复回 `feat/downloads-gallery-tab`，无丢失 |
 | 2026-07-02 | Claude (TDD) | **Phase 3 完成**（TDD）：`nav-store` 加 `{kind:"downloads"}` intent + `openDownloadsTab()`（复用 `pendingLibraryEntity` 通道）；`search-page` 消费 effect 加 downloads 分支；`download-indicator` 通知「查看」`setTab("settings")`→`openDownloadsTab()`；`DownloadCenter` done 行 `onOpenTrack`→`openSet(sessionId, trackId)`（缺 sessionId no-op）。新增 `nav-store` intent 单测 + `download-job-row` 3 组件单测。**全量 `vitest run` 3419 passed / 3 skipped 零回归**，tsc + biome 绿。Status → Completed |
 | 2026-07-02 | Claude | **滚动条/滚动样式对齐歌单详情列表**（需求方）：`DownloadCenter` 列表容器改用 `group/list no-scrollbar chrome-fade` + [`HoverScrollbar`](../../../../src/components/library/hover-scrollbar.tsx) 悬停浮层 + [`useSmoothScroll`](../../../../src/lib/smooth-scroll/use-smooth-scroll.ts)(Lenis) + 虚拟器 `rafObserveElementOffset`——与 `VirtualTrackList`（歌单/歌曲详情）同一套滚动 chrome。组件测加 mock（Lenis/HoverScrollbar，jsdom 无 layout/RAF）；tsc + biome + 8 组件单测绿 |
+| 2026-07-02 | Claude | **加「清空全部」**（需求方，除「清空已完成」外）：新 `clearAllDownloadJobs()`（repo `toCollection().delete()`）+ `clearAllDownloads()`（download-action）；`DownloadCenter` 聚合头加「清空全部」按钮（`total>0` 显示）。in-flight 安全——runner 用 `updateJob`(Dexie update) 对已删 id 为 no-op，删行不复活、活动下载后台完成。i18n×4 `downloadCenter.clearAll`；+1 组件单测；tsc + biome + 6 组件单测绿 |
 
 ---
 

@@ -6,6 +6,7 @@
  */
 
 import {
+  clearAllDownloadJobs,
   clearFinishedDownloadJobs,
   deleteDownloadJob,
   listDownloadJobs,
@@ -382,6 +383,11 @@ export async function removeDownload(id: string): Promise<void> {
 /** Panel action: clear all finished (done) jobs. */
 export async function clearFinishedDownloads(): Promise<number> {
   return clearFinishedDownloadJobs();
+}
+
+/** Panel action: clear every job (in-flight downloads finish in the background). */
+export async function clearAllDownloads(): Promise<number> {
+  return clearAllDownloadJobs();
 }
 
 /**

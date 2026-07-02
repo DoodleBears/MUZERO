@@ -17,7 +17,7 @@ import {
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
-import { clearFinishedDownloads } from "@/streamsrc/download-action";
+import { clearAllDownloads, clearFinishedDownloads } from "@/streamsrc/download-action";
 import { DownloadJobRow } from "./download-job-row";
 
 const FILTER_KEY = "muzero-download-filter";
@@ -120,6 +120,15 @@ export function DownloadCenter() {
             className="shrink-0 text-muted-foreground text-xs transition-colors hover:text-foreground"
           >
             {t("download.queueClear")}
+          </button>
+        )}
+        {summary.total > 0 && (
+          <button
+            type="button"
+            onClick={() => void clearAllDownloads()}
+            className="shrink-0 text-muted-foreground text-xs transition-colors hover:text-destructive"
+          >
+            {t("downloadCenter.clearAll")}
           </button>
         )}
       </div>

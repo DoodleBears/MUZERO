@@ -20,8 +20,10 @@ let streaming = true;
 vi.mock("@/lib/desktop/bridge", () => ({ hasStreamingSources: () => streaming }));
 
 const clearFinished = vi.fn();
+const clearAll = vi.fn();
 vi.mock("@/streamsrc/download-action", () => ({
   clearFinishedDownloads: () => clearFinished(),
+  clearAllDownloads: () => clearAll(),
   removeDownload: vi.fn(),
   retryDownload: vi.fn(),
 }));
@@ -117,5 +119,18 @@ describe("DownloadCenter", () => {
     rerender(<DownloadCenter />);
     fireEvent.click(screen.getByText("download.queueClear"));
     expect(clearFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it("clear-all appears whenever the queue is non-empty and calls clearAllDownloads", () => {
+    // Only an active job (nothing finished) → no clear-finished, but clear-all is present.
+    jobs = [job({ id: "a", status: "active" })];
+    const { rerender } = render(<DownloadCenter />);
+    expect(screen.queryByText("download.queueClear")).toBeNull();
+    fireEvent.click(screen.getByText("downloadCenter.clearAll"));
+    expect(clearAll).toHaveBeenCalledTimes(1);
+    // Empty queue → no clear-all button.
+    jobs = [];
+    rerender(<DownloadCenter />);
+    expect(screen.queryByText("downloadCenter.clearAll")).toBeNull();
   });
 });

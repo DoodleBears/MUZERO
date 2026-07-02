@@ -142,6 +142,7 @@
     "filterActive": "진행 중",
     "filterDone": "완료",
     "filterFailed": "실패",
+    "clearAll": "전체 지우기",
     "emptyWeb": "다운로드는 데스크톱 앱이 필요합니다.",
     "emptyFiltered": "이 필터에 해당하는 다운로드가 없습니다."
   },

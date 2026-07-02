@@ -142,6 +142,7 @@
     "filterActive": "進行中",
     "filterDone": "完了",
     "filterFailed": "失敗",
+    "clearAll": "すべてクリア",
     "emptyWeb": "ダウンロードはデスクトップ版が必要です。",
     "emptyFiltered": "この絞り込みに一致するダウンロードはありません。"
   },

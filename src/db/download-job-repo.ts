@@ -54,3 +54,9 @@ export async function findPendingJob(
 export async function clearFinishedDownloadJobs(db: MuzeroDB = defaultDb): Promise<number> {
   return db.downloadJobs.where("status").equals("done").delete();
 }
+
+/** Remove every job (UI "clear all"). Returns the count cleared. Any in-flight download
+ *  completes in the background — the runner's `update` on the deleted id is a no-op. */
+export async function clearAllDownloadJobs(db: MuzeroDB = defaultDb): Promise<number> {
+  return db.downloadJobs.toCollection().delete();
+}

@@ -151,6 +151,7 @@
     "filterActive": "In progress",
     "filterDone": "Completed",
     "filterFailed": "Failed",
+    "clearAll": "Clear all",
     "emptyWeb": "Downloads need the desktop app.",
     "emptyFiltered": "No downloads match this filter."
   },
