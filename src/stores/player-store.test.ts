@@ -2030,7 +2030,12 @@ describe("player-store context-aware play (playTrackInContext)", () => {
     });
   });
 
-  it("plays the clicked track next even in shuffle (insert after current is not skipped)", async () => {
+  // Generous per-test timeout: this test waits on two async liveQuery reflects, which the
+  // forks pool can starve for many seconds on a heavily-loaded machine (the whole file has
+  // been observed at ~27s under contention). Logic is fast; only scheduling is slow.
+  it("plays the clicked track next even in shuffle (insert after current is not skipped)", {
+    timeout: 30000,
+  }, async () => {
     const rt = await loadRuntime();
     const { db, repos, usePlayerStore } = rt;
     const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c"]);
@@ -2051,16 +2056,16 @@ describe("player-store context-aware play (playTrackInContext)", () => {
         expect(s.shuffle).toBe(true);
         expect(s.queue[0]?.id).toBe("trk_a"); // current pinned
       },
-      { timeout: 2500 },
+      { timeout: 5000 },
     );
 
     const cur = usePlayerStore.getState().currentIndex;
     await repos.playQueueInsertAt(cur + 1, [requested.id]);
-    // The liveQuery reflect of the DB insert into the store queue can lag several seconds
-    // under full-suite parallel load (forks pool + IndexedDB); give it generous slack, well
-    // under the 15s testTimeout (the 2500ms default was still occasionally too tight).
+    // The liveQuery reflect of the DB insert into the store queue can lag many seconds under
+    // full-suite parallel load (forks pool + IndexedDB starvation); give it generous slack
+    // (bounded, so a genuine hang still fails) within the 30s per-test timeout above.
     await waitFor(() => expect(usePlayerStore.getState().queue[cur + 1]?.id).toBe("trk_req"), {
-      timeout: 10000,
+      timeout: 20000,
     });
 
     await usePlayerStore.getState().next();
