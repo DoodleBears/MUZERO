@@ -2043,15 +2043,25 @@ describe("player-store context-aware play (playTrackInContext)", () => {
       .getState()
       .playTrackInContext(tracks[0], { source: { kind: "set", setId: set.id }, tracks });
     usePlayerStore.getState().setShuffle(true);
-    await waitFor(() => {
-      const s = usePlayerStore.getState();
-      expect(s.shuffle).toBe(true);
-      expect(s.queue[0]?.id).toBe("trk_a"); // current pinned
-    });
+    // Shuffle materialization + the liveQuery reflect are async; under heavy parallel-test
+    // load they can exceed waitFor's 1000ms default (same slack as the debounce waits above).
+    await waitFor(
+      () => {
+        const s = usePlayerStore.getState();
+        expect(s.shuffle).toBe(true);
+        expect(s.queue[0]?.id).toBe("trk_a"); // current pinned
+      },
+      { timeout: 2500 },
+    );
 
     const cur = usePlayerStore.getState().currentIndex;
     await repos.playQueueInsertAt(cur + 1, [requested.id]);
-    await waitFor(() => expect(usePlayerStore.getState().queue[cur + 1]?.id).toBe("trk_req"));
+    // The liveQuery reflect of the DB insert into the store queue can lag several seconds
+    // under full-suite parallel load (forks pool + IndexedDB); give it generous slack, well
+    // under the 15s testTimeout (the 2500ms default was still occasionally too tight).
+    await waitFor(() => expect(usePlayerStore.getState().queue[cur + 1]?.id).toBe("trk_req"), {
+      timeout: 10000,
+    });
 
     await usePlayerStore.getState().next();
 
