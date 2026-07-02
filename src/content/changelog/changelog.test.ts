@@ -26,8 +26,8 @@ describe("changelog loader", () => {
     expect(latestVersion).toBe(changelog[0].version);
   });
 
-  it("the newest release is 1.5.2", () => {
-    expect(latestVersion).toBe("1.5.2");
+  it("the newest release is 1.6.0", () => {
+    expect(latestVersion).toBe("1.6.0");
   });
 
   it("every release version is valid, unique, and matches its filename", () => {

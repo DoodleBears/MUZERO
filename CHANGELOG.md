@@ -2,6 +2,24 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.6.0 — 2026-07-02 · A home for your downloads
+
+1.6.0 gives downloads a first-class home: a new Downloads tab in your library lists every download with live progress, a status filter (in progress / completed / failed), and clear-finished or clear-all — virtualized so a 500-song favorites batch stays smooth. Plus, ⌘F filtering now matches pinyin and Japanese kana/romaji, playlist imports run in the background with a progress notification (and import far faster for big lists), you can filter the online playlist list before importing, and live-video backgrounds render reliably.
+
+### Highlights
+- **library** Downloads center — a dedicated tab for all your downloads — Your library gets a 6th tab, Downloads, next to Sets / Songs / Albums / Artists / Discover. It lists every download with live progress and a status filter (all / in progress / completed / failed), and it's virtualized — so downloading a whole 500-video favorites batch stays smooth. Clear finished or clear all from the header, and click a finished download to jump straight to where its track landed. The background download notification's 'View' now opens this tab too. _(desktop)_
+
+### Added
+- **search** ⌘F filter now matches pinyin and Japanese kana/romaji — Typing in the ⌘F @filter menu now matches Chinese songs by pinyin and Japanese songs by kana or romaji, so you can find 邓丽君 by typing 'deng' or 君の名は by typing 'kimi' — no need to type the exact characters.
+- **streaming** Playlist imports run in the background with a progress notification — Importing an online playlist (e.g. from NetEase or Bilibili) no longer blocks the UI — it runs in the background and shows a progress notification in the top-left, so you can keep browsing and playing while a big list imports. _(desktop)_
+
+### Changed
+- **streaming** Big playlist imports are dramatically faster — The batch import path was rewritten from O(n²) to O(n), so importing a large playlist (hundreds of tracks) is now dramatically faster and stays responsive. _(desktop)_
+- **streaming** Filter the online playlist list before importing — The online playlist import list now has a search box, so you can quickly filter to the playlist you want instead of scrolling a long list. _(desktop)_
+
+### Fixed
+- **player** Live-video backgrounds render reliably — Fixed a case where a live video used as an immersive background could fail to sample as a GPU texture before its first frame decoded, so the background didn't render; MUZERO now waits for a decoded frame first.
+
 ## v1.5.2 — 2026-06-26 · Background effects now apply to your videos
 
 When a video plays as your Now Playing background, the selected background effect — pixel, CRT, dot, ASCII, cross-hatch, noise, or blur — now renders over the moving picture, not just cover art. It samples the video you're already watching (no extra decode), so there's no added battery or memory cost. Keep a clean video backdrop with the existing 'Show background effects on video tracks' toggle.
