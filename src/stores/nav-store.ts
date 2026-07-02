@@ -29,7 +29,8 @@ export type LibraryEntityTarget =
   | { kind: "system-playlist"; id: SystemPlaylistId; anchorTrackId?: string }
   | { kind: "artist"; name: string }
   | { kind: "album"; trackId: string }
-  | { kind: "online-playlist"; playlist: StreamPlaylist; anchorTrackId?: string };
+  | { kind: "online-playlist"; playlist: StreamPlaylist; anchorTrackId?: string }
+  | { kind: "downloads" };
 
 interface NavState {
   tab: Tab;
@@ -49,6 +50,8 @@ interface NavState {
   openAlbumForTrack: (trackId: string) => void;
   /** Switch to the online library tab and open an external playlist detail page. */
   openOnlinePlaylist: (playlist: StreamPlaylist, anchorTrackId?: string) => void;
+  /** Switch to the library tab and open the Downloads gallery mode. */
+  openDownloadsTab: () => void;
   /** Read + clear the pending entity (the library page calls this on mount). */
   consumeLibraryEntity: () => LibraryEntityTarget | null;
 }
@@ -91,6 +94,7 @@ export const useNavStore = create<NavState>()(
             ...(anchorTrackId !== undefined ? { anchorTrackId } : {}),
           },
         }),
+      openDownloadsTab: () => set({ tab: "search", pendingLibraryEntity: { kind: "downloads" } }),
       consumeLibraryEntity: () => {
         const pending = get().pendingLibraryEntity;
         if (pending) set({ pendingLibraryEntity: null });

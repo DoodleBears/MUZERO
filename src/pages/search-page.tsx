@@ -832,6 +832,20 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
         consumeLibraryEntity();
       });
       return;
+    } else if (pendingEntity.kind === "downloads") {
+      transitionState(() => {
+        setMode("downloads");
+        if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "downloads");
+        setSelectedOnlinePlaylist(null);
+        setSelectedSetId(null);
+        setSelectedSetAnchorTrackId(undefined);
+        setSelectedSystemPlaylistId(null);
+        setSelectedSystemAnchorTrackId(undefined);
+        setSelectedArtistKey(null);
+        setSelectedAlbumKey(null);
+        consumeLibraryEntity();
+      });
+      return;
     } else {
       beginCoverMorph(sourceCoverMorphNamespace(pendingEntity));
       transitionState(() => {

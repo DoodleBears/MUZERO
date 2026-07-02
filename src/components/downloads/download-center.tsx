@@ -1,7 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Download } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { db } from "@/db/muzero-db";
 import type { DownloadJob } from "@/db/types";
@@ -13,6 +13,7 @@ import {
   summarizeDownloadCenter,
 } from "@/lib/download-center";
 import { cn } from "@/lib/utils";
+import { useNavStore } from "@/stores/nav-store";
 import { clearFinishedDownloads } from "@/streamsrc/download-action";
 import { DownloadJobRow } from "./download-job-row";
 
@@ -67,6 +68,11 @@ export function DownloadCenter() {
     setFilter(next);
     if (typeof localStorage !== "undefined") localStorage.setItem(FILTER_KEY, next);
   }
+
+  // A finished download jumps to the set its track landed in (anchoring the track).
+  const openTrack = useCallback((job: DownloadJob) => {
+    if (job.sessionId) useNavStore.getState().openSet(job.sessionId, job.trackId);
+  }, []);
 
   const pct = summary.progress != null ? Math.round(summary.progress * 100) : null;
 
@@ -154,7 +160,7 @@ export function DownloadCenter() {
                 className="absolute top-0 left-0 w-full"
                 style={{ transform: `translateY(${vr.start}px)` }}
               >
-                <DownloadJobRow job={rows[vr.index]} />
+                <DownloadJobRow job={rows[vr.index]} onOpenTrack={openTrack} />
               </div>
             ))}
           </div>

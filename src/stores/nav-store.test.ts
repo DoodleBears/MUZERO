@@ -63,4 +63,13 @@ describe("nav-store — persisted active tab", () => {
     });
     expect(localStorage.getItem("muzero-nav")).not.toContain("p1");
   });
+
+  it("openDownloadsTab switches to the library tab and queues the downloads intent", () => {
+    useNavStore.setState({ tab: "settings" });
+    useNavStore.getState().openDownloadsTab();
+    expect(useNavStore.getState().tab).toBe("search");
+    expect(useNavStore.getState().consumeLibraryEntity()).toEqual({ kind: "downloads" });
+    expect(useNavStore.getState().pendingLibraryEntity).toBeNull();
+    expect(localStorage.getItem("muzero-nav")).not.toContain("downloads");
+  });
 });

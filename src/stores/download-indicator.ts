@@ -54,7 +54,7 @@ export interface DownloadIndicatorView {
 export interface DownloadReconcilerDeps {
   view: DownloadIndicatorView;
   t: (key: string, opts?: Record<string, unknown>) => string;
-  /** Tap-through target (jump to Settings → Downloads), replacing the badge's onClick. */
+  /** Tap-through target (jump to the Downloads gallery tab), replacing the badge's onClick. */
   onView: () => void;
 }
 
@@ -99,7 +99,7 @@ export function startDownloadIndicator(): void {
   const reconcile = createDownloadReconciler({
     view: notify,
     t: (key, opts) => i18n.t(key as never, opts as never) as unknown as string,
-    onView: () => useNavStore.getState().setTab("settings"),
+    onView: () => useNavStore.getState().openDownloadsTab(),
   });
   subscription = liveQuery(() =>
     db.downloadJobs.where("status").anyOf("active", "pending").toArray(),

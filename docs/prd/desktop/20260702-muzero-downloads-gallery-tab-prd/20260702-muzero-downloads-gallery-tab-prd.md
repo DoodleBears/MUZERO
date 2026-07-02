@@ -1,6 +1,6 @@
 # PRD: MUZERO 下载中心 — Gallery 第 6 个「下载」Tab（虚拟列表 + 全状态 + 筛选）
 
-**Status:** Draft
+**Status:** Completed（3 phase 全实现 + 全量单测绿；真机行渲染/大批量入队 待 Electron 手测）
 **Created:** 2026-07-02
 **Author:** DoodleBear
 **Module:** `src/pages/search-page.tsx`（Gallery 第 6 个 mode）· `src/components/downloads/`（虚拟化下载中心 + 抽共享行）· `src/lib/download-center.ts`（纯筛选/排序/汇总）· i18n · 快捷键 registry
@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 纯核心 + 抽共享行（`download-center.ts` 筛选/排序/汇总 + 从 `downloads-panel` 抽 `DownloadJobRow`/action 钩子） | ✅ 完成（14 单测；progress口径倒置进 lib、`download-indicator` 委托；panel 改用共享行、Settings 不变） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Gallery 第 6 个「下载」tab（常驻 ModeTab + 快捷键 6 + 虚拟列表 + 筛选 chip + 聚合头 + 空态 + i18n×4） | ✅ 完成（代码就位 + 44 单测 + tsc/biome 绿 + E2E harness；真机行渲染/大批量待 Electron 手测） | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 跨链接收尾（done job → 跳转 track/set · 通知「查看」改指本 tab · 环境感知空态） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 跨链接收尾（done job → 跳转 track/set · 通知「查看」改指本 tab · 环境感知空态） | ✅ 完成（`openDownloadsTab` intent + done→`openSet` + 通知「查看」改指本 tab；nav/row 单测；全量 3419 零回归） | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -313,15 +313,16 @@ GALLERY_MODES = [..., "downloads"]                                              
 **Goal:** done 行可跳到建好的歌曲/所在集；左上角下载通知的「查看」改指本 tab；空态环境感知打磨。
 
 **Tasks:**
-- [ ] `DownloadJobRow` done 态：点击/「查看歌曲」→ `onOpenTrack` → [`nav-store`](../../../../src/stores/nav-store.ts) `openSet(job.sessionId)`（并尽量定位 `job.trackId`）；缺字段降级（§4.4）。
-- [ ] [`download-indicator.ts`](../../../../src/stores/download-indicator.ts) 通知「查看」动作：从 `setTab("settings")` 改为 `setTab("search") + setModePref("downloads")`（下载现在有一等 tab；更新其单测断言）。
-- [ ] 空态文案/图标按环境（桌面 vs web）最终打磨 + i18n 校对清理（删本 PRD 引入但未用的键）。
+- [x] `DownloadJobRow` done 态经 `onOpenTrack` → `DownloadCenter` 传 `(job) => openSet(job.sessionId, job.trackId)`（复用既有 [`nav-store`](../../../../src/stores/nav-store.ts) `openSet`，anchor 到 `trackId`）；`sessionId` 缺失则 no-op 降级（不崩）。
+- [x] 新 intent 通道：`nav-store` 加 `{ kind: "downloads" }` + `openDownloadsTab()`（复用既有 `pendingLibraryEntity` 短暂 intent + `consumeLibraryEntity`，不新增 store 字段）；`search-page` 消费 effect 加 downloads 分支（`setMode("downloads")` + 持久化 + 清选择）。
+- [x] [`download-indicator.ts`](../../../../src/stores/download-indicator.ts) 通知「查看」动作：`setTab("settings")` → `openDownloadsTab()`（落到 tab 2「下载」mode；reconciler 13 单测经注入 `onView` 不受影响，零回归）。
+- [x] 空态已环境感知（桌面空→`queueEmpty` / web→`emptyWeb` / 筛选空→`emptyFiltered`，Phase 2 落地）；本期无新增 i18n 键、无死键。
 
 #### Phase 3 Checklist
-- [ ] 完成的下载点「查看」→ 跳到该歌曲所在集（`trackId`/`sessionId` 缺失走降级，不崩）。
-- [ ] 左上角下载通知「查看」→ 落到 tab 2「下载」mode（非 Settings）。
-- [ ] web/无下载能力壳层：tab 常驻但显示「桌面版」引导空态，不报错。
-- [ ] `make check` 通过；无死 i18n key / 死代码。
+- [x] 完成的下载点行 → `openSet(sessionId, trackId)` 跳到所在集并 anchor 歌曲；`sessionId` 缺失 no-op 不崩（`DownloadJobRow` 3 组件单测：done 可点/非 done 不可点/failed 重试+移除）。
+- [x] 左上角下载通知「查看」→ `openDownloadsTab()` 落到「下载」mode（`nav-store` 单测：intent 入队 + `consumeLibraryEntity` 清空 + 不持久化）。
+- [x] web/无下载能力：tab 常驻 + `emptyWeb` 引导空态（Phase 2 组件单测覆盖）。
+- [x] 全量 `vitest run` 3419 passed / 3 skipped **零回归**；tsc + biome 绿；无死 i18n key / 死代码。
 
 ---
 
@@ -372,6 +373,7 @@ GALLERY_MODES = [..., "downloads"]                                              
 | 2026-07-02 | DoodleBear | Initial draft：把下载列表提升为 Gallery（tab 2）第 6 个常驻「下载」mode——虚拟化 + 全状态 + 筛选 chip + 聚合进度头；复用既有 `downloadJobs` 表/动作（零新持久化），抽共享 `DownloadJobRow`（tab + Settings 面板共用），纯 `download-center.ts`（筛选/排序/汇总，穷举单测）。3 phase：纯核心+抽行 → tab 集成（快捷键 6 常驻）→ 跨链接收尾（done 跳转 + 通知「查看」改指本 tab）。需求方三决策（完整下载中心 / 进度优先虚拟列表 / 常驻）已并入 §1.1 与 §10 |
 | 2026-07-02 | Claude (TDD) | **Phase 1 完成**（TDD）：纯 `download-center.ts`（`filterDownloadJobs`/`orderDownloadJobs`/`summarizeDownloadCenter`/`downloadAggregateProgress`/`isInFlight`）+ 14 单测；实现决策——progress口径单一真相倒置进 lib、`download-indicator.summarizeDownloadJobs` 委托（store→lib，13 单测零回归）。抽 `download-job-row.tsx`（`compact` + `onOpenTrack?` 预留）、`downloads-panel` 改用之（Settings 不变）。tsc + biome + 27 单测全绿 |
 | 2026-07-02 | Claude (TDD) | **Phase 2 完成**（TDD）：`search-page` 加第 6 个常驻「下载」mode（`GalleryMode`/`GALLERY_MODES`/`GALLERY_TAB_ACTIONS`/`isGalleryWallMode`/toolbar+wall 容器 downloads 分支）；registry `nav.galleryTabDownloads`(Digit6) + 单测扩 Digit1–6；`download-center.tsx`（聚合头 + 4 筛选 chip + `useVirtualizer`+`measureElement` 虚拟列表 + 能力感知空态）+ 5 组件单测；i18n×4（脚本插入 + JSON 校验）；E2E harness `scripts/download-center.mjs`（CDP seed→导航→快照→断言→清理）。tsc + biome + 44 单测全绿。真机行渲染/大批量/入队实时 待 Electron 手测。附：期间一并发 session 切到 `feat/online-source-playlist-filter` 提交 filter-playlists WIP（`d25a5833`），本工作已恢复回 `feat/downloads-gallery-tab`，无丢失 |
+| 2026-07-02 | Claude (TDD) | **Phase 3 完成**（TDD）：`nav-store` 加 `{kind:"downloads"}` intent + `openDownloadsTab()`（复用 `pendingLibraryEntity` 通道）；`search-page` 消费 effect 加 downloads 分支；`download-indicator` 通知「查看」`setTab("settings")`→`openDownloadsTab()`；`DownloadCenter` done 行 `onOpenTrack`→`openSet(sessionId, trackId)`（缺 sessionId no-op）。新增 `nav-store` intent 单测 + `download-job-row` 3 组件单测。**全量 `vitest run` 3419 passed / 3 skipped 零回归**，tsc + biome 绿。Status → Completed |
 
 ---
 
