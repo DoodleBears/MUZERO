@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { matchFilterOptions, parseMention, resolveFilterScope } from "./global-search-filter";
+import { ensureTransliterationLoaded } from "./search-transliterate";
+
+// `matchFilterOptions` is transliteration-aware (pinyin / kana / romaji). The libs
+// load lazily; warm them once so alias variant generation is fully synchronous here.
+beforeAll(async () => {
+  await ensureTransliterationLoaded();
+});
 
 describe("parseMention", () => {
   it("is inactive for empty input and plain text", () => {
@@ -100,6 +107,50 @@ describe("matchFilterOptions", () => {
     expect(matchFilterOptions("音频").map((o) => o.id)).toEqual(["audio"]);
     expect(matchFilterOptions("本地").map((o) => o.id)).toEqual(["local"]);
     expect(matchFilterOptions("在线").map((o) => o.id)).toEqual(["online"]);
+  });
+
+  it("matches Chinese aliases by pinyin — full syllables and 首字母 initials", () => {
+    // 歌曲 → gequ / gq, 歌单 → gedan / gd, etc. Full + initials both reach the option,
+    // and a distinct initial stays unambiguous (gd only hits 歌单, not 歌曲's gq).
+    expect(matchFilterOptions("gequ").map((o) => o.id)).toEqual(["track"]);
+    expect(matchFilterOptions("gq").map((o) => o.id)).toEqual(["track"]);
+    expect(matchFilterOptions("gedan").map((o) => o.id)).toEqual(["set"]);
+    expect(matchFilterOptions("gd").map((o) => o.id)).toEqual(["set"]);
+    expect(matchFilterOptions("geci").map((o) => o.id)).toEqual(["lyrics"]);
+    expect(matchFilterOptions("geshou").map((o) => o.id)).toEqual(["artist"]);
+    expect(matchFilterOptions("zhuanji").map((o) => o.id)).toEqual(["album"]);
+    expect(matchFilterOptions("shipin").map((o) => o.id)).toEqual(["video"]); // 视频
+    expect(matchFilterOptions("yinpin").map((o) => o.id)).toEqual(["audio"]); // 音频
+    expect(matchFilterOptions("bendi").map((o) => o.id)).toEqual(["local"]);
+    expect(matchFilterOptions("zaixian").map((o) => o.id)).toEqual(["online"]);
+  });
+
+  it("a bare CJK needle never leaks into a latin alias via a pinyin initial", () => {
+    // 曲's pinyin initial is `q`, which prefixes `qq` — but we transliterate the
+    // ALIAS, not the needle, so `曲` stays `曲` and only hits the track aliases.
+    expect(matchFilterOptions("曲").map((o) => o.id)).toEqual(["track"]);
+  });
+
+  it("matches Japanese kana aliases by kana (hira/kata) and romaji", () => {
+    // 曲: きょく / キョク / kyoku — plus うた / uta.
+    expect(matchFilterOptions("きょく").map((o) => o.id)).toEqual(["track"]);
+    expect(matchFilterOptions("キョク").map((o) => o.id)).toEqual(["track"]);
+    expect(matchFilterOptions("kyoku").map((o) => o.id)).toEqual(["track"]);
+    expect(matchFilterOptions("uta").map((o) => o.id)).toEqual(["track"]);
+    // 歌詞: かし / kashi.
+    expect(matchFilterOptions("かし").map((o) => o.id)).toEqual(["lyrics"]);
+    expect(matchFilterOptions("kashi").map((o) => o.id)).toEqual(["lyrics"]);
+    // アルバム / arubamu, プレイリスト → リスト / risuto.
+    expect(matchFilterOptions("arubamu").map((o) => o.id)).toEqual(["album"]);
+    expect(matchFilterOptions("risuto").map((o) => o.id)).toEqual(["set"]);
+    // 動画/ビデオ: douga / bideo; 音声/音楽: onsei / ongaku.
+    expect(matchFilterOptions("douga").map((o) => o.id)).toEqual(["video"]);
+    expect(matchFilterOptions("bideo").map((o) => o.id)).toEqual(["video"]);
+    expect(matchFilterOptions("onsei").map((o) => o.id)).toEqual(["audio"]);
+    expect(matchFilterOptions("ongaku").map((o) => o.id)).toEqual(["audio"]);
+    // ローカル / rookaru, オンライン / onrain.
+    expect(matchFilterOptions("rookaru").map((o) => o.id)).toEqual(["local"]);
+    expect(matchFilterOptions("onrain").map((o) => o.id)).toEqual(["online"]);
   });
 
   it("is case-insensitive (incl. capitalized @Video / @Audio)", () => {

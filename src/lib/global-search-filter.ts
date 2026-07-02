@@ -8,6 +8,7 @@
  */
 
 import type { StreamSourceId, TrackKind } from "@/db/types";
+import { normalizeSearchText, searchVariants } from "@/lib/search-transliterate";
 
 /**
  * A chosen scope. The overlay keeps this SINGLE-SELECT (one filter at a time).
@@ -53,53 +54,84 @@ export interface FilterOption {
 
 /**
  * The offered filters, in menu order. Sources mirror the overlay's enable chips
- * (netease + bili + YouTube + QQ). Aliases carry both latin and CJK forms so `@歌手`
- * and `@artist` both narrow to the same option.
+ * (netease + bili + YouTube + QQ). Aliases carry latin + CJK forms so `@歌手` and
+ * `@artist` both narrow to the same option; matching is transliteration-aware
+ * (see {@link matchFilterOptions}), so the Chinese aliases are also reachable by
+ * pinyin (`@gequ` / `@gd` → 歌曲 / 歌单). Japanese aliases are given in KANA (not
+ * kanji): kana → romaji works on the main thread via wanakana, so `@きょく` and
+ * `@kyoku` both narrow — whereas a kanji alias would need the worker-only kuromoji
+ * reading and so wouldn't romaji-match here.
  */
 export const FILTER_OPTIONS: FilterOption[] = [
   {
     id: "track",
     filter: { kind: "track" },
-    aliases: ["song", "songs", "track", "tracks", "title", "歌曲", "曲目", "曲", "标题"],
+    aliases: [
+      "song",
+      "songs",
+      "track",
+      "tracks",
+      "title",
+      "歌曲",
+      "曲目",
+      "曲",
+      "标题",
+      "うた",
+      "きょく",
+    ],
   },
   {
     id: "set",
     filter: { kind: "set" },
-    aliases: ["set", "sets", "playlist", "playlists", "歌单", "列表"],
+    aliases: [
+      "set",
+      "sets",
+      "playlist",
+      "playlists",
+      "歌单",
+      "列表",
+      "プレイリスト",
+      "セット",
+      "リスト",
+    ],
   },
   {
     id: "lyrics",
     filter: { kind: "lyrics" },
-    aliases: ["lyrics", "lyric", "lrc", "词", "歌词"],
+    aliases: ["lyrics", "lyric", "lrc", "词", "歌词", "かし"],
   },
   {
     id: "artist",
     filter: { kind: "artist" },
-    aliases: ["artist", "artists", "ar", "歌手", "singer"],
+    aliases: ["artist", "artists", "ar", "歌手", "singer", "アーティスト"],
   },
-  { id: "album", filter: { kind: "album" }, aliases: ["album", "albums", "al", "专辑"] },
+  {
+    id: "album",
+    filter: { kind: "album" },
+    aliases: ["album", "albums", "al", "专辑", "アルバム"],
+  },
   // Media-kind (LOCAL only) — narrow local songs by Track.kind. `@Video` / `@Audio`
   // are case-insensitive (matched lowercased), so the capitalized forms work too.
   {
     id: "video",
     filter: { kind: "video" },
-    aliases: ["video", "videos", "mv", "视频", "影片", "影像"],
+    aliases: ["video", "videos", "mv", "视频", "影片", "影像", "どうが", "ビデオ"],
   },
   {
     id: "audio",
     filter: { kind: "audio" },
-    aliases: ["audio", "sound", "music", "音频", "音乐", "声音"],
+    aliases: ["audio", "sound", "music", "音频", "音乐", "声音", "おんせい", "おんがく"],
   },
   // Scope axis — local-only vs online-only.
   {
     id: "local",
     filter: { kind: "local" },
-    aliases: ["local", "library", "device", "本地", "本机", "离线"],
+    aliases: ["local", "library", "device", "本地", "本机", "离线", "ローカル"],
   },
   {
     id: "online",
     filter: { kind: "online" },
-    aliases: ["online", "web", "stream", "在线", "线上", "网络"],
+    aliases: ["online", "web", "stream", "在线", "线上", "网络", "オンライン"],
   },
   {
     id: "bili",
@@ -150,19 +182,37 @@ export function parseMention(value: string): MentionState {
 }
 
 /**
- * Filter options whose alias prefix-matches the typed partial (empty → all).
- * Pass a pre-filtered `options` list to hide source filters where streaming is
- * unavailable (web / Tauri).
+ * Whether the typed `@` partial reaches an alias — transliteration-aware, the
+ * same treatment song search gives track fields. We prefix-match the normalized
+ * needle against every search *variant* of the alias (原文 + 拼音 全拼/首字母 +
+ * 假名/罗马音), so a Chinese alias is reachable by pinyin (`gequ`/`gd` → 歌曲/歌单)
+ * and a Japanese kana alias by kana ↔ romaji (`きょく`/`kyoku` → 曲).
+ *
+ * Crucially we transliterate the ALIAS, not the needle: a bare CJK needle like
+ * `曲` stays `曲` and only prefix-matches CJK/original variants, so it never leaks
+ * into an unrelated latin alias through a one-letter pinyin initial (e.g. 曲→`q`
+ * would otherwise hit `qq`). The variant set always includes the normalized
+ * original, so this is a strict superset of the old raw prefix match; before the
+ * dictionaries load `searchVariants` yields normalize-only variants, degrading to
+ * exactly that raw prefix so behavior never regresses.
+ */
+function aliasMatchesPartial(alias: string, needle: string): boolean {
+  return searchVariants(alias).some((variant) => variant.startsWith(needle));
+}
+
+/**
+ * Filter options whose alias matches the typed partial (empty → all), matched
+ * transliteration-aware via {@link aliasMatchesPartial}. Pass a pre-filtered
+ * `options` list to hide source filters where streaming is unavailable (web /
+ * Tauri).
  */
 export function matchFilterOptions(
   partial: string,
   options: readonly FilterOption[] = FILTER_OPTIONS,
 ): FilterOption[] {
-  const needle = partial.trim().toLowerCase();
+  const needle = normalizeSearchText(partial);
   if (!needle) return [...options];
-  return options.filter((opt) =>
-    opt.aliases.some((alias) => alias.toLowerCase().startsWith(needle)),
-  );
+  return options.filter((opt) => opt.aliases.some((alias) => aliasMatchesPartial(alias, needle)));
 }
 
 /**
