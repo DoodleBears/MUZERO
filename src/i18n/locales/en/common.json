@@ -188,6 +188,8 @@
     "loadingTracks": "Loading tracks…",
     "playlistTracksError": "Couldn't load this playlist",
     "playlistEmpty": "This playlist has no playable tracks.",
+    "filterPlaceholder": "Filter tracks…",
+    "filterNoMatches": "No tracks match your filter",
     "qrTitle": "Log in to {{source}}",
     "qrSubtitle": "Scan with the mobile app. The session cookie stays on this device.",
     "qrAlt": "{{source}} login QR code",

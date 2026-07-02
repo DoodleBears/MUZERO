@@ -178,6 +178,8 @@
     "loadingTracks": "曲を読み込み中…",
     "playlistTracksError": "このプレイリストを読み込めませんでした",
     "playlistEmpty": "このプレイリストには再生できる曲がありません。",
+    "filterPlaceholder": "曲を絞り込み…",
+    "filterNoMatches": "一致する曲がありません",
     "qrTitle": "{{source}}にログイン",
     "qrSubtitle": "モバイルアプリでスキャンしてください。セッション Cookie はこの端末だけに保存されます。",
     "qrAlt": "{{source}} ログイン QR コード",

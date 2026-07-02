@@ -178,6 +178,8 @@
     "loadingTracks": "正在加载歌曲…",
     "playlistTracksError": "无法加载这个歌单",
     "playlistEmpty": "这个歌单里暂无可播放歌曲。",
+    "filterPlaceholder": "过滤歌曲…",
+    "filterNoMatches": "没有匹配的歌曲",
     "qrTitle": "登录{{source}}",
     "qrSubtitle": "用手机 App 扫码。会话 Cookie 只保存在这台设备上。",
     "qrAlt": "{{source}} 登录二维码",

@@ -1,13 +1,24 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { AlertCircle, ArrowLeft, Disc3, ListMusic, Loader2, Play, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Disc3,
+  ListMusic,
+  Loader2,
+  Play,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Button } from "@/components/ui/button";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { useSettings } from "@/hooks/use-app-data";
 import { useBackGesture } from "@/hooks/use-back-gesture";
+import { type IndexableRow, parseSearchTokens, scoreRow } from "@/lib/search-core";
+import { NO_MATCH_SCORE } from "@/lib/search-transliterate";
 import { cn, formatDuration } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 import type { StreamPlaylist, StreamSearchHit } from "@/streamsrc/provider";
@@ -16,6 +27,19 @@ import { createStreamHttp } from "@/streamsrc/stream-http";
 import { isNeteaseDailyPlaylist } from "@/streamsrc/virtual-playlists";
 
 const ONLINE_ROW_HEIGHT = 60;
+/** Only surface the filter box once the fetched list is long enough to warrant it. */
+const FILTER_MIN_TRACKS = 8;
+
+/** Reduce a fetched hit to the source-agnostic search row (title / artist / album). */
+function hitToRow(hit: StreamSearchHit): IndexableRow {
+  return {
+    id: `${hit.source}:${hit.externalId}`,
+    free: [hit.title, hit.artist, hit.album].filter((s): s is string => !!s),
+    artist: hit.artist ? [hit.artist] : [],
+    album: hit.album ? [hit.album] : [],
+    tags: [],
+  };
+}
 
 export function OnlinePlaylistDetail({
   playlist,
@@ -191,11 +215,26 @@ function OnlineTrackList({
   emptyHint: string;
   onPlay: (hit: StreamSearchHit) => void;
 }) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  // A filter box only earns its space once the fetched list is actually long.
+  const showFilter = hits.length > FILTER_MIN_TRACKS;
+  // Defer the query so typing stays smooth while re-filtering a long list.
+  const deferredQuery = useDeferredValue(query);
+  const visibleHits = useMemo(() => {
+    const q = showFilter ? deferredQuery.trim() : "";
+    if (!q) return hits;
+    const tokens = parseSearchTokens(q);
+    // Filter in place (original playlist order); references are preserved so the
+    // parent's `hits.indexOf(hit)` still maps a row back to the full-queue index.
+    return hits.filter((hit) => scoreRow(hitToRow(hit), tokens) < NO_MATCH_SCORE);
+  }, [hits, deferredQuery, showFilter]);
+
   const parentRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
-    count: hits.length,
+    count: visibleHits.length,
     estimateSize: () => ONLINE_ROW_HEIGHT,
-    getItemKey: (index) => `${hits[index]?.source}:${hits[index]?.externalId}`,
+    getItemKey: (index) => `${visibleHits[index]?.source}:${visibleHits[index]?.externalId}`,
     getScrollElement: () => parentRef.current,
     overscan: 8,
   });
@@ -209,28 +248,50 @@ function OnlineTrackList({
   }
 
   return (
-    <div
-      ref={parentRef}
-      className="chrome-fade no-scrollbar min-h-0 pt-2 flex-1 overflow-y-auto pb-chrome-bottom [--chrome-fade-top:1.25rem]"
-      role="listbox"
-    >
-      <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
-        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const hit = hits[virtualRow.index];
-          return (
-            <div
-              key={`${hit.source}:${hit.externalId}`}
-              className="absolute left-0 top-0 flex w-full items-center"
-              style={{
-                height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-            >
-              <OnlineTrackRow hit={hit} onPlay={onPlay} />
-            </div>
-          );
-        })}
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {showFilter ? (
+        <div className="relative shrink-0 px-1">
+          <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 size-4 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("streamSources.filterPlaceholder")}
+            aria-label={t("streamSources.filterPlaceholder")}
+            type="search"
+            className="h-9 w-full rounded-lg border border-input bg-transparent pr-3 pl-9 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+      ) : null}
+
+      {visibleHits.length === 0 ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-muted-foreground text-sm">
+          {t("streamSources.filterNoMatches")}
+        </div>
+      ) : (
+        <div
+          ref={parentRef}
+          className="chrome-fade no-scrollbar min-h-0 pt-2 flex-1 overflow-y-auto pb-chrome-bottom [--chrome-fade-top:1.25rem]"
+          role="listbox"
+        >
+          <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const hit = visibleHits[virtualRow.index];
+              return (
+                <div
+                  key={`${hit.source}:${hit.externalId}`}
+                  className="absolute left-0 top-0 flex w-full items-center"
+                  style={{
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <OnlineTrackRow hit={hit} onPlay={onPlay} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
