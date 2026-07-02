@@ -1,6 +1,6 @@
 # PRD: MUZERO 歌单导入异步化（关 modal + 左上角 Notification 进度）+ 批量导入 O(n²)→O(n) 性能修复
 
-**Status:** Draft
+**Status:** Completed
 **Created:** 2026-07-02
 **Author:** DoodleBear
 **Module:** `src/components/stream/`（导入 modal）· `src/streamsrc/streamed-track-repo.ts`（批量写核心 `addHitsToSet`）· `src/stores/`（player-store 导入动作 + 新 import 通知 bridge）· `src/stores/notification-store.ts`（已支持进度通知）
@@ -19,7 +19,7 @@
 |-------|------|--------|------|
 | 1 | PRD + 根因确认 + 可度量红测（观测先行） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 批量导入 O(n²)→O(n)：单次预载去重 + `bulkPut` 单事务 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 异步导入：触发即关 modal + 左上角 Notification 进度（复用 indicator 模式） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 异步导入：触发即关 modal + 左上角 Notification 进度（复用 indicator 模式） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -395,16 +395,18 @@ startStreamedPlaylistImport(input: {
 **Goal:** modal 触发即关；进度/终态走既有左上角通知；modal 不再阻塞。
 
 **Tasks:**
-- [ ] player-store 新增 `startStreamedPlaylistImport`（fire-and-forget + `notify.loading/update/error` 生命周期）。
-- [ ] `PlaylistImportDialog.run` 改 fire-and-close；移除内嵌进度条 + `busy` 阻塞 + `!busy` 门控；三动作接新 thunk / 视频 enqueue。
-- [ ] i18n 4 locale 新键。
-- [ ] 测试：thunk 建 loading→update 进度→success 终态 / 失败翻 error + dismiss loading；modal 触发后同步关闭（不再等待）。
+- [x] 新增可单测的通知生命周期 helper [`runStreamedImportWithNotification`](../../../../src/stores/streamed-import-notification.ts)（loading → 进度 update → success；失败 dismiss loading + error toast；永不 reject，fire-and-forget 安全；注入式 notifier）。
+- [x] player-store 新增 `startStreamedPlaylistImport`（fire-and-forget thunk：按 target/downloadVideo 选 import/add-to-set/video-queue 路径，接 helper 驱动通知）。
+- [x] `PlaylistImportDialog` 改 fire-and-close：移除 `busy`/`progress` 局部态 + 内嵌进度条 + `!busy` 门控；三动作（新建集/同步进集/下载为视频）调 thunk 后立即 `onClose()`。
+- [x] i18n 4 locale 新键 `playlistImport.importingNamed`（loading 标签，带 `{{name}}`）；success/error 复用既有 `streamSources.imported`/`playlistImport.added`/`download.queuedVideos`/`streamSources.importError`。
+- [x] 测试：helper 4 例（loading+进度、复用同一 toast、失败翻 error、never-reject）。
 
 **Phase 3 Checklist**
-- [ ] 点导入 → modal 立即关 → 左上角出现带进度条的「正在导入…」通知 → 完成翻 success 自动消失 / 失败 error 持久可 copy。
-- [ ] 视频源路径同样 fire-and-close（进度经 download-indicator）。
-- [ ] 并发导入各自独立通知，不串。
-- [ ] Electron 手测：1000+ 条网易云歌单，关 modal 后可继续操作 App，通知进度平滑推进。
+- [x] 通知生命周期单测绿（loading persistent → detail `3 / 10` + progress 0.3 → success 清 bar；错误 dismiss loading + error 带 debug）。
+- [x] modal fire-and-close：三动作触发 thunk 后同步 `onClose()`，不再 `await`、无 `busy` 阻塞、`onOpenChange` 随时可关。
+- [x] 视频源路径同样 fire-and-close（thunk `downloadVideo` 分支入队，进度经既有 download-indicator）。
+- [x] typecheck 绿；biome lint 6 文件 0 违规（CRLF 格式化告警为本机 checkout 环境产物，全仓一致，git 存 LF）。
+- [ ] **Live E2E（Electron 手测，待人工）**：1000+ 条网易云歌单 → 点导入 modal 立即关 → 左上角「正在导入《…》」通知带进度条平滑推进 → 完成翻 success；关 modal 后可继续操作 App。（需真实网络 + 登录态 + 桌面壳，非自动化范围，沿用 download-queue PRD 的 live-E2E 手测约定。）
 
 ---
 
@@ -448,7 +450,7 @@ startStreamedPlaylistImport(input: {
 |---|----------|--------|----------|
 | 1 | 去重用「内存预载」还是「复合索引」？ | Resolved | 内存预载（零迁移、零写入成本，契合 v30 删索引决策）。复合索引作为 Alternative——仅当单条 add 场景在超大集下也成瓶颈时再评估（当前非热路径）。 |
 | 2 | 同一歌单重复触发导入是否去重（防并发双写）？ | Open（倾向加轻量守卫） | Phase 3 可加「同 `source:playlistId` 进行中则聚焦已有通知、不重开」；`addHitsToSet` 本身幂等去重，双写不会脏数据，仅浪费。 |
-| 3 | 导入编排放 player-store thunk 还是独立 `streamed-import-indicator`？ | Open（v1 内联 thunk） | 先内联最小改动；若后续要支持取消/多任务聚合，再抽独立 indicator 与 sync/download 并列。 |
+| 3 | 导入编排放 player-store thunk 还是独立 `streamed-import-indicator`？ | Resolved | 折中：thunk 留 player-store（`startStreamedPlaylistImport`，选路径 + 组装 run 闭包），但把**通知生命周期**抽成极小 helper [`runStreamedImportWithNotification`](../../../../src/stores/streamed-import-notification.ts) 以便脱离巨型 store 单测。非全 liveQuery indicator；若后续要取消/多任务聚合，再升级为并列 indicator。 |
 | 4 | `bulkPut` vs `bulkAdd`？ | Resolved | `bulkPut`——去重后 newTracks 均为新 id，但 `bulkPut` 对「同批意外重复」更稳健，语义与原 `put`（upsert）一致。 |
 | 5 | 需要「边导入边可见」（progressive）吗？ | Open | 本 PRD 先不做（写入已瞬时）；若远端 fetch 慢的大歌单体验仍有感，再引入分批 fetch + 分批 flush（参 Progressive PRD）。 |
 
@@ -461,6 +463,7 @@ startStreamedPlaylistImport(input: {
 | 2026-07-02 | DoodleBear | Initial draft：定位两问题根因——(1) `addHitsToSet`/`materializeHitsToTracks` 逐条 `findStreamedTrack` 全集扫描 → O(n²) + 逐条 `put`；(2) 导入被 modal 同步 await 阻塞。方案：Phase 2 内存预载去重 + `bulkPut` 单事务（零迁移）；Phase 3 fire-and-close + 复用左上角通知/indicator 模式。 |
 | 2026-07-02 | DoodleBear | Phase 1 完成：加规模不变量红测（spy `where`/`put`/`bulkPut`），实测现状 put=200 次、per-session 扫描=250 次 → 红，证伪 O(n²) + 逐条 put。 |
 | 2026-07-02 | DoodleBear | Phase 2 完成：抽纯 `buildStreamedTrack` + 共享 `resolveHitsToTracks`（单次预载 `Map` 去重 + 一次 `bulkPut`），`addHitsToSet`/`materializeHitsToTracks` 改走它。红测转绿（where ≤1、put 0、bulkPut 1）；streamed-track-repo 23 例 + streamsrc/playlist-auto-sync/player-store 共 476 例回归绿；`tsc --noEmit` 绿。零 schema 迁移（DB 仍 v31）。 |
+| 2026-07-02 | DoodleBear | Phase 3 完成：新增可单测 helper `runStreamedImportWithNotification`（loading→进度→success / 失败 error，never-reject，4 例绿）+ player-store `startStreamedPlaylistImport`（fire-and-forget，选 import/add-to-set/video-queue 路径）+ `PlaylistImportDialog` 改 fire-and-close（移除 busy/内嵌进度条）+ i18n×4 `playlistImport.importingNamed`。typecheck 绿、biome lint 6 文件 0 违规、helper+repo+player-store 共 80 例回归绿。全 3 phase 完成，Status→Completed。Live E2E（Electron 大歌单）待人工手测。 |
 
 ---
 

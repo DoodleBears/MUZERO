@@ -270,6 +270,7 @@
   },
   "playlistImport": {
     "title": "Import playlist",
+    "importingNamed": "Importing \"{{name}}\"…",
     "syncRecommended": "Sync into \"{{name}}\"",
     "recommendedTag": "Recommended",
     "orAddToExisting": "Or add to an existing set",

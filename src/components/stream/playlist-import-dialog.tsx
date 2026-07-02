@@ -5,13 +5,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { useSessions, useSettings } from "@/hooks/use-app-data";
-import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
-import {
-  canDownloadVideo,
-  downloadPlaylistVideos,
-  downloadPlaylistVideosToSet,
-} from "@/streamsrc/download-action";
+import { canDownloadVideo } from "@/streamsrc/download-action";
 import type { StreamPlaylist } from "@/streamsrc/provider";
 
 /**
@@ -19,6 +14,11 @@ import type { StreamPlaylist } from "@/streamsrc/provider";
  * synced from this same external playlist (matched by `streamPlaylistRef`), the
  * modal recommends an incremental re-sync into it; otherwise the user can add the
  * tracks to any existing set (auto-deduped) or create a fresh one.
+ *
+ * The actual import runs as a BACKGROUND task: picking an action fires
+ * `startStreamedPlaylistImport` and closes the modal immediately — progress and the
+ * terminal success/error live in the top-left notification stack, so a 1000+ track
+ * playlist never pins this dialog open.
  *
  * Controlled: pass the `playlist` to open, `null` to close. Shared by the Settings
  * "我的歌单" list and the ⌘F pasted-link card.
@@ -33,13 +33,9 @@ export function PlaylistImportDialog({
   const { t } = useTranslation();
   const sessions = useSessions();
   const settings = useSettings();
-  const importStreamedPlaylist = usePlayerStore((s) => s.importStreamedPlaylist);
-  const addStreamedPlaylistToSet = usePlayerStore((s) => s.addStreamedPlaylistToSet);
-  const [busy, setBusy] = useState(false);
-  // null while fetching the hit list (indeterminate); {done,total} once tracks write.
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const startStreamedPlaylistImport = usePlayerStore((s) => s.startStreamedPlaylistImport);
   const [targetId, setTargetId] = useState("");
-  // When on, every import path below also downloads the tracks to local blobs
+  // When on, the streaming-reference import also downloads each track to a local blob
   // (offline play + stable cover-color extraction) in the background after import.
   const [download, setDownload] = useState(false);
 
@@ -56,79 +52,52 @@ export function PlaylistImportDialog({
     (s) => s.streamPlaylistRef?.source === pl.source && s.streamPlaylistRef?.id === pl.id,
   );
 
-  async function run(action: () => Promise<void>) {
-    setBusy(true);
-    setProgress(null);
-    try {
-      await action();
-      onClose();
-    } catch {
-      notify.error(t("streamSources.importError"));
-    } finally {
-      setBusy(false);
-      setProgress(null);
-    }
-  }
-
-  const onProgress = (done: number, total: number) => setProgress({ done, total });
-
   // Default for video sources: import the favlist AND download each item as a local video
   // (Settings → "auto-download playlist videos", on by default). Audio sources / setting-off
   // keep the streaming-reference import (with the optional "download to device" checkbox).
   const defaultDownloadsVideo =
     canDownloadVideo(pl.source) && settings.autoDownloadPlaylistVideos !== false;
 
-  const createNewSet = () =>
-    run(async () => {
-      if (defaultDownloadsVideo) {
-        const { queued } = await downloadPlaylistVideos(pl.source, pl.id, {
-          name: pl.name,
-          coverUrl: pl.coverUrl,
-        });
-        notify.success(t("download.queuedVideos", { count: queued }));
-        return;
-      }
-      const count = await importStreamedPlaylist(pl.source, pl.id, pl.name, {
-        coverUrl: pl.coverUrl,
-        download,
-        onProgress,
-      });
-      notify.success(t("streamSources.imported", { count, name: pl.name }));
+  const createNewSet = () => {
+    startStreamedPlaylistImport({
+      source: pl.source,
+      playlistId: pl.id,
+      name: pl.name,
+      coverUrl: pl.coverUrl,
+      download,
+      downloadVideo: defaultDownloadsVideo,
     });
+    onClose();
+  };
 
-  const syncInto = (setId: string, setName: string) =>
-    run(async () => {
-      // Video source (default-download-video on): re-sync through the persistent download
-      // queue so NEW MVs download in place AND the unified indicator shows their progress —
-      // the old `addStreamedPlaylistToSet` cached audio to memory blobs with no progress.
-      if (defaultDownloadsVideo) {
-        const { added, skipped } = await downloadPlaylistVideosToSet(pl.source, pl.id, setId, {
-          onProgress,
-        });
-        notify.success(t("playlistImport.added", { added, skipped, name: setName }));
-        return;
-      }
-      const { added, skipped } = await addStreamedPlaylistToSet(pl.source, pl.id, setId, {
-        download,
-        onProgress,
-      });
-      notify.success(t("playlistImport.added", { added, skipped, name: setName }));
+  const syncInto = (setId: string, setName: string) => {
+    startStreamedPlaylistImport({
+      source: pl.source,
+      playlistId: pl.id,
+      name: pl.name,
+      target: { id: setId, name: setName },
+      download,
+      downloadVideo: defaultDownloadsVideo,
     });
+    onClose();
+  };
 
-  const downloadAsVideo = () =>
-    run(async () => {
-      const { queued } = await downloadPlaylistVideos(pl.source, pl.id, {
-        name: pl.name,
-        coverUrl: pl.coverUrl,
-      });
-      notify.success(t("download.queuedVideos", { count: queued }));
+  const downloadAsVideo = () => {
+    startStreamedPlaylistImport({
+      source: pl.source,
+      playlistId: pl.id,
+      name: pl.name,
+      coverUrl: pl.coverUrl,
+      downloadVideo: true,
     });
+    onClose();
+  };
 
   return (
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !busy) onClose();
+        if (!open) onClose();
       }}
     >
       {/* z-[100] so it sits above the ⌘F search overlay (z-90), which is its own backdrop. */}
@@ -158,9 +127,8 @@ export function PlaylistImportDialog({
         {matched && (
           <button
             type="button"
-            disabled={busy}
             onClick={() => syncInto(matched.id, matched.name)}
-            className="flex w-full items-center gap-2 rounded-lg border border-primary bg-accent px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/70 disabled:opacity-60"
+            className="flex w-full items-center gap-2 rounded-lg border border-primary bg-accent px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/70"
           >
             <RefreshCw className="size-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate">
@@ -178,7 +146,6 @@ export function PlaylistImportDialog({
             <select
               value={targetId}
               onChange={(e) => setTargetId(e.target.value)}
-              disabled={busy}
               className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 py-1.5 text-foreground text-sm"
             >
               <option value="">{t("playlistImport.choosePlaceholder")}</option>
@@ -190,7 +157,7 @@ export function PlaylistImportDialog({
             </select>
             <button
               type="button"
-              disabled={busy || !targetId}
+              disabled={!targetId}
               onClick={() => {
                 const s = sessions.find((x) => x.id === targetId);
                 if (s) syncInto(s.id, s.name);
@@ -218,7 +185,6 @@ export function PlaylistImportDialog({
               id="playlist-import-download"
               checked={download}
               onCheckedChange={(checked) => setDownload(checked === true)}
-              disabled={busy}
               className="mt-0.5"
             />
             <span className="min-w-0">
@@ -233,38 +199,11 @@ export function PlaylistImportDialog({
           </label>
         )}
 
-        {busy && (
-          <div className="space-y-1">
-            <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-              <div
-                className={
-                  progress
-                    ? "h-full bg-primary transition-[width] duration-200"
-                    : "h-full w-1/3 animate-pulse bg-primary"
-                }
-                style={
-                  progress
-                    ? {
-                        width: `${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%`,
-                      }
-                    : undefined
-                }
-              />
-            </div>
-            {progress && (
-              <p className="text-right text-muted-foreground text-xs tabular-nums">
-                {progress.done} / {progress.total}
-              </p>
-            )}
-          </div>
-        )}
-
         <div className="flex items-center justify-between gap-2 pt-1">
           <button
             type="button"
-            disabled={busy}
             onClick={() => onClose()}
-            className="rounded-md px-3 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground disabled:opacity-50"
+            className="rounded-md px-3 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
           >
             {t("playlistImport.cancel")}
           </button>
@@ -274,9 +213,8 @@ export function PlaylistImportDialog({
             {canDownloadVideo(pl.source) && !defaultDownloadsVideo && (
               <button
                 type="button"
-                disabled={busy}
                 onClick={downloadAsVideo}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent"
               >
                 <Download className="size-4" />
                 {t("download.allVideos")}
@@ -284,20 +222,17 @@ export function PlaylistImportDialog({
             )}
             <button
               type="button"
-              disabled={busy}
               onClick={createNewSet}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm transition-opacity hover:opacity-90"
             >
               {defaultDownloadsVideo ? (
                 <Download className="size-4" />
               ) : (
                 <ListPlus className="size-4" />
               )}
-              {busy
-                ? t("streamSources.importing")
-                : defaultDownloadsVideo
-                  ? t("playlistImport.newSetWithVideo")
-                  : t("playlistImport.newSet")}
+              {defaultDownloadsVideo
+                ? t("playlistImport.newSetWithVideo")
+                : t("playlistImport.newSet")}
             </button>
           </div>
         </div>

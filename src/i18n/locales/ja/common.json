@@ -258,6 +258,7 @@
   },
   "playlistImport": {
     "title": "プレイリストをインポート",
+    "importingNamed": "「{{name}}」をインポート中…",
     "syncRecommended": "「{{name}}」に同期",
     "recommendedTag": "おすすめ",
     "orAddToExisting": "または既存のセットに追加",

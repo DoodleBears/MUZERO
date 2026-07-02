@@ -258,6 +258,7 @@
   },
   "playlistImport": {
     "title": "导入歌单",
+    "importingNamed": "正在导入《{{name}}》…",
     "syncRecommended": "增量同步到「{{name}}」",
     "recommendedTag": "推荐",
     "orAddToExisting": "或添加到现有歌单",

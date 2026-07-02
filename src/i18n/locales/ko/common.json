@@ -258,6 +258,7 @@
   },
   "playlistImport": {
     "title": "플레이리스트 가져오기",
+    "importingNamed": "\"{{name}}\" 가져오는 중…",
     "syncRecommended": "\"{{name}}\"에 동기화",
     "recommendedTag": "추천",
     "orAddToExisting": "또는 기존 세트에 추가",

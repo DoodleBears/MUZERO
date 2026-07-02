@@ -116,8 +116,10 @@ import {
 } from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
 import { setSetBulkDownloading, setStreamDownloading } from "@/stores/stream-cache-store";
+import { runStreamedImportWithNotification } from "@/stores/streamed-import-notification";
 import { useUiStore } from "@/stores/ui-store";
 import { runStreamCache } from "@/streamsrc/cache-stream";
+import { downloadPlaylistVideos, downloadPlaylistVideosToSet } from "@/streamsrc/download-action";
 import {
   cacheStreamPlaylistCover,
   cacheStreamPlaylistTrackCovers,
@@ -322,6 +324,23 @@ interface PlayerState {
     targetSetId: string,
     opts?: { download?: boolean; onProgress?: (done: number, total: number) => void },
   ) => Promise<AddHitsResult>;
+  /**
+   * Fire-and-forget a source-playlist import as a BACKGROUND task surfaced through the
+   * top-left notification stack (loading → live progress → success/error). The import
+   * dialog calls this and closes immediately instead of blocking on the write, so a
+   * 1000+ track playlist no longer pins the modal open. `target` present → incremental
+   * add-to-set; absent → new set. `downloadVideo` routes through the video download
+   * queue (its own download-indicator progress) instead of the streaming-reference path.
+   */
+  startStreamedPlaylistImport: (input: {
+    source: StreamSourceId;
+    playlistId: string;
+    name: string;
+    coverUrl?: string;
+    target?: { id: string; name: string };
+    download?: boolean;
+    downloadVideo?: boolean;
+  }) => void;
   /** Download a streamed track's media for offline play (Phase 5); no-op if already cached. */
   downloadStreamedTrack: (trackId: string) => Promise<void>;
   /** Download every not-yet-cached streamed track in a set to local blobs. */
@@ -1670,6 +1689,49 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     void cacheStreamPlaylistTrackCovers({ sessionId: targetSetId, hits });
     if (opts?.download) void downloadStreamedSetTracks(targetSetId);
     return result;
+  },
+
+  startStreamedPlaylistImport(input) {
+    void runStreamedImportWithNotification({
+      loadingLabel: i18n.t("playlistImport.importingNamed", { name: input.name }),
+      errorLabel: i18n.t("streamSources.importError"),
+      run: async (onProgress) => {
+        // Video sources default to the persistent download queue (its own progress via
+        // download-indicator); audio sources take the streaming-reference import path.
+        if (input.downloadVideo) {
+          if (input.target) {
+            const { added, skipped } = await downloadPlaylistVideosToSet(
+              input.source,
+              input.playlistId,
+              input.target.id,
+              { onProgress },
+            );
+            return i18n.t("playlistImport.added", { added, skipped, name: input.target.name });
+          }
+          const { queued } = await downloadPlaylistVideos(input.source, input.playlistId, {
+            name: input.name,
+            coverUrl: input.coverUrl,
+          });
+          return i18n.t("download.queuedVideos", { count: queued });
+        }
+        if (input.target) {
+          const { added, skipped } = await get().addStreamedPlaylistToSet(
+            input.source,
+            input.playlistId,
+            input.target.id,
+            { download: input.download, onProgress },
+          );
+          return i18n.t("playlistImport.added", { added, skipped, name: input.target.name });
+        }
+        const count = await get().importStreamedPlaylist(
+          input.source,
+          input.playlistId,
+          input.name,
+          { coverUrl: input.coverUrl, download: input.download, onProgress },
+        );
+        return i18n.t("streamSources.imported", { count, name: input.name });
+      },
+    });
   },
 
   async downloadStreamedTrack(trackId) {
