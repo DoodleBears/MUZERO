@@ -1,12 +1,9 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import type { TFunction } from "i18next";
-import { Copy, Download, Loader2, RotateCcw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { db } from "@/db/muzero-db";
 import type { DownloadJob } from "@/db/types";
-import { cn } from "@/lib/utils";
-import { notify } from "@/stores/notification-store";
-import { clearFinishedDownloads, removeDownload, retryDownload } from "@/streamsrc/download-action";
+import { clearFinishedDownloads } from "@/streamsrc/download-action";
+import { DownloadJobRow } from "./download-job-row";
 
 /** The persistent download queue — live progress, per-job retry/remove, clear-finished. */
 export function DownloadsPanel() {
@@ -37,102 +34,9 @@ export function DownloadsPanel() {
       ) : (
         <div className="space-y-1">
           {jobs.map((job) => (
-            <DownloadRow key={job.id} job={job} />
+            <DownloadJobRow key={job.id} job={job} compact />
           ))}
         </div>
-      )}
-    </div>
-  );
-}
-
-function statusLabel(job: DownloadJob, t: TFunction): string {
-  switch (job.status) {
-    case "pending":
-      return t("download.statusPending");
-    case "active":
-      return t("download.statusActive");
-    case "paused":
-      return t("download.statusPaused");
-    case "failed":
-      return job.lastError
-        ? `${t("download.statusFailed")} · ${job.lastError}`
-        : t("download.statusFailed");
-    case "done":
-      return t("download.done");
-  }
-}
-
-function DownloadRow({ job }: { job: DownloadJob }) {
-  const { t } = useTranslation();
-  const pct =
-    job.status === "active" && job.totalBytes
-      ? Math.round((job.bytesDone / job.totalBytes) * 100)
-      : null;
-  return (
-    <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/40">
-      <div className="grid size-9 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius">
-        {job.coverUrl ? (
-          <img
-            src={job.coverUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="size-full object-cover"
-          />
-        ) : (
-          <Download className="size-3.5" />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">{job.title}</div>
-        <div
-          className={cn(
-            "truncate text-xs",
-            job.status === "failed" ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {statusLabel(job, t)}
-          {pct != null ? ` · ${pct}%` : ""}
-        </div>
-      </div>
-      {job.status === "active" && (
-        <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
-      )}
-      {job.status === "failed" && job.lastError && (
-        <button
-          type="button"
-          onClick={() => {
-            void navigator.clipboard
-              ?.writeText(job.lastError ?? "")
-              .then(() => notify.success(t("download.errorCopied")));
-          }}
-          aria-label={t("download.copyError")}
-          title={t("download.copyError")}
-          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:text-foreground"
-        >
-          <Copy className="size-4" />
-        </button>
-      )}
-      {job.status === "failed" && (
-        <button
-          type="button"
-          onClick={() => void retryDownload(job.id)}
-          aria-label={t("download.retry")}
-          title={t("download.retry")}
-          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:text-foreground"
-        >
-          <RotateCcw className="size-4" />
-        </button>
-      )}
-      {job.status !== "active" && (
-        <button
-          type="button"
-          onClick={() => void removeDownload(job.id)}
-          aria-label={t("download.remove")}
-          title={t("download.remove")}
-          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
       )}
     </div>
   );

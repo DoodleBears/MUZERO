@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 纯核心 + 抽共享行（`download-center.ts` 筛选/排序/汇总 + 从 `downloads-panel` 抽 `DownloadJobRow`/action 钩子） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 纯核心 + 抽共享行（`download-center.ts` 筛选/排序/汇总 + 从 `downloads-panel` 抽 `DownloadJobRow`/action 钩子） | ✅ 完成（14 单测；progress口径倒置进 lib、`download-indicator` 委托；panel 改用共享行、Settings 不变） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Gallery 第 6 个「下载」tab（常驻 ModeTab + 快捷键 6 + 虚拟列表 + 筛选 chip + 聚合头 + 空态 + i18n×4） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 跨链接收尾（done job → 跳转 track/set · 通知「查看」改指本 tab · 环境感知空态） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -280,14 +280,14 @@ GALLERY_MODES = [..., "downloads"]                                              
 **Goal:** `download-center.ts` 三个纯函数有穷举单测；`DownloadJobRow` 从 `downloads-panel` 抽出，两处（未来的 tab + 现有 Settings 面板）共用同一行。
 
 **Tasks:**
-- [ ] 新增 [`src/lib/download-center.ts`](../../../../src/lib/download-center.ts)：`filterDownloadJobs` / `orderDownloadJobs` / `summarizeDownloadCenter`（`progress` 委托/复用 [`summarizeDownloadJobs`](../../../../src/stores/download-indicator.ts)，同口径）+ `DownloadFilter` 类型。
-- [ ] `download-center.test.ts`：各 filter 切片（all/active=pending+active+paused/done/failed）、五状态稳定排序、同段 updatedAt desc、空数组、无 total 不给 progress、多任务平均、全 done → inFlight 0。
-- [ ] 抽 [`download-job-row.tsx`](../../../../src/components/downloads/download-job-row.tsx)（cover/title/source/status/进度/重试/移除/复制错误 + `compact` prop）；[`downloads-panel.tsx`](../../../../src/components/downloads/downloads-panel.tsx) 改用它（删内联行），Settings 行为不变（视觉回归自查）。
+- [x] 新增 [`src/lib/download-center.ts`](../../../../src/lib/download-center.ts)：`filterDownloadJobs` / `orderDownloadJobs` / `summarizeDownloadCenter` + `isInFlight` + `DownloadFilter` 类型。**实现决策（倒置依赖）**：progress口径的单一真相搬到本纯 lib 的 `downloadAggregateProgress`，[`download-indicator.ts`](../../../../src/stores/download-indicator.ts) 的 `summarizeDownloadJobs` **委托**它（store→lib 正确方向；避免 lib 反向 import 重量级 store，且两处进度永不打架）。
+- [x] `download-center.test.ts`（14 例）：各 filter 切片（all/active=pending+active+paused/done/failed）、五状态稳定排序、同段 updatedAt desc、不变性（不 mutate 入参）、空数组、无 total 不给 progress、多任务平均、全 done → inFlight 0。
+- [x] 抽 [`download-job-row.tsx`](../../../../src/components/downloads/download-job-row.tsx)（cover/title/status/进度条/重试/移除/复制错误 + `compact` prop + `onOpenTrack?` 预留给 Phase 3）；[`downloads-panel.tsx`](../../../../src/components/downloads/downloads-panel.tsx) 改用 `<DownloadJobRow compact>`（删内联 `DownloadRow`/`statusLabel`），Settings 行为/外观不变。
 
 #### Phase 1 Checklist
-- [ ] `download-center` 三函数单测全绿（含边界：空、无 total、五态混排、各 filter）。
-- [ ] `downloads-panel` 改用 `DownloadJobRow` 后，Settings→在线源下载面板行为/外观不变（重试/移除/复制/清空/进度）。
-- [ ] `make check`（typecheck + biome + 新单测）通过；无 `console.*` 直连（规则 8）。
+- [x] `download-center` 四函数单测全绿（14 例，含边界：空、无 total、五态混排、各 filter、不变性）。
+- [x] `downloads-panel` 改用 `DownloadJobRow` 后，Settings→在线源下载面板行为/外观不变（重试/移除/复制/清空/进度）；`download-indicator` 委托后 13 单测零回归。
+- [x] `make check` 等价（`tsc --noEmit` + biome + 27 单测）通过；无 `console.*` 直连（规则 8）。
 
 ### Phase 2: Gallery 第 6 个「下载」tab
 
@@ -370,6 +370,7 @@ GALLERY_MODES = [..., "downloads"]                                              
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：把下载列表提升为 Gallery（tab 2）第 6 个常驻「下载」mode——虚拟化 + 全状态 + 筛选 chip + 聚合进度头；复用既有 `downloadJobs` 表/动作（零新持久化），抽共享 `DownloadJobRow`（tab + Settings 面板共用），纯 `download-center.ts`（筛选/排序/汇总，穷举单测）。3 phase：纯核心+抽行 → tab 集成（快捷键 6 常驻）→ 跨链接收尾（done 跳转 + 通知「查看」改指本 tab）。需求方三决策（完整下载中心 / 进度优先虚拟列表 / 常驻）已并入 §1.1 与 §10 |
+| 2026-07-02 | Claude (TDD) | **Phase 1 完成**（TDD）：纯 `download-center.ts`（`filterDownloadJobs`/`orderDownloadJobs`/`summarizeDownloadCenter`/`downloadAggregateProgress`/`isInFlight`）+ 14 单测；实现决策——progress口径单一真相倒置进 lib、`download-indicator.summarizeDownloadJobs` 委托（store→lib，13 单测零回归）。抽 `download-job-row.tsx`（`compact` + `onOpenTrack?` 预留）、`downloads-panel` 改用之（Settings 不变）。tsc + biome + 27 单测全绿 |
 
 ---
 

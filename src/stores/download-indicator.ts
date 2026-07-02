@@ -15,6 +15,7 @@ import { liveQuery, type Subscription } from "dexie";
 import { db } from "@/db/muzero-db";
 import type { DownloadJob } from "@/db/types";
 import i18n from "@/i18n/i18n";
+import { downloadAggregateProgress } from "@/lib/download-center";
 import { log } from "@/lib/logger";
 import { useNavStore } from "@/stores/nav-store";
 import { type NotificationAction, notify } from "@/stores/notification-store";
@@ -36,11 +37,8 @@ const IN_FLIGHT: ReadonlyArray<DownloadJob["status"]> = ["active", "pending"];
  */
 export function summarizeDownloadJobs(jobs: readonly DownloadJob[]): DownloadSummary {
   const inFlight = jobs.filter((j) => IN_FLIGHT.includes(j.status));
-  const withBytes = inFlight.filter((j) => j.status === "active" && (j.totalBytes ?? 0) > 0);
-  const progress = withBytes.length
-    ? withBytes.reduce((sum, j) => sum + j.bytesDone / (j.totalBytes ?? 1), 0) / withBytes.length
-    : null;
-  return { count: inFlight.length, progress };
+  // Progress口径 lives in the pure lib (download-center) so the tab header + this toast agree.
+  return { count: inFlight.length, progress: downloadAggregateProgress(jobs) };
 }
 
 /** Minimal slice of the notification store the reconciler needs (injectable for tests). */
