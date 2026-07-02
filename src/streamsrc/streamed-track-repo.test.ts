@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MediaStorageProvider } from "@/db/media-blob-storage";
 import { MuzeroDB } from "@/db/muzero-db";
 import { createSession } from "@/db/repositories";
@@ -140,6 +140,67 @@ describe("addHitsToSet", () => {
       [2, 3],
       [3, 3],
     ]);
+  });
+});
+
+// Scale invariant: a 1000+ track playlist import got progressively slower because
+// dedup scanned the whole (growing) session per hit — O(n²) — and each track was a
+// separate `put`. These assertions are cost-model guards, independent of wall time:
+// dedup must use ONE preload scan and new rows must land in ONE bulkPut, no matter
+// how many hits. (PRD: 20260702-muzero-playlist-import-async-notify-batch-perf.)
+describe("addHitsToSet — batch write is O(n), not O(n²)", () => {
+  const manyHits = (n: number): StreamSearchHit[] =>
+    Array.from({ length: n }, (_, i) => ({
+      source: "netease" as const,
+      externalId: String(i),
+      title: `T${i}`,
+    }));
+
+  it("dedupes with a single per-session scan regardless of hit count", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const whereSpy = vi.spyOn(db.tracks, "where");
+
+    const res = await addHitsToSet(set.id, manyHits(200), db);
+    expect(res.added).toBe(200);
+
+    // The per-hit full-set dedup scan (`where("sessionId")…`) must NOT run once per
+    // hit. A single preload read of the session's existing tracks is allowed.
+    const perSessionScans = whereSpy.mock.calls.filter((c) => String(c[0]) === "sessionId").length;
+    expect(perSessionScans).toBeLessThanOrEqual(1);
+
+    whereSpy.mockRestore();
+  });
+
+  it("writes new rows with one bulkPut, not one put per track", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const putSpy = vi.spyOn(db.tracks, "put");
+    const bulkPutSpy = vi.spyOn(db.tracks, "bulkPut");
+
+    await addHitsToSet(set.id, manyHits(200), db);
+
+    expect(putSpy).not.toHaveBeenCalled();
+    expect(bulkPutSpy).toHaveBeenCalledTimes(1);
+
+    putSpy.mockRestore();
+    bulkPutSpy.mockRestore();
+  });
+
+  it("re-sync into a large existing set also avoids per-hit scans", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await addHitsToSet(set.id, manyHits(200), db); // seed
+    const whereSpy = vi.spyOn(db.tracks, "where");
+
+    // Re-sync the same 200 (all dedupe) + 50 new → still one preload scan, one bulkPut.
+    const bulkPutSpy = vi.spyOn(db.tracks, "bulkPut");
+    const res = await addHitsToSet(set.id, manyHits(250), db);
+    expect(res).toMatchObject({ added: 50, skipped: 200 });
+
+    const perSessionScans = whereSpy.mock.calls.filter((c) => String(c[0]) === "sessionId").length;
+    expect(perSessionScans).toBeLessThanOrEqual(1);
+    expect(bulkPutSpy).toHaveBeenCalledTimes(1);
+
+    whereSpy.mockRestore();
+    bulkPutSpy.mockRestore();
   });
 });
 

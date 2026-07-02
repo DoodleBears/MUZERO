@@ -17,8 +17,8 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | PRD + 根因确认 + 可度量红测（观测先行） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 批量导入 O(n²)→O(n)：单次预载去重 + `bulkPut` 单事务 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 1 | PRD + 根因确认 + 可度量红测（观测先行） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | 批量导入 O(n²)→O(n)：单次预载去重 + `bulkPut` 单事务 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 异步导入：触发即关 modal + 左上角 Notification 进度（复用 indicator 模式） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -361,33 +361,34 @@ startStreamedPlaylistImport(input: {
 **Goal:** 落 PRD；补「能证伪 O(n²)」的测试，作为 Phase 2 的 before/after ground truth。
 
 **Tasks:**
-- [ ] 本 PRD（根因 + best-practice + 分阶段）。
-- [ ] 在 [`streamed-track-repo.test.ts`](../../../../src/streamsrc/streamed-track-repo.test.ts) 加**规模不变量红测**：注入计数 db（spy `tracks.where(...)` / `put` 调用次数），导入 N=1500 hits，断言：
-  - `findStreamedTrack` 式全集扫描调用次数 **不随 N 线性叠加**（现状会 ≈N 次全集扫描 → 红）；
-  - `tracks.put` 调用次数 **不等于 N**（现状 =N → 红），目标是 1 次 `bulkPut`。
-- [ ] 断言 dedupe / 顺序 / added-skipped 计数现有行为作为回归基线。
+- [x] 本 PRD（根因 + best-practice + 分阶段）。
+- [x] 在 [`streamed-track-repo.test.ts`](../../../../src/streamsrc/streamed-track-repo.test.ts) 加**规模不变量红测**（`describe("addHitsToSet — batch write is O(n), not O(n²)")`，3 例）：spy `db.tracks.where`/`put`/`bulkPut`，导入 200 / re-sync 250 hits，断言：
+  - `where("sessionId")` 全集扫描 **≤ 1 次**（现状 = N → 红）；
+  - `tracks.put` **不被调用** + `bulkPut` **恰 1 次**（现状 put = N、bulkPut = 0 → 红）。
+- [x] 断言 dedupe / 顺序 / added-skipped 计数现有行为作为回归基线（沿用既有 20 例）。
 
 **Phase 1 Checklist**
-- [ ] PRD status = Final。
-- [ ] 红测在现状下 fail（证明 O(n²) 与逐条 put 存在），不依赖计时/网络。
-- [ ] 未提交任何实现于 PRD 之前。
+- [x] PRD 定稿可执行（分阶段 + 验收明确）。
+- [x] 红测在现状下 fail：实测 `put` 调用 200 次（期望 0）、per-session 扫描 250 次（期望 ≤1）；不依赖计时/网络。
+- [x] 未提交任何实现于 PRD 之前（PRD 单独 commit `65449583`）。
 
 ### Phase 2: 批量导入 O(n²)→O(n)
 
 **Goal:** 单次预载去重 + `bulkPut` 单事务；`addHitsToSet` / `materializeHitsToTracks` / `createStreamedTrack` 共享纯构造 helper。
 
 **Tasks:**
-- [ ] 抽 `buildStreamedTrack(input): Track`（纯构造，不落库）。
-- [ ] 重写 `addHitsToSet`：整集一次读 → `Map` 去重 → 累积 newTracks → `bulkPut` 单事务 → 一次 `prependTrackIds`；`onProgress` 保持每条触发。
-- [ ] 重写 `materializeHitsToTracks` 同法（在线歌单播放上下文）。
-- [ ] （可选）让 `addHitsToSet` 返回可区分 added/existing 的结果，消除 [`syncBoundPlaylistSet`](../../../../src/stores/playlist-auto-sync.ts#L68) 的第二次全集读。
-- [ ] 绿化 Phase 1 红测；补：同批内重复 hit 去重、跨批 re-sync 幂等、顺序 = hit 顺序、bulkPut 单事务。
+- [x] 抽 `buildStreamedTrack(input): Track`（纯构造，不落库；`createStreamedTrack` 单条路径改用它 + 单条 `put`）。
+- [x] 新增共享 `resolveHitsToTracks`：整集一次读 → `Map<source:externalId, Track>` 去重 → 累积 newTracks → `bulkPut` → 返回 hit 顺序；`onProgress` 保持每条触发。
+- [x] 重写 `addHitsToSet` / `materializeHitsToTracks` 均走 `resolveHitsToTracks`（后者不动 membership）。
+- [ ] （可选，deferred）让 `addHitsToSet` 返回可区分 added/existing 的结果，消除 [`syncBoundPlaylistSet`](../../../../src/stores/playlist-auto-sync.ts#L68) 的第二次全集读——非关键（`addHitsToSet` 本身已 O(n)），留作后续清理。
+- [x] 绿化 Phase 1 红测；覆盖：同批内重复 hit 去重、跨批 re-sync 幂等（added 50 / skipped 200）、顺序 = hit 顺序、bulkPut 单次。
 
 **Phase 2 Checklist**
-- [ ] 1500 条导入：DB 全集扫描 O(1) 次（非 O(N)），track 写为 1 次 `bulkPut`。
-- [ ] dedupe / 顺序 / added-skipped 计数与旧行为一致（回归绿）。
-- [ ] 无 schema 变更、无新索引。
-- [ ] 大集重复 re-sync（全命中已存在）也不再 O(n²)。
+- [x] 批量导入：`where("sessionId")` 全集扫描 ≤1 次（非 O(N)），新行写为 1 次 `bulkPut`（`put` 0 次）——规模不变量红测转绿。
+- [x] dedupe / 顺序 / added-skipped 计数与旧行为一致（streamed-track-repo 23 例 + 相关 476 例回归绿）。
+- [x] 无 schema 变更、无新索引（DB 仍 v31）。
+- [x] 大集重复 re-sync（200 全命中 + 50 新）也只 1 次预载扫描 + 1 次 bulkPut。
+- [x] typecheck 绿（`tsc --noEmit`）。
 
 ### Phase 3: 异步导入 + 左上角 Notification 进度
 
@@ -458,6 +459,8 @@ startStreamedPlaylistImport(input: {
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：定位两问题根因——(1) `addHitsToSet`/`materializeHitsToTracks` 逐条 `findStreamedTrack` 全集扫描 → O(n²) + 逐条 `put`；(2) 导入被 modal 同步 await 阻塞。方案：Phase 2 内存预载去重 + `bulkPut` 单事务（零迁移）；Phase 3 fire-and-close + 复用左上角通知/indicator 模式。 |
+| 2026-07-02 | DoodleBear | Phase 1 完成：加规模不变量红测（spy `where`/`put`/`bulkPut`），实测现状 put=200 次、per-session 扫描=250 次 → 红，证伪 O(n²) + 逐条 put。 |
+| 2026-07-02 | DoodleBear | Phase 2 完成：抽纯 `buildStreamedTrack` + 共享 `resolveHitsToTracks`（单次预载 `Map` 去重 + 一次 `bulkPut`），`addHitsToSet`/`materializeHitsToTracks` 改走它。红测转绿（where ≤1、put 0、bulkPut 1）；streamed-track-repo 23 例 + streamsrc/playlist-auto-sync/player-store 共 476 例回归绿；`tsc --noEmit` 绿。零 schema 迁移（DB 仍 v31）。 |
 
 ---
 

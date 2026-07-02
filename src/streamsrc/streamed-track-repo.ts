@@ -70,18 +70,17 @@ export async function findStreamedTrack(
     .first();
 }
 
-/**
- * Create a streamed track in a session, or return the existing one if the same
- * external track was already added (dedupe by source + externalId within the set).
- */
-export async function createStreamedTrack(
-  input: CreateStreamedTrackInput,
-  db: MuzeroDB = defaultDb,
-): Promise<Track> {
-  const existing = await findStreamedTrack(input.sessionId, input.sourceId, input.externalId, db);
-  if (existing) return existing;
+/** Membership key for streamed-track dedupe within a session. */
+const streamedTrackKey = (sourceId: string, externalId: string) => `${sourceId}:${externalId}`;
 
-  const track: Track = {
+/**
+ * Build a streamed `Track` row from resolved input — PURE, no DB read/write. Shared by
+ * the single-add path ({@link createStreamedTrack}) and the batched path
+ * ({@link resolveHitsToTracks}) so both produce an identical row shape.
+ */
+export function buildStreamedTrack(input: CreateStreamedTrackInput): Track {
+  const now = Date.now();
+  return {
     id: newId("trk"),
     sessionId: input.sessionId,
     title: input.title,
@@ -90,8 +89,8 @@ export async function createStreamedTrack(
     provider: input.sourceId,
     status: "ready",
     durationSec: input.meta?.durationSec ?? 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
     playCount: 0,
     liked: false,
     tags: [],
@@ -108,12 +107,73 @@ export async function createStreamedTrack(
             artists: input.meta.artist ? [input.meta.artist] : undefined,
             album: input.meta.album,
             parser: "manual",
-            parsedAt: Date.now(),
+            parsedAt: now,
           }
         : undefined,
   };
+}
+
+/**
+ * Create a streamed track in a session, or return the existing one if the same
+ * external track was already added (dedupe by source + externalId within the set).
+ * Single-add path (e.g. "add this search hit to a set"); batch imports go through
+ * {@link resolveHitsToTracks} instead to avoid a per-item DB scan.
+ */
+export async function createStreamedTrack(
+  input: CreateStreamedTrackInput,
+  db: MuzeroDB = defaultDb,
+): Promise<Track> {
+  const existing = await findStreamedTrack(input.sessionId, input.sourceId, input.externalId, db);
+  if (existing) return existing;
+  const track = buildStreamedTrack(input);
   await db.tracks.put(track);
   return track;
+}
+
+/**
+ * Resolve a batch of hits into streamed `Track` rows within `sessionId`, deduped by
+ * (source, externalId), returned IN HIT ORDER (1:1 with `hits`).
+ *
+ * Performance contract (see PRD 20260702-…-batch-perf): dedupe uses a SINGLE preload of
+ * the session's existing tracks + an in-memory index — NOT one `findStreamedTrack` DB
+ * scan per hit, which was O(n²) and made 1000+ track imports slow down as they grew.
+ * New rows land in ONE `db.tracks.bulkPut`, not one `put` per track. Cost is O(n): one
+ * indexed read + in-memory O(1) lookups + one bulk write.
+ */
+async function resolveHitsToTracks(
+  sessionId: string,
+  hits: StreamSearchHit[],
+  db: MuzeroDB,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Track[]> {
+  // ① One indexed read of the session's existing tracks → key → row index.
+  const existingRows = await db.tracks.where("sessionId").equals(sessionId).toArray();
+  const byKey = new Map<string, Track>();
+  for (const t of existingRows) {
+    if (t.origin === "streamed" && t.streamSourceId && t.streamExternalId) {
+      byKey.set(streamedTrackKey(t.streamSourceId, t.streamExternalId), t);
+    }
+  }
+
+  // ② Dedupe in memory (O(1) per hit); accumulate genuinely-new rows.
+  const tracks: Track[] = [];
+  const newTracks: Track[] = [];
+  for (let i = 0; i < hits.length; i++) {
+    const hit = hits[i];
+    const key = streamedTrackKey(hit.source, hit.externalId);
+    let track = byKey.get(key);
+    if (!track) {
+      track = buildStreamedTrack(hitToStreamedInput(sessionId, hit));
+      byKey.set(key, track); // also dedupes repeats WITHIN this batch
+      newTracks.push(track);
+    }
+    tracks.push(track);
+    onProgress?.(i + 1, hits.length);
+  }
+
+  // ③ One bulk write for all new rows.
+  if (newTracks.length > 0) await db.tracks.bulkPut(newTracks);
+  return tracks;
 }
 
 export interface AddHitsResult {
@@ -135,19 +195,13 @@ export async function addHitsToSet(
   sessionId: string,
   hits: StreamSearchHit[],
   db: MuzeroDB = defaultDb,
-  /** Fired after each track is written — drives the import progress bar. */
+  /** Fired after each hit is resolved — drives the import progress bar. */
   onProgress?: (done: number, total: number) => void,
 ): Promise<AddHitsResult> {
   const session = await db.sessions.get(sessionId);
   const before = new Set(session?.trackIds ?? []);
-  const ids: string[] = [];
-  const tracks: Track[] = [];
-  for (const hit of hits) {
-    const track = await createStreamedTrack(hitToStreamedInput(sessionId, hit), db);
-    ids.push(track.id);
-    tracks.push(track);
-    onProgress?.(ids.length, hits.length);
-  }
+  const tracks = await resolveHitsToTracks(sessionId, hits, db, onProgress);
+  const ids = tracks.map((t) => t.id);
   await prependTrackIds(sessionId, ids, db);
   const addedIds = new Set(ids.filter((id) => !before.has(id)));
   return { added: addedIds.size, skipped: hits.length - addedIds.size, tracks };
@@ -165,11 +219,7 @@ export async function materializeHitsToTracks(
   hits: StreamSearchHit[],
   db: MuzeroDB = defaultDb,
 ): Promise<Track[]> {
-  const tracks: Track[] = [];
-  for (const hit of hits) {
-    tracks.push(await createStreamedTrack(hitToStreamedInput(sessionId, hit), db));
-  }
-  return tracks;
+  return resolveHitsToTracks(sessionId, hits, db);
 }
 
 // ---------------------------------------------------- offline cache (Phase 5) ----
