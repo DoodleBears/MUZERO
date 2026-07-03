@@ -15,7 +15,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | ASR 基础设施：`src/asr` provider registry + Groq + 麦克风录制编排 + Settings「Speech-to-Text」面板 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | ASR 基础设施：`src/asr` provider registry + Groq + 麦克风录制编排 + Settings「Speech-to-Text」面板 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | TTS 基础设施：`src/tts` provider registry + Fish Audio + 音色拉取/搜索/添加 + Settings「Text-to-Speech」面板 + 试听播放 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 语音对话闭环：`voice.talkToDj`（默认 hold/不绑定）→ ASR → **当前活跃**会话 `DjChatRuntimeActor` + **动态滑动窗口** → `dj_say` reply 工具 → 左上角通知 + 自动朗读（渐变 ducking）+ 付费确认 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 平台 QA / 权限边界 / i18n×4 校对 / VAD 静音自动停 (可选增强) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -431,20 +431,20 @@ dj_say: tool({
 **Goal:** 能在 Settings 里录一段话、看到转写文本——语音**输入**能力独立可用、可单测。
 
 **Tasks:**
-- [ ] `AppSettings` 增加 asr / voice 相关 optional 字段（§3.1）；`updateSettings` 无需改；`useAppSettings` 直接可读。
-- [ ] `src/asr/provider.ts`（`AsrProvider` 接口）+ `groq-mapping.ts`（`buildTranscribeForm` / `parseTranscript` / `classifyGroqError`，纯函数，穷举单测）+ `groq-provider.ts`（直连 `getAppFetch()`）+ `registry.ts`（`resolveAsrProvider` / `isAsrConfigured`）。
-- [ ] `src/voice/voice-input-controller.ts`：录音状态机（`getUserMedia` + `MediaRecorder` + MIME 选择 + 时长 + 焦点丢失取消，镜像 anysoul `use-voice-input.ts`），`toggle/start/stop/cancel` + 回调；ASR 由注入的 `transcribe` 完成（测试注入 fake）。
-- [ ] `src/components/settings/voice-asr-settings.tsx` + `SETTINGS_NAV` 注册；Groq key 表单 + Test + 模型/语言/设备 + 麦克风测试块 + push-to-talk 模式。
-- [ ] i18n×4：`settings.navVoiceAsr` + `voice.asr.*`（en 源 → zh/ja/ko）。
+- [x] `AppSettings` 增加 asr / voice 相关 optional 字段（§3.1；`asrEnabled`/`asrProvider`/`groqApiKey`/`asrModel`/`asrLanguage`/`asrInputDeviceId`/`voiceInputMode` + `VoiceInputMode` 类型）；`saveSettings` 无需改；`useSettings` 直接可读。
+- [x] `src/asr/provider.ts`（`AsrProvider` 接口 + `AsrError`/`AsrErrorKind`）+ `groq-mapping.ts`（`extensionFromMime` / `buildTranscribeForm` / `parseTranscript` / `classifyGroqError`，纯函数，穷举单测）+ `groq-provider.ts`（直连 `getAppFetch()`，注入 fetch 可测）+ `registry.ts`（`resolveAsrProvider` / `isAsrConfigured` / `resolveGroqApiKey` 复用 DJ Groq key）。
+- [x] `src/voice/voice-input-controller.ts`：录音状态机（`idle→recording→transcribing→idle`，注入 `getMedia`/`createRecorder`/`pickMimeType`/`transcribe`/`onBlur`，MIME 选择 + `MIN_BLOB_BYTES` 丢弃过短 + 焦点丢失取消 + 并发去抖），`toggle/start/stop/cancel` + 回调；`voice-input-runtime.ts` 生产 wiring（真 `getUserMedia`/`MediaRecorder` + `transcribeWithSettings` + 全局单例）。
+- [x] `src/components/settings/voice-asr-settings.tsx` + `SETTINGS_NAV`（`voice-asr`, icon `mic`）+ settings-page 渲染；Groq key 表单（show/hide + reuse 提示）+ 模型/语言/设备 + 麦克风测试块（hold-to-talk 真跑 controller）+ push-to-talk 模式单选 + 绑定提示。
+- [x] i18n×4：`settings.navVoiceAsr` + `voice.asr.*`（en 源 → zh/ja/ko）。
 
 ### Phase 1 Checklist
 
-- [ ] Settings「Speech-to-Text」录一段话 → 显示转写文本（Groq turbo）。
-- [ ] 无 key / key 无效 / 限流 / 无麦克风权限 → 各自明确文案，不崩、不吞。
-- [ ] 太短录音（<~0.5s）静默丢弃。
-- [ ] 单测：`buildTranscribeForm`（MIME→扩展名、language 省略逻辑）、`parseTranscript`（含 header 配额）、`classifyGroqError`（401/429/other）、`voice-input-controller` 状态机（注入 fake recorder + fake ASR：start→stop→transcript、cancel、焦点丢失取消、并发去抖）。
-- [ ] Groq 调用走 `getAppFetch()`（无直接 `window.fetch`）；无 `console.*`（走 logger）。
-- [ ] `make check` 通过。
+- [x] Settings「Speech-to-Text」录一段话 → 显示转写文本（Groq turbo）。（麦克风测试块 hold-to-talk 跑真 `VoiceInputController`；真实转写需 key + 硬件，逻辑由注入-fake 测试覆盖。）
+- [x] 无 key / key 无效 / 限流 / 无麦克风权限 → 各自明确文案（`voice.asr.notConfigured` / `errAuth` / `errRateLimit` / `micDenied`），不崩、不吞。
+- [x] 太短录音（<~0.5s / <1KB）静默丢弃（`MIN_BLOB_BYTES`，单测覆盖）。
+- [x] 单测：`extensionFromMime`/`buildTranscribeForm`（MIME→扩展名、language 省略逻辑）、`parseTranscript`（含 header 配额）、`classifyGroqError`（401/403/429/other）、`groq-provider`（bearer/表单/401/429/network/无 key）、`registry`（key 回退）、`voice-input-controller` 状态机（start→stop→transcript、too-short、cancel、焦点丢失取消、并发去抖、权限错误、转写失败、静音空文本）。共 32 测。
+- [x] Groq 调用走 `getAppFetch()`（无直接 `window.fetch`）；无 `console.*`（走 `createDiagnosticLogger("voice.*")`，只记 provider/bytes/quota，不记文本/key）。
+- [x] `make check` 通过（typecheck + biome + 3455 测试全绿）。
 
 ### Phase 2: TTS 基础设施（Fish Audio）+ 音色拉取/搜索/添加 + 试听
 
@@ -594,3 +594,4 @@ dj_say: tool({
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |
 | 2026-07-02 | DoodleBear | PM 拍板 Q1-Q5/Q7：用 `dj_say` 工具；push-to-talk **默认 hold**（Settings 可选，暴露后台无 key-up 的退化约束）；朗读 duck **渐变过渡**（`djVoiceDuckRampMs`）；**不开专用会话、继承当前活跃会话** + 上下文改**动态滑动窗口**（新增 §3.4 `selectContextWindow`，替代 `contextStartIndex`/compaction）；付费生成**要确认**；快捷键**默认不绑定**。Q6/Q8 采用默认。相应更新 §2.2/§2.3/§3.1/§3.4/§4.4/§4.5/§5.2/§6 Phase 3/§10。 |
+| 2026-07-03 | Claude (TDD) | **Phase 1 完成**：ASR 基础设施落地。新增 `src/asr/`（`provider.ts` 接口 + `AsrError`；`groq-mapping.ts` 四纯函数；`groq-provider.ts` 直连 `getAppFetch()`；`registry.ts` `resolveAsrProvider`/`isAsrConfigured`/`resolveGroqApiKey` 复用 DJ Groq key）+ `src/voice/`（`voice-input-controller.ts` 注入式录音状态机 + `voice-input-runtime.ts` 生产 wiring/单例）+ `voice-asr-settings.tsx`（Settings「Speech-to-Text」面板 + `SETTINGS_NAV` `voice-asr`/mic + settings-page 渲染 + sidebar mic 图标）+ `AppSettings` asr/voice optional 字段（不 bump DB）+ i18n×4（`settings.navVoiceAsr` + `voice.asr.*`）。TDD：32 个新单测（映射/provider/registry/controller），`make check`（typecheck+biome+3455 测试）全绿。 |

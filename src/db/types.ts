@@ -1,5 +1,7 @@
 import type { UIMessage } from "ai";
 import type { LlmProviderPresetId } from "@/ai/llm-providers";
+import type { GroqWhisperModel } from "@/asr/groq-mapping";
+import type { AsrProviderId } from "@/asr/provider";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import type { AppIconId } from "@/lib/app-icon";
 import type {
@@ -630,6 +632,10 @@ export const DEFAULT_DJ_CONFIG: DjConfig = {
 };
 
 export type LlmProviderId = "openai" | "anthropic";
+/** Push-to-talk trigger style for the voice DJ. `hold` = press-and-hold (true
+ *  only in-app; global background degrades to press-start + auto-stop, see the
+ *  voice-DJ PRD). `toggle` = press once to start, again to stop. */
+export type VoiceInputMode = "hold" | "toggle";
 export type AudienceRequestSearchScope = "active-set" | "all-library";
 export type AudienceRequestSourceStatus = "testing" | "active" | "disabled";
 export type AudienceRequestSourceAuthMode = "open" | "secret";
@@ -1123,6 +1129,23 @@ export interface AppSettings {
    * a track only matches once, so it can't spam.
    */
   lyricsMatchToasts?: boolean;
+  // --- Voice DJ: ASR / speech-to-text (voice-DJ PRD) -------------------------
+  // All optional + default-at-read (?? fallbacks) → additive, no Dexie bump.
+  /** Master switch for speech input. Default false (opt-in). */
+  asrEnabled?: boolean;
+  /** Which ASR provider transcribes speech. Default "groq". */
+  asrProvider?: AsrProviderId;
+  /** BYOK Groq key for ASR. When absent, falls back to the DJ's
+   *  `apiKeysByPresetId.groq` (PRD Q6). Device-local only, never bundled. */
+  groqApiKey?: string;
+  /** Groq Whisper model. Default "whisper-large-v3-turbo". */
+  asrModel?: GroqWhisperModel;
+  /** ISO-639-1 transcription language, or "auto" to detect. Default "auto". */
+  asrLanguage?: string;
+  /** Preferred microphone `deviceId` (optional; empty = system default). */
+  asrInputDeviceId?: string;
+  /** Push-to-talk trigger style. Default "hold" (PRD Q2). */
+  voiceInputMode?: VoiceInputMode;
 }
 
 /**

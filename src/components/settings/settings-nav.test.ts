@@ -19,6 +19,7 @@ describe("settings-nav", () => {
       "ai-dj-model",
       "live-requests",
       "ai-music-generation",
+      "voice-asr",
       "listening-stats",
       "shortcuts",
       "playback",
