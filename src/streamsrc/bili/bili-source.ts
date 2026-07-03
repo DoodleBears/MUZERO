@@ -246,7 +246,7 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
   /** All videos in a favlist as hits (paginated resource-list; capped at MAX_FAV_PAGES). */
   async function importPlaylist(
     mediaId: string,
-    opts?: { signal?: AbortSignal },
+    opts?: { signal?: AbortSignal; onProgress?: (done: number, total?: number) => void },
   ): Promise<StreamSearchHit[]> {
     const hits: StreamSearchHit[] = [];
     for (let pn = 1; pn <= MAX_FAV_PAGES; pn += 1) {
@@ -257,6 +257,9 @@ export function createBiliSource(deps: BiliSourceDeps): StreamSourceProvider {
       );
       const { hits: pageHits, hasMore } = parseFavResourceList(await getJson(url, opts?.signal));
       hits.push(...pageHits);
+      // `has_more` pagination — the total isn't known upfront, so report a growing
+      // count (no determinate bar) so the import notification still shows liveness.
+      opts?.onProgress?.(hits.length);
       if (!hasMore || pageHits.length === 0) break;
     }
     return hits;

@@ -184,14 +184,21 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     return parseNeteaseUserPlaylists(json);
   }
 
-  // song/detail is batched (a full playlist's trackIds can be thousands).
-  async function songDetailHits(ids: string[], signal?: AbortSignal): Promise<StreamSearchHit[]> {
+  // song/detail is batched (a full playlist's trackIds can be thousands). Report progress
+  // per batch (processed ids / total ids) — the total is known upfront, so the import
+  // notification renders a determinate bar that scrolls one batch at a time.
+  async function songDetailHits(
+    ids: string[],
+    signal?: AbortSignal,
+    onProgress?: (done: number, total?: number) => void,
+  ): Promise<StreamSearchHit[]> {
     const hits: StreamSearchHit[] = [];
     for (let i = 0; i < ids.length; i += SONG_DETAIL_CHUNK) {
       const chunk = ids.slice(i, i + SONG_DETAIL_CHUNK);
       const c = JSON.stringify(chunk.map((id) => ({ id: Number(id) })));
       const json = await postEapiJson(SONG_DETAIL_URL, SONG_DETAIL_PATH, { c }, signal);
       hits.push(...parseNeteaseSongDetailHits(json));
+      onProgress?.(Math.min(i + SONG_DETAIL_CHUNK, ids.length), ids.length);
     }
     return hits;
   }
@@ -219,7 +226,7 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
 
   async function importPlaylist(
     playlistId: string,
-    opts?: { signal?: AbortSignal },
+    opts?: { signal?: AbortSignal; onProgress?: (done: number, total?: number) => void },
   ): Promise<StreamSearchHit[]> {
     const detail = await postEapiJson(
       PLAYLIST_DETAIL_URL,
@@ -227,7 +234,7 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       { id: playlistId, n: "100000", s: "8" },
       opts?.signal,
     );
-    return songDetailHits(parseNeteasePlaylistTrackIds(detail), opts?.signal);
+    return songDetailHits(parseNeteasePlaylistTrackIds(detail), opts?.signal, opts?.onProgress);
   }
 
   /** 每日推荐歌曲 — needs login; `afresh` rerolls the 30. */

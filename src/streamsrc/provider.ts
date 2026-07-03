@@ -166,8 +166,19 @@ export interface StreamSourceProvider {
     playlistRef: string,
     opts?: { signal?: AbortSignal },
   ): Promise<StreamPlaylist | null>;
-  /** Import a source playlist/favlist/collection into hits (optional per source). */
-  importPlaylist?(playlistRef: string, opts?: { signal?: AbortSignal }): Promise<StreamSearchHit[]>;
+  /**
+   * Import a source playlist/favlist/collection into hits (optional per source).
+   * `onProgress(done, total?)` fires once per fetched network batch — the real
+   * time-consuming, batch-shaped work — so the import notification can show a live bar.
+   * `total` is omitted when the source can't know it upfront (e.g. `has_more` pagination).
+   */
+  importPlaylist?(
+    playlistRef: string,
+    opts?: {
+      signal?: AbortSignal;
+      onProgress?: (done: number, total?: number) => void;
+    },
+  ): Promise<StreamSearchHit[]>;
   /**
    * The personalized "每日推荐歌曲" (daily-recommended songs) as flat hits. Requires
    * login; `afresh` rerolls the list ("换一批"). Online-discover feature; optional per

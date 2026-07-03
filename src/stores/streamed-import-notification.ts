@@ -29,10 +29,12 @@ export interface StreamedImportRun {
   /** Toast text if the import throws. */
   errorLabel: string;
   /**
-   * The async import. Receives a progress reporter (wire it to the per-hit `onProgress`
-   * of `addHitsToSet` etc.) and resolves to the terminal success toast text.
+   * The async import. Receives a progress reporter (wire it to the batched-fetch
+   * `onProgress` of `importPlaylist` etc.) and resolves to the terminal success toast text.
+   * `total` may be omitted when the source can't know it upfront — then the toast shows a
+   * growing counter instead of a determinate bar.
    */
-  run: (onProgress: (done: number, total: number) => void) => Promise<string>;
+  run: (onProgress: (done: number, total?: number) => void) => Promise<string>;
 }
 
 /**
@@ -47,8 +49,8 @@ export async function runStreamedImportWithNotification(
   try {
     const message = await op.run((done, total) =>
       notifier.update(id, {
-        detail: `${done} / ${total}`,
-        progress: total > 0 ? done / total : undefined,
+        detail: total != null ? `${done} / ${total}` : `${done}`,
+        progress: total != null && total > 0 ? done / total : undefined,
       }),
     );
     // Flip loading → success (auto-dismisses); clear the counter/bar for a clean line.

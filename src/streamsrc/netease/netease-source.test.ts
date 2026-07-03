@@ -163,4 +163,23 @@ describe("createNeteaseSource", () => {
     const playlists = await source.getRecommendedPlaylists?.();
     expect(playlists?.map((p) => p.id)).toEqual(["22"]);
   });
+
+  it("importPlaylist reports progress once per song/detail batch (determinate: processed / total)", async () => {
+    // 1200 track ids → SONG_DETAIL_CHUNK(500) → 3 batches: 500, 1000, 1200 of 1200.
+    const trackIds = Array.from({ length: 1200 }, (_, i) => ({ id: i + 1 }));
+    const { source } = deps([
+      ["/eapi/v6/playlist/detail", { playlist: { trackIds } }],
+      ["/eapi/v3/song/detail", { songs: [] }],
+    ]);
+    const progress: Array<[number, number | undefined]> = [];
+    await source.importPlaylist?.("100", {
+      onProgress: (done, total) => progress.push([done, total]),
+    });
+    // The batched fetch — the real time sink — drives a live, determinate bar (total known upfront).
+    expect(progress).toEqual([
+      [500, 1200],
+      [1000, 1200],
+      [1200, 1200],
+    ]);
+  });
 });

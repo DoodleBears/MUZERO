@@ -310,7 +310,7 @@ interface PlayerState {
     opts?: {
       coverUrl?: string;
       download?: boolean;
-      onProgress?: (done: number, total: number) => void;
+      onProgress?: (done: number, total?: number) => void;
     },
   ) => Promise<number>;
   /**
@@ -322,7 +322,7 @@ interface PlayerState {
     sourceId: StreamSourceId,
     playlistId: string,
     targetSetId: string,
-    opts?: { download?: boolean; onProgress?: (done: number, total: number) => void },
+    opts?: { download?: boolean; onProgress?: (done: number, total?: number) => void },
   ) => Promise<AddHitsResult>;
   /**
    * Fire-and-forget a source-playlist import as a BACKGROUND task surfaced through the
@@ -1665,7 +1665,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async importStreamedPlaylist(sourceId, playlistId, name, opts) {
-    const hits = await fetchPlaylistHits(sourceId, playlistId);
+    // Progress rides the FETCH (the batched, seconds-long part); the write is now O(n)
+    // and effectively instant (see 20260702-…-batch-perf PRD), so feeding per-hit write
+    // progress would only snap the bar. Let the batched fetch drive the notification bar.
+    const hits = await fetchPlaylistHits(sourceId, playlistId, opts?.onProgress);
     if (hits.length === 0) return 0;
     // Tag the new set with the playlist ref so a later sync can offer incremental re-sync.
     const session = await createSession({
@@ -1677,15 +1680,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (opts?.coverUrl) {
       void cacheStreamPlaylistCover({ sessionId: session.id, coverUrl: opts.coverUrl });
     }
-    const { added } = await addHitsToSet(session.id, hits, undefined, opts?.onProgress);
+    const { added } = await addHitsToSet(session.id, hits);
     void cacheStreamPlaylistTrackCovers({ sessionId: session.id, hits });
     if (opts?.download) void downloadStreamedSetTracks(session.id);
     return added;
   },
 
   async addStreamedPlaylistToSet(sourceId, playlistId, targetSetId, opts) {
-    const hits = await fetchPlaylistHits(sourceId, playlistId);
-    const result = await addHitsToSet(targetSetId, hits, undefined, opts?.onProgress);
+    // Progress rides the batched fetch, not the now-instant write (see importStreamedPlaylist).
+    const hits = await fetchPlaylistHits(sourceId, playlistId, opts?.onProgress);
+    const result = await addHitsToSet(targetSetId, hits);
     void cacheStreamPlaylistTrackCovers({ sessionId: targetSetId, hits });
     if (opts?.download) void downloadStreamedSetTracks(targetSetId);
     return result;
@@ -4472,6 +4476,7 @@ async function ensureTrackInCurrentPlayQueue(
 async function fetchPlaylistHits(
   sourceId: StreamSourceId,
   playlistId: string,
+  onProgress?: (done: number, total?: number) => void,
 ): Promise<StreamSearchHit[]> {
   const settings = await getSettings();
   const source = createStreamSource(sourceId, {
@@ -4479,7 +4484,7 @@ async function fetchPlaylistHits(
     now: () => Date.now(),
     getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
   });
-  return (await source?.importPlaylist?.(playlistId)) ?? [];
+  return (await source?.importPlaylist?.(playlistId, { onProgress })) ?? [];
 }
 
 async function ensureOnlineSet(): Promise<string> {
