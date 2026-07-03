@@ -54,7 +54,7 @@ function snapshot(part: ToolUIPart, text = "I found a few songs."): DjChatRuntim
 }
 
 describe("deriveChatActivity", () => {
-  it("uses the latest tool label and assistant text preview", () => {
+  it("shows the tool label + its query detail + a per-tool icon key", () => {
     const activity = deriveChatActivity(
       snapshot({
         type: "tool-library_search",
@@ -66,9 +66,28 @@ describe("deriveChatActivity", () => {
     );
 
     expect(activity).toMatchObject({
-      preview: "I found a few songs.",
+      preview: "rain", // the "具体执行的内容" — the query, not the assistant text
       status: "Searching library",
       tone: "running",
+      iconKey: "search",
+    });
+  });
+
+  it("falls back to assistant text when the tool has no summarizable input", () => {
+    const activity = deriveChatActivity(
+      snapshot({
+        type: "tool-play_track",
+        toolCallId: "call_3",
+        state: "input-available",
+        input: { trackId: "#T1" },
+      } satisfies ToolUIPart),
+      labels,
+    );
+
+    expect(activity).toMatchObject({
+      preview: "I found a few songs.",
+      status: "Playing track",
+      iconKey: "play",
     });
   });
 

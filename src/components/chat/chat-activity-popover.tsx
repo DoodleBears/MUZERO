@@ -1,9 +1,50 @@
 import { type DynamicToolUIPart, getToolName, isToolUIPart, type ToolUIPart } from "ai";
-import { AlertCircle, Loader2, Sparkles } from "lucide-react";
+import {
+  AlertCircle,
+  Disc3,
+  Download,
+  FolderTree,
+  Globe,
+  ListMusic,
+  ListOrdered,
+  ListPlus,
+  ListX,
+  Loader2,
+  type LucideIcon,
+  Pencil,
+  Play,
+  Repeat,
+  Search,
+  Sparkles,
+  StickyNote,
+  Tags,
+  Wand2,
+} from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
+import { summarizeToolInput, toolIconName } from "@/chat/dj-tool-display";
 import type { DjChatRuntimeSnapshot } from "@/chat/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
+
+/** Lucide component per {@link toolIconName} key — the DJ-tool icon set. */
+const TOOL_ICON_COMPONENT: Record<string, LucideIcon> = {
+  search: Search,
+  "folder-tree": FolderTree,
+  tags: Tags,
+  "disc-3": Disc3,
+  "list-music": ListMusic,
+  "list-plus": ListPlus,
+  pencil: Pencil,
+  "list-ordered": ListOrdered,
+  repeat: Repeat,
+  "list-x": ListX,
+  play: Play,
+  "sticky-note": StickyNote,
+  sparkles: Sparkles,
+  globe: Globe,
+  download: Download,
+  "wand-2": Wand2,
+};
 
 type ChatToolPart = ToolUIPart | DynamicToolUIPart;
 type ChatToolState = ChatToolPart["state"];
@@ -26,6 +67,8 @@ export interface ChatActivity {
   preview?: string;
   status: string;
   tone: ChatActivityTone;
+  /** Per-tool lucide icon key (see `dj-tool-display`); absent → tone-based icon. */
+  iconKey?: string;
 }
 
 export function deriveChatActivity(
@@ -40,30 +83,37 @@ export function deriveChatActivity(
   if (latestTool) {
     const toolName = getToolName(latestTool);
     const toolLabel = labels.tools?.[toolName]?.label ?? latestTool.title ?? toolName;
+    const iconKey = toolIconName(toolName);
+    // Prefer the tool's key input (search query / set name / generated title) as
+    // the detail line — that's the "具体执行的内容" — falling back to reply text.
+    const inputDetail = summarizeToolInput(toolName, latestTool.input);
     if (latestTool.state === "approval-requested") {
       return {
         autoHide: false,
-        preview,
+        preview: inputDetail ?? preview,
         status: labels.waitingApproval,
         tone: "approval",
+        iconKey,
       };
     }
     if (latestTool.state === "output-error") {
       return {
         autoHide: false,
-        preview: latestTool.errorText || preview || labels.error,
+        preview: latestTool.errorText || inputDetail || preview || labels.error,
         status: toolLabel,
         tone: "error",
+        iconKey,
       };
     }
     return {
       autoHide: latestTool.state === "output-available" || latestTool.state === "output-denied",
-      preview,
+      preview: inputDetail ?? preview,
       status: toolLabel || labels.toolStates[latestTool.state],
       tone:
         latestTool.state === "output-available" || latestTool.state === "output-denied"
           ? "done"
           : "running",
+      iconKey,
     };
   }
 
@@ -167,7 +217,7 @@ export function ChatActivityPopover({
         onClick={() => setMode("expanded")}
         type="button"
       >
-        <ActivityIcon tone={activity.tone} />
+        <ActivityIcon iconKey={activity.iconKey} tone={activity.tone} />
         <span className="min-w-0 flex-1 space-y-0.5" role="status">
           <span className="block truncate font-medium text-sm">{activity.status}</span>
           {activity.preview ? (
@@ -186,9 +236,13 @@ export function ChatActivityPopover({
   );
 }
 
-function ActivityIcon({ tone }: { tone: ChatActivityTone }) {
+function ActivityIcon({ iconKey, tone }: { iconKey?: string; tone: ChatActivityTone }) {
   if (tone === "error")
     return <AlertCircle aria-hidden className="mt-0.5 size-4 text-destructive" />;
+  // A concrete tool → its own icon (search / play / generate …); otherwise the
+  // generic spinner while "thinking" and sparkles at rest.
+  const ToolIcon = iconKey ? TOOL_ICON_COMPONENT[iconKey] : undefined;
+  if (ToolIcon) return <ToolIcon aria-hidden className="mt-0.5 size-4 text-primary" />;
   if (tone === "running") {
     return <Loader2 aria-hidden className="mt-0.5 size-4 animate-spin text-primary" />;
   }
@@ -200,7 +254,9 @@ function latestToolPart(snapshot: DjChatRuntimeSnapshot): ChatToolPart | undefin
     const parts = snapshot.messages[i]?.parts ?? [];
     for (let j = parts.length - 1; j >= 0; j--) {
       const part = parts[j];
-      if (isToolUIPart(part)) return part;
+      // dj_say has its own reply surface (top notification + replay/TTS); don't
+      // double-show it as dock "activity".
+      if (isToolUIPart(part) && getToolName(part) !== "dj_say") return part;
     }
   }
   return undefined;

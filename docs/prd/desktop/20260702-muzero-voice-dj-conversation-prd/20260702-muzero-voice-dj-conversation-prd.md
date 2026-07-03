@@ -19,6 +19,9 @@
 | 2 | TTS 基础设施：`src/tts` provider registry + Fish Audio + 音色拉取/搜索/添加 + Settings「Text-to-Speech」面板 + 试听播放 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 语音对话闭环：`voice.talkToDj`（默认 hold/不绑定）→ ASR → **当前活跃**会话 `DjChatRuntimeActor` + **动态滑动窗口** → `dj_say` reply 工具 → 左上角通知 + 自动朗读（渐变 ducking）+ 付费确认 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 平台 QA / 权限边界 / i18n×4 校对 / VAD 静音自动停 (可选增强) | ✅ Completed（VAD deferred） | [Phase 4 Checklist](#phase-4-checklist) |
+| 5 | Round-2 优化：DJ 工具活动展示打磨（dock 活动气泡 per-tool 图标 + query 明细，**不在顶部重复**） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 6 | Round-2 优化：播放淡入淡出 / crossfade（`crossfadeEnabled` 默认开；切歌 + 暂停/恢复淡变） | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 7 | Round-2 优化：Composer 录音按钮（快捷键之外手动点录音）+ tool-call 执行性能核查 | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -589,10 +592,60 @@ dj_say: tool({
 
 ---
 
+## 12. Follow-up Enhancements（round-2，用户反馈）
+
+> 2026-07-03 用户在 Electron 手测后补充的四点优化 + 一条性能红线。按 phase 推进、原子化 commit、每次改完先更 PRD 再 commit、TDD + E2E harness（复用 `POST /voice/transcript` + `GET /notifications` + `GET /state` 控制端点）。
+
+### Phase 5：DJ 工具活动展示打磨（dock 活动气泡）
+
+**背景**：dock 上的 [`ChatActivityPopover`](../../../../src/components/chat/chat-activity-popover.tsx)（`deriveChatActivity` 从 runtime snapshot 派生「当前在调哪个工具」）**已经**在底部显示工具活动。所以：
+
+- **不在顶部通知栈重复**工具活动（用户：「既然底部这里会显示，其实顶部的就不需要显示了」）——放弃 round-1 起过的 tool-activity **bus + instrument 每个 tool execute** 方案（那会给每次 tool-call 加副作用，撞性能红线），改为纯读 snapshot。
+- **不同 toolcall 用不同 lucide 图标**：`ChatActivityPopover` 的 `ActivityIcon` 现按 tone（running/error/idle）出图标，改为**按工具**（`toolIconName(toolName)`）——search→🔍、play→▶、generate→🪄…（[`dj-tool-display.ts`](../../../../src/chat/dj-tool-display.ts) 纯映射）。
+- **明细行 = tool-call 核心参数**：气泡当前的副行是 assistant 文本；running 工具时改显 `summarizeToolInput(toolName, latestTool.input)`（search 的 query、set 的 name、generate 的 title 等；≤80 字裁剪）。
+- **性能**：只读 snapshot 里已有的 tool part，**零**新增 tool-call 开销（对齐性能红线）。
+
+**Phase 5 Checklist**
+- [x] dock 活动气泡：running 工具显示 per-tool 图标（`ChatActivityPopover.ActivityIcon` 按 `iconKey` 出图，16 个 DJ 工具图标）+ 工具 label + query/param 明细（`summarizeToolInput` 优先于 assistant 文本）；idle/error/thinking tone 兜底。
+- [x] 顶部通知栈**不再**出现工具活动卡（从未加，撤掉 round-1 起过的 bus/instrument）；dj_say 从 dock 气泡 `latestToolPart` **排除**（回话仍在顶部，携 replay/TTS，不双显）。
+- [x] 单测：`toolIconName`/`summarizeToolInput`（6 测）+ `deriveChatActivity`（query 明细 + iconKey + 无摘要时回退 assistant 文本）。共 8 新测 + 既有 popover 测更新。
+- [x] `make check`（typecheck + biome + chat 119 测）通过。**零 tool-call 开销**：纯读 snapshot，无 bus/instrument（对齐性能红线）。
+
+### Phase 6：播放淡入淡出 / crossfade
+
+**背景**：用户觉得 DJ 说话时的音量 ducking 渐变很好，希望**切歌**和**暂停/恢复**也有淡变。
+
+- 新增 `AppSettings.crossfadeEnabled`（「淡入淡出」）——**默认开**（additive optional，不 bump DB）。可加 `crossfadeMs`（默认 ~400ms）。
+- **切歌**：新曲淡入 + 旧曲淡出（`MediaEngine`/`AudioEngine` 单 `<audio>`/`<video>` 元素——真 crossfade 需两条轨或 WebAudio gain；单元素退化为「快速 fade-out 旧 → 切源 → fade-in 新」，复用 ducker 的分步 `setVolume` ramp）。
+- **暂停/恢复**：暂停前 fade-out 到 0 再 pause；恢复时 play 后 fade-in 到用户音量。
+- **性能**：ramp 用现成分步 `setVolume`（30ms 步进），不新建 WebAudio 图除非必要；不在 rAF 每帧做重活。
+- Settings→播放 加「淡入淡出」开关 + 时长（i18n×4）。
+
+**Phase 6 Checklist**
+- [ ] `crossfadeEnabled` 默认开；关掉 = 立即切/立即暂停（现状行为）。
+- [ ] 切歌：旧曲淡出、新曲淡入；快速连切不叠音、不卡。
+- [ ] 暂停/恢复：平滑淡出/淡入，不爆音。
+- [ ] 单测：fade 调度纯逻辑（注入 `setVolume`/`now`/timer，断言 ramp 序列 + 取消旧 ramp）；切歌/暂停接线在 store 层可测。
+- [ ] `make check` + 端点 E2E（`player/playIndex`、`player`（pause/resume）驱动，`GET /state` 看 isPlaying/volume 变化）。
+
+### Phase 7：Composer 录音按钮 + tool-call 执行性能核查
+
+- **录音按钮**：[`dj-chat-entry.tsx`](../../../../src/components/chat/dj-chat-entry.tsx) 的 chip 里、输入框旁加一个 mic 按钮——点击 = `getVoiceInputController().toggle()`（与快捷键同一路径），录音态显示（脉冲/停止图标）。ASR 未配置时 disabled + 提示去设置。i18n×4。
+- **性能红线（贯穿 5/6/7）**：核查 LLM 调 tool-call 时底层执行有无性能问题——内存占用、掉帧、主线程卡顿。手段：控制端点 `POST /voice/transcript` 触发多步 tool 运行，配合 `GET /processes`（进程内存/CPU）、`perf/trace`、`perf/sampler`、`renderTrace`（每表面 commit 计数）观察一轮多 tool-call 期间有无异常渲染/内存增长；tool execute 是异步 Dexie 查询（非 UI 阻塞），确认 snapshot 更新不触发全树重渲染（Zustand selector 纪律，规则 6）。
+
+**Phase 7 Checklist**
+- [ ] Composer 出现录音按钮；点击开/停录音，录音态可见；未配 ASR 时 disabled + 提示。
+- [ ] 一轮多 tool-call（search→switch→dj_say…）期间：无明显掉帧、无内存持续增长、活动气泡更新不引发全树重渲染（renderTrace 佐证）。
+- [ ] 单测：录音按钮点击 → controller.toggle（注入 fake controller）；perf 核查记录进 memory/PRD。
+- [ ] `make check` + 端点 E2E。
+
+---
+
 ## 11. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-2) | **§12 Follow-up 记录 + Phase 5 完成**：用户 Electron 手测反馈 4 优化 + 性能红线，记入新 §12（Phase 5/6/7）。**Phase 5**：DJ 工具活动展示打磨——`ChatActivityPopover`/`deriveChatActivity` 加 per-tool lucide 图标（`dj-tool-display.toolIconName`，16 图标）+ running 工具显示 `summarizeToolInput` 的核心参数（query/name/title）作明细行；dj_say 从 dock 气泡排除（顶部回话不双显）；**撤掉** round-1 起过的 tool-activity bus + instrument-every-execute（零 tool-call 开销，对齐性能红线）。8 新单测，`make check` 全绿。 |
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |
 | 2026-07-02 | DoodleBear | PM 拍板 Q1-Q5/Q7：用 `dj_say` 工具；push-to-talk **默认 hold**（Settings 可选，暴露后台无 key-up 的退化约束）；朗读 duck **渐变过渡**（`djVoiceDuckRampMs`）；**不开专用会话、继承当前活跃会话** + 上下文改**动态滑动窗口**（新增 §3.4 `selectContextWindow`，替代 `contextStartIndex`/compaction）；付费生成**要确认**；快捷键**默认不绑定**。Q6/Q8 采用默认。相应更新 §2.2/§2.3/§3.1/§3.4/§4.4/§4.5/§5.2/§6 Phase 3/§10。 |
 | 2026-07-03 | Claude | **Fish 模型更新 + 默认改免费（用户补充）**：`FishTtsBackend` union 扩为 `s2.1-pro-free`/`s2.1-pro`/`s2-pro`/`s1`；新增 `FISH_TTS_BACKENDS` + `DEFAULT_FISH_BACKEND = "s2.1-pro-free"`（免费开发模型，同 S2.1-Pro 质量/83 语言，最适合 BYOK 个人自用）。provider/registry/Settings 默认全部改走 `DEFAULT_FISH_BACKEND`；Settings backend 下拉列全 4 项（i18n×4 加 `backendS21Free`/`backendS21`）；加 fish-provider 默认-backend 单测。Q8 Resolved。 |
