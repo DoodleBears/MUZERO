@@ -868,6 +868,8 @@
     "shuffleHint": "新しいキューをシャッフル順で開始します。",
     "shuffleReshuffleLabel": "切り替えるたびにシャッフルし直す",
     "shuffleReshuffleHint": "オン：シャッフルをオンにするたびに新しいランダム順を生成します。オフ（既定）：プレイリストを切り替えるまでシャッフル順は保持されます。",
+    "crossfadeLabel": "フェードイン / アウト",
+    "crossfadeHint": "曲の切り替えや一時停止・再開のとき、急に切らず音楽を滑らかにフェードします。既定でオン。",
     "storageTitle": "ストレージとキャッシュ",
     "storageUsageTitle": "デバイスストレージ",
     "storageUsageRatio": "{{usage}} / {{quota}} 使用中 · {{percent}}%",

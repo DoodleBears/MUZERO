@@ -868,6 +868,8 @@
     "shuffleHint": "새 대기열을 셔플 순서로 시작합니다.",
     "shuffleReshuffleLabel": "토글할 때마다 다시 셔플",
     "shuffleReshuffleHint": "켜기: 셔플을 켤 때마다 새로운 무작위 순서를 만듭니다. 끄기(기본값): 재생목록을 바꾸기 전까지 셔플 순서가 유지됩니다.",
+    "crossfadeLabel": "페이드 인 / 아웃",
+    "crossfadeHint": "곡을 전환하거나 일시정지·재개할 때 갑자기 끊지 않고 음악을 부드럽게 페이드합니다. 기본값 켜짐.",
     "storageTitle": "저장 공간 및 캐시",
     "storageUsageTitle": "기기 저장 공간",
     "storageUsageRatio": "{{usage}} / {{quota}} 사용 중 · {{percent}}%",

@@ -1,5 +1,6 @@
 import type { DiagnosticContext, DiagnosticErrorKind, DiagnosticPhase } from "@/lib/diagnostics";
 import { createDiagnosticLogger, log } from "@/lib/logger";
+import { createAudioFader } from "./audio-fade";
 
 /**
  * Owns playback through a persistent `<audio>` element (the driver) plus a muted
@@ -60,6 +61,17 @@ export class MediaEngine {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private diagnosticsContext: MediaDiagnosticsContext | undefined;
+  /** The user's intended volume; the element volume may be mid-fade below it. */
+  private targetVolume = 1;
+  private crossfadeEnabled = false;
+  private crossfadeMs = 400;
+  /** Stepwise volume ramp for pause/resume + track-switch fades (淡入淡出). */
+  private readonly fader = createAudioFader({
+    apply: (v) => {
+      if (this.audioEl instanceof HTMLMediaElement)
+        this.audioEl.volume = Math.min(1, Math.max(0, v));
+    },
+  });
 
   constructor(private callbacks: MediaEngineCallbacks = {}) {
     const canDom = typeof document !== "undefined";
@@ -243,6 +255,8 @@ export class MediaEngine {
       currentSrc: !!this.audioEl.currentSrc,
     });
     this.ensureGraph();
+    // Fade-in (淡入): start silent so the track/resume ramps up instead of popping.
+    if (this.crossfadeEnabled && this.audioEl instanceof HTMLMediaElement) this.audioEl.volume = 0;
     this.traceMediaElementEvent("audio", "play.requested", this.audioEl, { phase: "start" });
     let settled = false;
     try {
@@ -281,10 +295,17 @@ export class MediaEngine {
         errorKind: "unknown",
       });
     }
+    // Ramp up to the user's volume once playback has started.
+    if (this.crossfadeEnabled) this.fader.fadeTo(0, this.targetVolume, this.crossfadeMs);
   }
 
   pause(): void {
-    this.audioEl.pause();
+    // Fade-out (淡出) then pause; a resume mid-fade cancels this via fadeTo/setVolume.
+    if (this.crossfadeEnabled && this.audioEl instanceof HTMLMediaElement) {
+      this.fader.fadeTo(this.audioEl.volume, 0, this.crossfadeMs, () => this.audioEl.pause());
+    } else {
+      this.audioEl.pause();
+    }
   }
 
   seek(positionSec: number): void {
@@ -302,14 +323,29 @@ export class MediaEngine {
   }
 
   setVolume(volume: number): void {
-    this.audioEl.volume = Math.min(1, Math.max(0, volume));
+    // The user's intended level. Cancel any in-flight fade and apply immediately
+    // (fades ramp the ELEMENT volume toward this target, never the other way).
+    this.targetVolume = Math.min(1, Math.max(0, volume));
+    this.fader.cancel();
+    this.audioEl.volume = this.targetVolume;
   }
 
   getVolume(): number {
     return this.audioEl.volume;
   }
 
+  /** Enable playback crossfade (淡入淡出) on pause/resume + track switch. */
+  setCrossfade(enabled: boolean, ms?: number): void {
+    this.crossfadeEnabled = enabled;
+    if (typeof ms === "number" && ms > 0) this.crossfadeMs = ms;
+    if (!enabled) {
+      this.fader.cancel();
+      if (this.audioEl instanceof HTMLMediaElement) this.audioEl.volume = this.targetVolume;
+    }
+  }
+
   stop(): void {
+    this.fader.cancel();
     this.audioEl.pause();
     this.videoEl.pause();
     this.audioEl.removeAttribute("src");

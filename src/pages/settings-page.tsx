@@ -844,6 +844,22 @@ export function SettingsPage({ pageActive }: { pageActive?: boolean } = {}) {
                       </span>
                     </span>
                   </label>
+                  <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.crossfadeEnabled ?? true}
+                      onChange={(event) =>
+                        void saveSettings({ crossfadeEnabled: event.currentTarget.checked })
+                      }
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">{t("settings.crossfadeLabel")}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.crossfadeHint")}
+                      </span>
+                    </span>
+                  </label>
                 </CardContent>
               </Card>
             )}

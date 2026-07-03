@@ -1085,6 +1085,10 @@ export interface AppSettings {
   shuffleReshuffleOnToggle?: boolean;
   /** Persisted playback volume (0–1). */
   playerVolume?: number;
+  /** Fade playback in/out (淡入淡出) on pause/resume + track switch. Default true. */
+  crossfadeEnabled?: boolean;
+  /** Fade duration in ms for {@link crossfadeEnabled}. Default 400. */
+  crossfadeMs?: number;
   /** Persisted resume pointer for the AI DJ chat runtime. */
   lastChatSessionId?: string;
   /** Local Electron loopback intake for Social Stream Ninja / OBS audience requests. */

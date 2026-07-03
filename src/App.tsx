@@ -60,7 +60,7 @@ import { useDesktopWindowStore } from "@/stores/desktop-window-store";
 import { startDownloadIndicator } from "@/stores/download-indicator";
 import { useNavStore } from "@/stores/nav-store";
 import { startPlaybackIndicator } from "@/stores/playback-indicator";
-import { usePlayerStore } from "@/stores/player-store";
+import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { startPlaylistAutoSyncScheduler } from "@/stores/playlist-auto-sync";
 import { startSyncIndicator } from "@/stores/sync-indicator";
 import { useUiStore } from "@/stores/ui-store";
@@ -130,6 +130,11 @@ export default function App() {
   useEffect(() => {
     initDesktopWindow();
   }, [initDesktopWindow]);
+
+  // Apply the playback fade-in/out (淡入淡出) preference live when it changes.
+  useEffect(() => {
+    getMediaEngine()?.setCrossfade(settings.crossfadeEnabled ?? true, settings.crossfadeMs);
+  }, [settings.crossfadeEnabled, settings.crossfadeMs]);
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.

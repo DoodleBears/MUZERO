@@ -20,7 +20,7 @@
 | 3 | 语音对话闭环：`voice.talkToDj`（默认 hold/不绑定）→ ASR → **当前活跃**会话 `DjChatRuntimeActor` + **动态滑动窗口** → `dj_say` reply 工具 → 左上角通知 + 自动朗读（渐变 ducking）+ 付费确认 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 平台 QA / 权限边界 / i18n×4 校对 / VAD 静音自动停 (可选增强) | ✅ Completed（VAD deferred） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Round-2 优化：DJ 工具活动展示打磨（dock 活动气泡 per-tool 图标 + query 明细，**不在顶部重复**） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
-| 6 | Round-2 优化：播放淡入淡出 / crossfade（`crossfadeEnabled` 默认开；切歌 + 暂停/恢复淡变） | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 6 | Round-2 优化：播放淡入淡出 / crossfade（`crossfadeEnabled` 默认开；切歌 + 暂停/恢复淡变） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 7 | Round-2 优化：Composer 录音按钮（快捷键之外手动点录音）+ tool-call 执行性能核查 | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -622,11 +622,11 @@ dj_say: tool({
 - Settings→播放 加「淡入淡出」开关 + 时长（i18n×4）。
 
 **Phase 6 Checklist**
-- [ ] `crossfadeEnabled` 默认开；关掉 = 立即切/立即暂停（现状行为）。
-- [ ] 切歌：旧曲淡出、新曲淡入；快速连切不叠音、不卡。
-- [ ] 暂停/恢复：平滑淡出/淡入，不爆音。
-- [ ] 单测：fade 调度纯逻辑（注入 `setVolume`/`now`/timer，断言 ramp 序列 + 取消旧 ramp）；切歌/暂停接线在 store 层可测。
-- [ ] `make check` + 端点 E2E（`player/playIndex`、`player`（pause/resume）驱动，`GET /state` 看 isPlaying/volume 变化）。
+- [x] `crossfadeEnabled` **默认开**（`?? true`）；关掉 = `setCrossfade(false)` 立即恢复 element 音量、走原立即切/暂停路径（零行为差）。
+- [x] 切歌/恢复：`MediaEngine.play()` 淡入（crossfade 时先把 element 音量置 0，play 后 `fader.fadeTo(0→targetVolume)`），覆盖切歌 + resume 同一路径（新曲/续播不爆音）。单元素模型不做真 overlap crossfade（需双轨/WebAudio，记为后续）。
+- [x] 暂停：`MediaEngine.pause()` 淡出到 0 再 `audioEl.pause()`；resume mid-fade 由 `fadeTo`/`setVolume` 取消旧 ramp（不残留 onDone）。
+- [x] 单测：`AudioFader`（5 测：均匀 ramp、onDone、0/1 步即时、新 fade 取消旧、cancel）；`MediaEngine` 集成走既有 149 player 测（无回归）。
+- [x] `make check`（typecheck + biome + player 149 测）通过。**性能**：ramp 用 30ms setTimeout 步进（一轮 fade ~13 个 timer），无 rAF/无每帧重活；`setVolume` 只改 element 属性（无重渲染，规则 6）。Settings→播放 加「淡入淡出」开关 + i18n×4。
 
 ### Phase 7：Composer 录音按钮 + tool-call 执行性能核查
 
@@ -645,6 +645,7 @@ dj_say: tool({
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-2) | **Phase 6 完成**：播放淡入淡出 / crossfade。新增 `src/player/audio-fade.ts`（`createAudioFader` 分步 ramp，注入 timer 可测，5 单测）；`MediaEngine` 集成——`targetVolume`/`crossfadeEnabled`/`crossfadeMs` + `setCrossfade()`，`play()` 淡入（先置 0 再 ramp 到 target）、`pause()` 淡出再暂停、`setVolume()` 设 target+取消 fade、`stop()` 取消 fade。`AppSettings.crossfadeEnabled`（默认 true）/`crossfadeMs`；`hydratePlaybackSettings` 启动应用 + App effect 实时应用；Settings→播放「淡入淡出」开关 + i18n×4。性能：30ms setTimeout 步进、无 rAF、只改 element 音量属性。`make check`（149 player 测）全绿。 |
 | 2026-07-03 | Claude (round-2) | **§12 Follow-up 记录 + Phase 5 完成**：用户 Electron 手测反馈 4 优化 + 性能红线，记入新 §12（Phase 5/6/7）。**Phase 5**：DJ 工具活动展示打磨——`ChatActivityPopover`/`deriveChatActivity` 加 per-tool lucide 图标（`dj-tool-display.toolIconName`，16 图标）+ running 工具显示 `summarizeToolInput` 的核心参数（query/name/title）作明细行；dj_say 从 dock 气泡排除（顶部回话不双显）；**撤掉** round-1 起过的 tool-activity bus + instrument-every-execute（零 tool-call 开销，对齐性能红线）。8 新单测，`make check` 全绿。 |
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |
 | 2026-07-02 | DoodleBear | PM 拍板 Q1-Q5/Q7：用 `dj_say` 工具；push-to-talk **默认 hold**（Settings 可选，暴露后台无 key-up 的退化约束）；朗读 duck **渐变过渡**（`djVoiceDuckRampMs`）；**不开专用会话、继承当前活跃会话** + 上下文改**动态滑动窗口**（新增 §3.4 `selectContextWindow`，替代 `contextStartIndex`/compaction）；付费生成**要确认**；快捷键**默认不绑定**。Q6/Q8 采用默认。相应更新 §2.2/§2.3/§3.1/§3.4/§4.4/§4.5/§5.2/§6 Phase 3/§10。 |

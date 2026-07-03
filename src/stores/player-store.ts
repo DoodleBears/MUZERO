@@ -4313,6 +4313,8 @@ async function hydratePlaybackSettings(set: (p: Partial<PlayerState>) => void): 
   set({ repeat, shuffle, volume, displayMode });
   mediaEngine?.setVolume(volume);
   mediaEngine?.setVideoEnabled(displayMode === "video");
+  // Playback fade-in/out (淡入淡出) — default ON. Live toggles apply via App's effect.
+  mediaEngine?.setCrossfade(settings.crossfadeEnabled ?? true, settings.crossfadeMs);
   // Shuffle is materialized into the persisted queue order (playQueue.entries), so the
   // boot queue is already the last play order. The persisted natural order (for un-shuffle
   // after a relaunch) is restored in the queue watcher, synchronously with the source.
