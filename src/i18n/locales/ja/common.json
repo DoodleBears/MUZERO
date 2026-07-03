@@ -379,6 +379,22 @@
     "noMemoryCreateHint": "まだメモリーはありません。{{shortcut}} で作成できます。",
     "openSettingsHint": "右クリックまたは長押しで歌詞設定"
   },
+  "enrichSettings": {
+    "title": "ジャンルタグ",
+    "autoEnrich": "取り込んだ曲のジャンルを自動補完",
+    "autoEnrichHint": "アップロード / ストリーミング曲のジャンル・スタイルを検索（MusicBrainz、設定済みなら Last.fm/Discogs も）し、DJ と検索がスタイルで絞り込めるようにします。各曲は一度だけ処理し、見つからなかった曲は次回スキップします。",
+    "lastfmKey": "Last.fm API キー",
+    "lastfmKeyHint": "任意。より濃い曲単位のタグを追加（欧米の音楽に最適）。last.fm/api で無料取得。",
+    "discogsToken": "Discogs トークン",
+    "discogsTokenHint": "任意。厳選された genre / style 分類を追加。",
+    "desktopOnly": "Last.fm と Discogs はデスクトップ版が必要です（ブラウザはリクエストをブロックします）。MusicBrainz は全プラットフォームで動作します。",
+    "libraryBackfill": "ライブラリ一括補完",
+    "sweepIdle": "すべて完了 — 未処理の曲はありません。",
+    "sweepProgress": "補完中 {{done}} / {{total}}…",
+    "enrichNow": "今すぐライブラリを補完",
+    "stop": "停止",
+    "retryFailed": "見つからなかった曲を再試行"
+  },
   "lyricsSettings": {
     "title": "歌詞",
     "align": "配置",

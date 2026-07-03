@@ -391,6 +391,22 @@
     "noMemoryCreateHint": "No memories yet. Press {{shortcut}} to create one.",
     "openSettingsHint": "Right-click or long-press for lyrics settings"
   },
+  "enrichSettings": {
+    "title": "Genre tags",
+    "autoEnrich": "Auto-fill genre for imported tracks",
+    "autoEnrichHint": "Looks up genre/style for uploaded & streamed tracks (MusicBrainz, plus Last.fm/Discogs if configured) so the DJ and search can filter by style. Each track is processed once; one that comes up empty is skipped next time.",
+    "lastfmKey": "Last.fm API key",
+    "lastfmKeyHint": "Optional. Adds denser per-track tags (best for Western music). Free key at last.fm/api.",
+    "discogsToken": "Discogs token",
+    "discogsTokenHint": "Optional. Adds a curated genre / style taxonomy.",
+    "desktopOnly": "Last.fm & Discogs need the desktop app (the browser blocks their requests). MusicBrainz works everywhere.",
+    "libraryBackfill": "Library backfill",
+    "sweepIdle": "All caught up — nothing left to process.",
+    "sweepProgress": "Enriching {{done}} / {{total}}…",
+    "enrichNow": "Enrich library now",
+    "stop": "Stop",
+    "retryFailed": "Retry not-found"
+  },
   "lyricsSettings": {
     "title": "Lyrics",
     "align": "Alignment",

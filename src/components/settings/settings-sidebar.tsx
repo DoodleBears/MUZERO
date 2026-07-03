@@ -20,6 +20,7 @@ import {
   PlayCircle,
   Radio,
   Sparkles,
+  Tags,
   Volume2,
   Waves,
 } from "lucide-react";
@@ -59,6 +60,7 @@ const SETTINGS_ICONS = {
   "play-circle": PlayCircle,
   radio: Radio,
   sparkles: Sparkles,
+  tags: Tags,
   "volume-2": Volume2,
   waves: Waves,
 } as const satisfies Record<string, LucideIcon>;

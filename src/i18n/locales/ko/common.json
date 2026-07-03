@@ -379,6 +379,22 @@
     "noMemoryCreateHint": "아직 추억이 없어요. {{shortcut}} 키로 만들 수 있습니다.",
     "openSettingsHint": "우클릭 또는 길게 눌러 가사 설정"
   },
+  "enrichSettings": {
+    "title": "장르 태그",
+    "autoEnrich": "가져온 트랙의 장르 자동 채우기",
+    "autoEnrichHint": "업로드 / 스트리밍 트랙의 장르·스타일을 조회해(MusicBrainz, 설정된 경우 Last.fm/Discogs 포함) DJ와 검색이 스타일로 필터링할 수 있게 합니다. 각 트랙은 한 번만 처리하며, 찾지 못한 트랙은 다음에 건너뜁니다.",
+    "lastfmKey": "Last.fm API 키",
+    "lastfmKeyHint": "선택. 더 촘촘한 트랙별 태그 추가(서양 음악에 가장 적합). last.fm/api에서 무료로 발급.",
+    "discogsToken": "Discogs 토큰",
+    "discogsTokenHint": "선택. 정제된 genre / style 분류 추가.",
+    "desktopOnly": "Last.fm과 Discogs는 데스크톱 앱이 필요합니다(브라우저가 요청을 차단). MusicBrainz는 모든 플랫폼에서 작동합니다.",
+    "libraryBackfill": "라이브러리 일괄 채우기",
+    "sweepIdle": "모두 완료 — 처리할 트랙이 없습니다.",
+    "sweepProgress": "채우는 중 {{done}} / {{total}}…",
+    "enrichNow": "지금 라이브러리 채우기",
+    "stop": "중지",
+    "retryFailed": "찾지 못한 항목 재시도"
+  },
   "lyricsSettings": {
     "title": "가사",
     "align": "정렬",

@@ -1743,6 +1743,15 @@ export async function clearTrackEnrichment(
 }
 
 /**
+ * Delete every negative-cache (`notFound`) enrichment row so the sweep re-attempts those
+ * tracks — the "retry the ones that came up empty" manual action. `found` rows are kept.
+ * Returns how many rows were cleared.
+ */
+export async function clearFailedEnrichments(db: MuzeroDB = defaultDb): Promise<number> {
+  return db.enrichments.filter((e) => e.status === "notFound").delete();
+}
+
+/**
  * Attach (or replace) a cover image for a track. The full image is stored; an
  * optional `crop` records the square region to show (non-destructive). Passing
  * no crop clears any previous one.

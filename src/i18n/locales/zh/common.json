@@ -379,6 +379,22 @@
     "noMemoryCreateHint": "还没有记忆。按 {{shortcut}} 创建。",
     "openSettingsHint": "右键或长按打开歌词设置"
   },
+  "enrichSettings": {
+    "title": "风格标签",
+    "autoEnrich": "为导入曲目自动补齐风格",
+    "autoEnrichHint": "为上传 / 流媒体曲目查风格流派（MusicBrainz，若已配置则加 Last.fm/Discogs），让 DJ 和搜索能按风格过滤。每首只处理一次；查不到的下次自动跳过。",
+    "lastfmKey": "Last.fm API key",
+    "lastfmKeyHint": "可选。补更密的单曲标签（欧美音乐最佳）。可在 last.fm/api 免费申请。",
+    "discogsToken": "Discogs token",
+    "discogsTokenHint": "可选。补上精编的 genre / style 分类。",
+    "desktopOnly": "Last.fm 与 Discogs 需桌面端（浏览器会拦截其请求）；MusicBrainz 全平台可用。",
+    "libraryBackfill": "全库补齐",
+    "sweepIdle": "已全部补齐——没有待处理曲目。",
+    "sweepProgress": "补齐中 {{done}} / {{total}}…",
+    "enrichNow": "立即补齐全库",
+    "stop": "停止",
+    "retryFailed": "重试未找到"
+  },
   "lyricsSettings": {
     "title": "歌词",
     "align": "对齐",

@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 数据模型 + enrichment 契约（独立 `enrichments` 表 + Zod schema + 纯 normalize 映射） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Provider registry + MusicBrainz（keyless / web 可用）+ 后台 auto-enrich 队列 + DJ 接线 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Last.fm（BYOK，标签质量最高）+ Discogs（style 分类法，可选）+ Settings 面板 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Last.fm（BYOK，标签质量最高）+ Discogs（style 分类法）+ auto 组合 + Settings 面板 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 华语复用：QQ 原生 genre（实测✅）灌入 enrichment；NetEase（实测❌）回退外部库 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 消费方接线：DJ 续歌 + chat agent 过滤 + 搜索 + 手动补齐 + 可选 LLM 归一化 + i18n | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | （可选 / 可拆独立 PRD）Essentia.js 内容分析兜底：零元数据也能出风格 | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
@@ -353,13 +353,13 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 - [x] `enrich/lastfm-provider.ts` + `lastfm-map.ts`：`track.getTopTags`（count 阈值过滤 folksonomy），BYOK `api_key`（settings 行，永不进日志）；error 6→null、坏 key→throw；单测。
 - [x] `enrich/discogs-provider.ts` + `discogs-map.ts`：search 直取 genre+style，BYOK `token`；单测。
 - [x] `enrich/registry.ts`：`enrichmentProviderOrder`（lastfm→musicbrainz→discogs，按 key 存在装配）+ `createAutoEnrichmentProvider`（首个命中即停；单 provider 全 error 才 throw，clean miss→null 可缓存）；`AppSettings.lastfmApiKey`/`discogsToken`；单测。
-- [ ] Settings「元数据补齐」面板：autoEnrich 开关 + key 录入（不回显）+ health chip + sweep 进度 + 手动「补齐全部/重新补齐」按钮。
-- [ ] web 降级：Last.fm/Discogs 在 web 标「仅桌面」（CORS 限制），不误导。
+- [x] Settings「风格标签」面板（[`genre-enrichment-settings.tsx`](../../../../src/components/settings/genre-enrichment-settings.tsx)，AI section）：autoEnrich 开关 + Last.fm/Discogs key 录入（password、不回显、失焦保存）+ sweep 进度（轮询）+ 手动「立即补齐/停止/重试未找到」按钮 + web 降级说明。`clearFailedEnrichments`（只清 notFound）驱动「重试未找到」。
+- [x] web 降级：Settings 面板注明 Last.fm/Discogs 仅桌面（CORS 限制）；MusicBrainz 全平台。
 
 ### Phase 3 Checklist
 - [x] BYOK key 只在 settings 行，永不进 bundle/log/URL（rule 2）。
 - [x] provider 顺序生效，首个命中即停（负缓存正确）。
-- [ ] Settings 面板 + i18n（en 先行）+ web 降级标注。
+- [x] Settings 面板 + i18n（en/zh/ja/ko 全量）+ web 降级标注。
 
 ### Phase 4: 华语复用（QQ 原生 genre；NetEase 回退外部库）
 
@@ -479,3 +479,4 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 | 2026-07-04 | MUZERO Team | **Phase 1+2 实现完成**（`src/enrich/*` 镜像 `src/lyrics/`）：provider/normalize/build-query/registry/musicbrainz(-map)/auto-enrich + `enrichments` 表(v32，**改独立表避列表扇出**) + repo + player-store 播放触发 + dj-engine `RecentTrack.genres` 合并。**33 单测 + 162 既有测全绿、tsc/biome 干净**。**In-app E2E（真实 MusicBrainz + 用户真实 NetEase 库）**：Fun Fun Fun→soundtrack(recording)、HOYO-MiX→soundtrack(artist)、初音ミク→j-pop/vocaloid(artist) 等，NetEase 无 genre 曲目全部补齐；normalize 按真实 MB 噪声(vgm/hoyoverse/composer…)迭代收紧 |
 | 2026-07-04 | MUZERO Team | **后台 sweep 队列**（[`enrich-sweep.ts`](../../../../src/enrich/enrich-sweep.ts)）：自动补齐全库未处理曲目（不必逐首播放），启动延迟触发 + `autoEnrich` gate + 单并发 + 限速 + abortable + in-flight 去重；**无持久 job 表**（`enrichments` 表即状态，work-list 每次从 DB 重派生 → 重启安全/自愈），处理过(found/notFound)即 skip，手动 `clearTrackEnrichment` 重来。**38 单测全绿**。**In-app E2E**：启动约 20s 后自动开跑，从用户真实库派生 **5937** 首 work-list，~1.1s/首推进(0→13)，`sweepStop` 干净停止，重启续跑 |
 | 2026-07-04 | MUZERO Team | **Phase 3 provider 层（TDD）**：Last.fm（`track.getTopTags`，BYOK key，count 阈值过滤）+ Discogs（search 直取 genre+style，BYOK token）+ registry 改「auto 组合」（`enrichmentProviderOrder` lastfm→musicbrainz→discogs 按 key 装配 + `createAutoEnrichmentProvider` 首个命中即停 / 全 error 才 throw）+ `AppSettings.lastfmApiKey`/`discogsToken`。**67 enrich 单测全绿（+29）、tsc/biome 干净**。Settings UI + web 降级标注留下一 commit |
+| 2026-07-04 | MUZERO Team | **Phase 3 Settings UI 完成**：`genre-enrichment-settings.tsx`（AI section「风格标签」，图标 tags）= autoEnrich 开关 + Last.fm/Discogs key（password/失焦保存）+ sweep 进度轮询 + 立即补齐/停止/重试未找到按钮 + web 降级说明；`clearFailedEnrichments`（TDD，只清 notFound）；i18n en/zh/ja/ko 全量。**全量 3637 测全绿（+30）**。Phase 3 完成 |

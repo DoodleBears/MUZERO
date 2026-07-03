@@ -21,6 +21,7 @@ import { DeviceAvatarPicker } from "@/components/settings/device-avatar-picker";
 import { DjToolCapabilities } from "@/components/settings/dj-tool-capabilities";
 import { ElectronWindowAppearanceSettings } from "@/components/settings/electron-window-appearance-settings";
 import { FlowSettings } from "@/components/settings/flow-settings";
+import { GenreEnrichmentSettings } from "@/components/settings/genre-enrichment-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
 import {
   ListeningStatsLink,
@@ -762,6 +763,7 @@ export function SettingsPage({ pageActive }: { pageActive?: boolean } = {}) {
             {activeItem === "performance" && <PerformanceSettings />}
 
             {activeItem === "lyrics" && <LyricsSettings />}
+            {activeItem === "genre-enrichment" && <GenreEnrichmentSettings />}
             {activeItem === "online-sources" && <StreamSourcesSettings />}
             {activeItem === "storage" && <PersistentStorageSettings />}
 

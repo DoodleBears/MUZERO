@@ -21,6 +21,7 @@ describe("settings-nav", () => {
       "ai-music-generation",
       "voice-tts",
       "voice-asr",
+      "genre-enrichment",
       "listening-stats",
       "shortcuts",
       "playback",
