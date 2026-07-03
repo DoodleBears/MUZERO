@@ -70,6 +70,22 @@ describe("createFishTtsProvider", () => {
     expect(result.blob.size).toBe(8);
   });
 
+  it("defaults the backend to s2.1-pro-free (free model)", async () => {
+    let modelHeader: string | null = null;
+    const provider = createFishTtsProvider({
+      apiKey: "k",
+      fetchImpl: (async (_url: string, init?: RequestInit) => {
+        modelHeader = new Headers(init?.headers).get("model");
+        return new Response(new Uint8Array(4), {
+          status: 200,
+          headers: { "content-type": "audio/mpeg" },
+        });
+      }) as never,
+    });
+    await provider.synthesize({ text: "hi", voiceId: "v" });
+    expect(modelHeader).toBe("s2.1-pro-free");
+  });
+
   it("throws a classified TtsError on auth failure", async () => {
     const provider = createFishTtsProvider({
       apiKey: "bad",

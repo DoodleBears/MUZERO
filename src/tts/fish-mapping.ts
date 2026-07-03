@@ -12,8 +12,16 @@ import type { TtsErrorKind, VoiceModel, VoiceModelSample } from "./provider";
 
 export const FISH_API_BASE = "https://api.fish.audio";
 
-/** Fish synthesis backend, sent as the `model` header on `/v1/tts`. */
-export type FishTtsBackend = "s1" | "s2-pro";
+/**
+ * Fish synthesis backend, sent as the `model` header on `/v1/tts`.
+ *  - `s2.1-pro-free` — same model as S2.1-Pro at $0 (fair-use, no TTFA/DPA
+ *    guarantees). MUZERO's default: BYOK personal use, free is plenty.
+ *  - `s2.1-pro`       — recommended production model.
+ *  - `s2-pro` / `s1`  — previous generations, kept for existing setups.
+ */
+export type FishTtsBackend = "s2.1-pro-free" | "s2.1-pro" | "s2-pro" | "s1";
+export const FISH_TTS_BACKENDS: FishTtsBackend[] = ["s2.1-pro-free", "s2.1-pro", "s2-pro", "s1"];
+export const DEFAULT_FISH_BACKEND: FishTtsBackend = "s2.1-pro-free";
 export type TtsAudioFormat = "mp3" | "opus";
 
 export interface MapReplyOptions {

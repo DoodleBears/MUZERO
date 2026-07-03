@@ -111,7 +111,7 @@ MUZERO 已经有一个**工具调用式 AI DJ chat**（Vercel AI SDK `ToolLoopAg
 
 | Component | Technology | Rationale |
 |-----------|------------|-----------|
-| **TTS provider** | Fish Audio HTTP API（`GET /model` 列表/搜索、`GET /model/{id}` 取单个、`POST /v1/tts` 合成），BYOK `Authorization: Bearer` + `model: s1\|s2-pro` header | 官方直连；`self_only=true` 天然满足「拉取 key 拥有的音色」，`title=` 满足「搜索」，`GET /model/{id}` 满足「添加其它音色」 |
+| **TTS provider** | Fish Audio HTTP API（`GET /model` 列表/搜索、`GET /model/{id}` 取单个、`POST /v1/tts` 合成），BYOK `Authorization: Bearer` + `model` header（默认 `s2.1-pro-free` 免费） | 官方直连；`self_only=true` 天然满足「拉取 key 拥有的音色」，`title=` 满足「搜索」，`GET /model/{id}` 满足「添加其它音色」 |
 | **ASR provider** | Groq Whisper（`POST https://api.groq.com/openai/v1/audio/transcriptions`，`multipart/form-data`，`model=whisper-large-v3-turbo`） | anysoul 已验证的直连路径；50ms/10s、准确、便宜（$0.04/h turbo）；MUZERO 已有 Groq LLM preset，key 可复用 |
 | **出站 HTTP** | [`getAppFetch()`](../../../../src/lib/platform.ts) → Electron `muzfetch://` / Tauri http / web | 绕 CORS / mixed-content（规则 5/10）；**禁止**直接 `window.fetch` 调 Fish/Groq |
 | **麦克风采集** | `navigator.mediaDevices.getUserMedia` + `MediaRecorder`（`audio/webm;codecs=opus` 优先，回退 ogg/mp4） | 浏览器原生；镜像 anysoul [`use-voice-input.ts`](file:///D:/code/project/anysoul/packages/web/src/hooks/use-voice-input.ts) 的 MIME 选择 + 时长 + 焦点丢失取消 |
@@ -189,7 +189,7 @@ AppSettings（已有单行，扩 optional 字段——不 bump DB version）
   │   ├─ ttsProvider?: TtsProviderId     "fish-audio"（union，未来可扩）
   │   ├─ fishAudioApiKey?: string        BYOK；只存本地；show/hide；永不入 bundle/log
   │   ├─ ttsVoiceId?: string             选中的 Fish model id（reference_id）
-  │   ├─ ttsModel?: "s1" | "s2-pro"      Fish backend（TTS header），默认 s1
+  │   ├─ ttsModel?: FishTtsBackend      "s2.1-pro-free"(默认) | "s2.1-pro" | "s2-pro" | "s1"（TTS `model` header）
   │   ├─ ttsSpeed?: number               prosody.speed 0.5–2.0，默认 1
   │   ├─ ttsFormat?: "mp3" | "opus"      默认 mp3（解码兼容最好）
   │   └─ ttsAddedVoiceIds?: string[]     手动粘贴添加的公开 model id（镜像 anysoul publicModelIds）
@@ -284,7 +284,7 @@ export function selectContextWindow(
 |---|---|---|
 | **列出音色（拥有的 + 搜索）** | `GET https://api.fish.audio/model` | query：`self_only=true`（key 拥有的）、`title=<搜索词>`、`page_size`、`page_number`、`sort_by`（`task_count`\|`created_at`）、`language`。响应 `PaginatedResponse<ModelEntity>`（`items[]` + `total`） |
 | **取单个音色（添加公开音色）** | `GET https://api.fish.audio/model/{model_id}` | 用户粘贴 model id → 拉全量信息缓存进 `ttsAddedVoiceCache` |
-| **合成（朗读 reply）** | `POST https://api.fish.audio/v1/tts` | header 额外带 `model: s1`（默认）或 `s2-pro`；body 见下；响应是**流式音频字节**（`Transfer-Encoding: chunked`） |
+| **合成（朗读 reply）** | `POST https://api.fish.audio/v1/tts` | header 额外带 `model: s2.1-pro-free`（默认，免费）/ `s2.1-pro` / `s2-pro` / `s1`；body 见下；响应是**流式音频字节**（`Transfer-Encoding: chunked`） |
 
 **`ModelEntity`（音色，映射到内部 `VoiceModel`）**：`_id`/`id`、`title`、`description`、`cover_image`、`state`、`tags[]`、`languages[]`、`samples[]`（含 `audio` 试听 url、`text`）、`visibility`、`author`、`like_count`、`created_at`。→ 由纯函数 `parseVoiceModel` 归一。
 
@@ -411,7 +411,7 @@ dj_say: tool({
   - **My Voices**：TanStack Query 拉 `self_only=true`，卡片显示 title + id + 试听（`samples[0].audio` 用临时 `<audio>` 播放，镜像 anysoul `VoiceModelCard`）；顶部**搜索框**（`title=` query，防抖）。
   - **Add a voice**：粘贴一个/多个 model id（逗号/空格/换行分隔）→ `getVoice(id)` 解析 → 存 `ttsAddedVoiceIds` + 缓存；可移除。
   - **选中音色** = `ttsVoiceId`（radio / 高亮）；「Preview reply」用当前音色合成一句示例并播放。
-  - `djReplyAutoSpeak`（单一开关：开=DJ 出声，无独立母开关）、`ttsModel`(s1/s2-pro)、`ttsSpeed`(slider)、`djVoiceDuckMusic` + `djVoiceDuckVolume`(slider) + `djVoiceDuckRampMs`(渐变时长，默认 200ms)。
+  - `djReplyAutoSpeak`（单一开关：开=DJ 出声，无独立母开关）、`ttsModel`(s2.1-pro-free 默认 / s2.1-pro / s2-pro / s1)、`ttsSpeed`(slider)、`djVoiceDuckMusic` + `djVoiceDuckVolume`(slider) + `djVoiceDuckRampMs`(渐变时长，默认 200ms)。
 - **DJ reply 通知**：`notify.info(replyText, { duration: 8000, dismissible: true, actions: [{ label: t("voice.reply.replay"), onClick: replay, keepOpen: true }, { label: t("voice.reply.open"), onClick: openDjChat }] })`。朗读中可用 `notify.loading` 起手、念完 `update` 成 info（可选）。
 - **录音指示**：录音时左上角一条 `notify.loading(t("voice.listening"))`（阈值门控，避免瞬时闪现），停止即 dismiss——沿用 [`20260622-unified-background-progress-notification`](../20260622-muzero-unified-background-progress-notification-prd/20260622-muzero-unified-background-progress-notification-prd.md) 的 indicator 模式。可选：Now Playing / dock 一个微弱的「mic 脉冲」发光。
 
@@ -585,7 +585,7 @@ dj_say: tool({
 | 5 | 语音里付费生成是否要确认？ | ✅ Resolved | **要确认**（通知 Approve/Deny，PM 2026-07-02）；`voiceAutoApproveGenerate` 显式开关（默认关）才免确认。 |
 | 7 | 默认 `voice.talkToDj` 快捷键？ | ✅ Resolved | **默认不绑定**（PM 2026-07-02）；用户在 Settings 显式绑定（最安全，对齐 system-global 默认不启用）。 |
 | 6 | ASR 的 Groq key 是否复用已配置的 DJ Groq key（`apiKeysByPresetId.groq`）？ | 🔲 Open（采用默认） | 提供「复用」开关，默认复用（若已存在），也允许单独填 `groqApiKey`。未收到反对，暂按此实现。 |
-| 8 | Fish TTS backend 默认 `s1` 还是 `s2-pro`？ | 🔲 Open（采用默认） | 默认 `s1`（更快、够用），`s2-pro` 可选。未收到反对，暂按此实现。 |
+| 8 | Fish TTS backend 默认哪个 model？ | ✅ Resolved | **默认 `s2.1-pro-free`**（2026-07-03 用户拍板）——与 `s2.1-pro` 同模型、同质量/83 语言，$0 供开发测试（fair-use，无 TTFA/DPA 保证），最适合 BYOK 个人自用。可选 `s2.1-pro`(付费) / `s2-pro` / `s1`。`FishTtsBackend` union 扩为四项，`DEFAULT_FISH_BACKEND` 集中定义。 |
 
 ---
 
@@ -595,6 +595,7 @@ dj_say: tool({
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |
 | 2026-07-02 | DoodleBear | PM 拍板 Q1-Q5/Q7：用 `dj_say` 工具；push-to-talk **默认 hold**（Settings 可选，暴露后台无 key-up 的退化约束）；朗读 duck **渐变过渡**（`djVoiceDuckRampMs`）；**不开专用会话、继承当前活跃会话** + 上下文改**动态滑动窗口**（新增 §3.4 `selectContextWindow`，替代 `contextStartIndex`/compaction）；付费生成**要确认**；快捷键**默认不绑定**。Q6/Q8 采用默认。相应更新 §2.2/§2.3/§3.1/§3.4/§4.4/§4.5/§5.2/§6 Phase 3/§10。 |
+| 2026-07-03 | Claude | **Fish 模型更新 + 默认改免费（用户补充）**：`FishTtsBackend` union 扩为 `s2.1-pro-free`/`s2.1-pro`/`s2-pro`/`s1`；新增 `FISH_TTS_BACKENDS` + `DEFAULT_FISH_BACKEND = "s2.1-pro-free"`（免费开发模型，同 S2.1-Pro 质量/83 语言，最适合 BYOK 个人自用）。provider/registry/Settings 默认全部改走 `DEFAULT_FISH_BACKEND`；Settings backend 下拉列全 4 项（i18n×4 加 `backendS21Free`/`backendS21`）；加 fish-provider 默认-backend 单测。Q8 Resolved。 |
 | 2026-07-03 | Claude | **TTS 双开关合并（用户反馈）**：原「启用文字转语音」(`ttsEnabled` 母开关) 与「自动朗读回话」(`djReplyAutoSpeak`) 对主用例重复——两个都得开才出声。合并为**单一** `djReplyAutoSpeak`：删除 `ttsEnabled` 字段 + UI 开关 + `voice.tts.enable/enableHint` i18n×4；`isTtsReady` 改为 `key && voiceId`（配好即就绪，Preview/重播只看 key+音色）。registry 测试更新，`make check` 全绿。 |
 | 2026-07-03 | Claude (TDD) | **Phase 4 完成**：QA / 权限 / i18n 收口。Electron 麦克风权限接线（`main.cjs` `setPermissionRequestHandler` grant + `package.json` `build.mac.extendInfo.NSMicrophoneUsageDescription`）；log 扫描确认新模块无 `console.*`、日志无文本/key/audio（仅 provider/bytes/quota）；i18n×4 脚本核对 `voice.*` 81 键 + `chat.tools.dj_say` + nav/shortcut 键完全一致；`vite build`（✓ 5.48s）+ `node --check electron/main.cjs` 通过。VAD 静音自动停 deferred（字段预留）。PRD 状态转 Implemented。 |
 | 2026-07-03 | Claude (TDD) | **Phase 3 完成**：语音对话闭环接线。`voice.talkToDj` 快捷键（in-app hold keydown/keyup + 后台 toggle 退化；默认不绑定）→ `VoiceInputController` → `use-voice-dj` wiring（`getActiveDjChatRuntimeActor` 继承当前会话；`routeVoiceTranscript` send/interrupt；`dj-reply-bus` + `dj_say` 工具/`executeDjSay` → `notify.info` + `postReply`；`lastAssistantPreview` 兜底；`decideApproval` 付费审批通知/`voiceAutoApproveGenerate`）+ `selectContextWindow` 动态滑动窗口（接入 `dj-chat-agent.sendMessages`，`contextStartIndex` 取 max）+ `createGradientDucker`（`MediaEngine.getVolume()` 新增）+ Settings 加 autoSpeak/duckRamp/autoApprove/inputMode 控件 + AppSettings Phase-3 字段 + i18n×4。TDD：21 个新单测（`selectContextWindow`/`dj_say`/`voice-dj-logic`），`make check`（typecheck+biome+3498 测试）全绿。 |

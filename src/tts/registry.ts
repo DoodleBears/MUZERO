@@ -5,7 +5,7 @@
  */
 
 import type { AppSettings } from "@/db/types";
-import type { FishTtsBackend, TtsAudioFormat } from "./fish-mapping";
+import { DEFAULT_FISH_BACKEND, type FishTtsBackend, type TtsAudioFormat } from "./fish-mapping";
 import { createFishTtsProvider } from "./fish-provider";
 import type { TtsProvider, TtsProviderId } from "./provider";
 
@@ -13,8 +13,8 @@ export const TTS_PROVIDER_IDS: TtsProviderId[] = ["fish-audio"];
 
 /**
  * Resolve a TTS provider from the configured API key — usable for listing /
- * previewing voices even before the master switch is on. Returns `null` when no
- * key is set. The speak path additionally gates on {@link isTtsReady}.
+ * previewing voices as soon as a key is set. Returns `null` when no key is set.
+ * The speak path additionally gates on {@link isTtsReady}.
  */
 export function resolveTtsProvider(settings: AppSettings): TtsProvider | null {
   switch (settings.ttsProvider ?? "fish-audio") {
@@ -23,7 +23,7 @@ export function resolveTtsProvider(settings: AppSettings): TtsProvider | null {
       if (!apiKey) return null;
       return createFishTtsProvider({
         apiKey,
-        backend: (settings.ttsModel as FishTtsBackend | undefined) ?? "s1",
+        backend: (settings.ttsModel as FishTtsBackend | undefined) ?? DEFAULT_FISH_BACKEND,
         format: (settings.ttsFormat as TtsAudioFormat | undefined) ?? "mp3",
       });
     }

@@ -10,6 +10,7 @@ import { createDiagnosticLogger } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import {
   classifyFishError,
+  DEFAULT_FISH_BACKEND,
   FISH_API_BASE,
   type FishTtsBackend,
   mapReplyToTtsBody,
@@ -29,7 +30,7 @@ const diag = createDiagnosticLogger("voice.tts");
 
 export interface FishTtsConfig {
   apiKey: string;
-  /** Synthesis backend (sent as the `model` header). Default "s1". */
+  /** Synthesis backend (sent as the `model` header). Default s2.1-pro-free. */
   backend?: FishTtsBackend;
   /** Output container. Default "mp3" (widest `<audio>`/decode support). */
   format?: TtsAudioFormat;
@@ -38,7 +39,7 @@ export interface FishTtsConfig {
 }
 
 export function createFishTtsProvider(cfg: FishTtsConfig): TtsProvider {
-  const backend = cfg.backend ?? "s1";
+  const backend = cfg.backend ?? DEFAULT_FISH_BACKEND;
   const format = cfg.format ?? "mp3";
   const resolveFetch = async () => cfg.fetchImpl ?? (await getAppFetch());
 

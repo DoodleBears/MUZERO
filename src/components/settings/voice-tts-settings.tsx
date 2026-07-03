@@ -17,13 +17,24 @@ import { saveSettings } from "@/db/repositories";
 import type { CachedVoiceModel } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { openExternalUrl } from "@/lib/platform";
-import type { FishTtsBackend } from "@/tts/fish-mapping";
+import { DEFAULT_FISH_BACKEND, FISH_TTS_BACKENDS, type FishTtsBackend } from "@/tts/fish-mapping";
 import { TtsError, type VoiceModel } from "@/tts/provider";
 import { resolveTtsProvider } from "@/tts/registry";
 import { synthesizeReply } from "@/voice/tts-playback-runtime";
 
 const FISH_KEY_URL = "https://fish.audio/go-api/";
-const BACKENDS: FishTtsBackend[] = ["s1", "s2-pro"];
+function backendLabelKey(id: FishTtsBackend) {
+  switch (id) {
+    case "s2.1-pro-free":
+      return "voice.tts.backendS21Free" as const;
+    case "s2.1-pro":
+      return "voice.tts.backendS21" as const;
+    case "s2-pro":
+      return "voice.tts.backendS2" as const;
+    default:
+      return "voice.tts.backendS1" as const;
+  }
+}
 
 type TtsErrorKey =
   | "voice.tts.errAuth"
@@ -369,22 +380,20 @@ export function VoiceTtsSettings() {
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <span className="text-muted-foreground text-xs">{t("voice.tts.backend")}</span>
             <Select
-              value={settings.ttsModel ?? "s1"}
+              value={settings.ttsModel ?? DEFAULT_FISH_BACKEND}
               onValueChange={(value) => {
                 if (value) void saveSettings({ ttsModel: value as FishTtsBackend });
               }}
             >
               <SelectTrigger>
                 <SelectValue>
-                  {(value) =>
-                    value === "s2-pro" ? t("voice.tts.backendS2") : t("voice.tts.backendS1")
-                  }
+                  {(value) => t(backendLabelKey((value as FishTtsBackend) ?? DEFAULT_FISH_BACKEND))}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {BACKENDS.map((id) => (
+                {FISH_TTS_BACKENDS.map((id) => (
                   <SelectItem key={id} value={id}>
-                    {id === "s2-pro" ? t("voice.tts.backendS2") : t("voice.tts.backendS1")}
+                    {t(backendLabelKey(id))}
                   </SelectItem>
                 ))}
               </SelectContent>
