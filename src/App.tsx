@@ -18,6 +18,7 @@ import { MacWindowControls } from "@/components/shell/mac-window-controls";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { WindowsWindowControls } from "@/components/shell/windows-window-controls";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
+import { startEnrichmentSweepScheduler } from "@/enrich/enrich-sweep";
 import { useSettings } from "@/hooks/use-app-data";
 import { useAppIcon } from "@/hooks/use-app-icon";
 import { useDockIdle } from "@/hooks/use-dock-idle";
@@ -183,6 +184,10 @@ export default function App() {
 
   // Auto-sync sets bound to an external playlist/favlist (per-set cadence + auto-download new).
   useEffect(() => startPlaylistAutoSyncScheduler(), []);
+
+  // Background genre-enrichment sweep: backfill imported tracks that were never played
+  // (deferred + rate-limited + gated by autoEnrich; skips anything already processed).
+  useEffect(() => startEnrichmentSweepScheduler(), []);
 
   // Dev / profiling-build automation control endpoint bridge. In a normal prod build
   // both flags fold to false → the import is dead code → tree-shaken. The dedicated

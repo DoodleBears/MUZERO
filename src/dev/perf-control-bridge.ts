@@ -76,7 +76,8 @@ export interface PerfControlCommand {
     | "voiceTranscript"
     | "ttsPreview"
     | "notifications"
-    | "chatTrace";
+    | "chatTrace"
+    | "enrichProbe";
   actionId?: string;
   /** voiceTranscript: the text to feed into the voice→DJ pipeline (no mic). */
   text?: string;
@@ -139,6 +140,8 @@ interface PerfCommandHandlerDeps {
   downloadQueue?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** Playback-queue-model E2E: seed a cross-set scenario / play a track in a set context. */
   playbackContext?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Enrichment feasibility probe: dump RAW genre/style/tag fields from a source's song detail. */
+  enrichProbe?: (payload: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -375,6 +378,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "playbackContext": {
         if (!deps.playbackContext) throw new Error("playbackContext not wired");
         return deps.playbackContext(command.payload ?? {});
+      }
+      case "enrichProbe": {
+        if (!deps.enrichProbe) throw new Error("enrichProbe not wired");
+        return deps.enrichProbe(command.payload ?? {});
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
@@ -1087,6 +1094,122 @@ export function startPerfControlBridge(): void {
         return { played: trackId, setId };
       }
       throw new Error(`unknown playbackContext action: ${action}`);
+    },
+    // Enrichment feasibility probe (PRD desktop/20260704): does QQ / NetEase song-detail carry
+    // genre/style/tag metadata? Builds the source with the user's cookie, resolves an externalId
+    // (explicit or first search hit), re-issues the RAW detail request (parsers drop genre), and
+    // returns only the genre-bearing fields — never the cookie. Dynamic import so HMR picks up edits.
+    enrichProbe: async (payload) => {
+      // action:"sweep" — drive the REAL library sweep (bounded by `limit` for E2E), or
+      // observe/stop it. Proves the background backfill queue end-to-end.
+      if (payload.action === "sweep") {
+        const { runEnrichmentSweep } = await import("@/enrich/enrich-sweep");
+        return {
+          sweep: await runEnrichmentSweep({
+            limit: payload.limit != null ? Number(payload.limit) : undefined,
+            interTrackDelayMs: payload.delayMs != null ? Number(payload.delayMs) : undefined,
+          }),
+        };
+      }
+      if (payload.action === "sweepStatus") {
+        const { getEnrichmentSweepStatus } = await import("@/enrich/enrich-sweep");
+        return { sweep: getEnrichmentSweepStatus() };
+      }
+      if (payload.action === "sweepStop") {
+        const { stopEnrichmentSweep, getEnrichmentSweepStatus } = await import(
+          "@/enrich/enrich-sweep"
+        );
+        stopEnrichmentSweep();
+        return { sweep: getEnrichmentSweepStatus() };
+      }
+      // action:"pipeline" — run the REAL enrichment pipeline (resolveEnrichmentProvider +
+      // runAutoEnrich) against live MusicBrainz on a track (by id, or the current one), then
+      // read back what landed. End-to-end proof of Phase 1+2. `force` clears the negative cache
+      // first so a re-run actually re-fetches. Dynamic imports so HMR picks up edits.
+      if (payload.action === "pipeline") {
+        const { getTrack, getTrackEnrichment, clearTrackEnrichment } = await import(
+          "@/db/repositories"
+        );
+        const { resolveEnrichmentProvider } = await import("@/enrich/registry");
+        const { runAutoEnrich } = await import("@/enrich/auto-enrich");
+        const { buildEnrichmentQuery } = await import("@/enrich/build-query");
+        const s = usePlayerStore.getState();
+        const trackId = String(
+          payload.trackId ?? (s.currentIndex >= 0 ? (s.queue[s.currentIndex]?.id ?? "") : ""),
+        );
+        const track = trackId ? await getTrack(trackId) : null;
+        if (!track) throw new Error("no track (pass trackId or play one)");
+        if (payload.force) await clearTrackEnrichment(track.id);
+        const settingsFull = await getSettings();
+        const query = buildEnrichmentQuery(track);
+        await runAutoEnrich({
+          track,
+          settings: settingsFull,
+          provider: resolveEnrichmentProvider(settingsFull),
+        });
+        const stored = await getTrackEnrichment(track.id);
+        return {
+          trackId: track.id,
+          title: track.title,
+          origin: track.origin,
+          streamSourceId: track.streamSourceId,
+          query,
+          enrichment: stored
+            ? {
+                source: stored.source,
+                status: stored.status,
+                genres: stored.genres,
+                styles: stored.styles,
+                via: stored.match?.via,
+                confidence: stored.match?.confidence,
+                sourceId: stored.sourceId,
+              }
+            : null,
+        };
+      }
+      const { qqRawSongDetail, neteaseRawSongDetail, scanGenreFields } = await import(
+        "./enrich-probe"
+      );
+      const sourceId = String(payload.sourceId ?? "netease") as StreamSourceId;
+      if (sourceId !== "qq" && sourceId !== "netease") {
+        throw new Error(`enrichProbe supports qq|netease only, got ${sourceId}`);
+      }
+      const settings = (await getSettings()) as {
+        streamSources?: Record<string, { cookie?: string } | undefined>;
+      };
+      const cookie = settings.streamSources?.[sourceId]?.cookie;
+      const http = createStreamHttp();
+      const source = createStreamSource(sourceId, {
+        http,
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      if (!source) throw new Error(`source ${sourceId} unavailable`);
+
+      let externalId = String(payload.externalId ?? "");
+      let searchHits: Array<{ externalId: string; title: string; artist?: string }> = [];
+      if (!externalId && payload.search) {
+        const hits = await source.search(String(payload.search), { limit: 3 });
+        searchHits = hits.map((h) => ({
+          externalId: h.externalId,
+          title: h.title,
+          artist: h.artist,
+        }));
+        externalId = hits[0]?.externalId ?? "";
+      }
+      if (!externalId) throw new Error("externalId or search required");
+
+      const raw =
+        sourceId === "qq"
+          ? await qqRawSongDetail(http, externalId, cookie)
+          : await neteaseRawSongDetail(http, externalId, cookie);
+      return {
+        sourceId,
+        externalId,
+        authed: Boolean(cookie),
+        searchHits,
+        genreFields: scanGenreFields(raw),
+      };
     },
     // Render-trace: reset per-surface commit counters before a scenario, snapshot after
     // — surfaces shows which re-rendered (and whether a hidden one wasted work).

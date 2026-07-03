@@ -26,6 +26,7 @@ import type {
   SyncObject,
   SyncRun,
   Track,
+  TrackEnrichment,
   TrackLike,
   TrackLyrics,
   TrackPlaybackStats,
@@ -63,6 +64,7 @@ export class MuzeroDB extends Dexie {
   playbackCache!: EntityTable<PlaybackCacheEntry, "id">;
   coverDerivatives!: EntityTable<CoverDerivative, "id">;
   downloadJobs!: EntityTable<DownloadJob, "id">;
+  enrichments!: EntityTable<TrackEnrichment, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -448,6 +450,13 @@ export class MuzeroDB extends Dexie {
     // memory-filtered streamed-track queries). Additive new table, no backfill.
     this.version(31).stores({
       downloadJobs: "id, status, createdAt",
+    });
+
+    // v32 — external genre/style enrichment (genre-enrichment PRD). Own table, mirroring
+    // `lyrics` (v20): NOT on the Track row so a first-play enrichment write can't fan out
+    // the virtualized queue/list liveQueries. 1:1 via a unique trackId. Additive, no backfill.
+    this.version(32).stores({
+      enrichments: "id, &trackId",
     });
   }
 }

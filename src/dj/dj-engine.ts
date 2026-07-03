@@ -1,6 +1,7 @@
 import type { MuzeroDB } from "@/db/muzero-db";
 import {
   createPendingTrack,
+  getEnrichmentsByTrackIds,
   getSession,
   getTracksByIds,
   markTrackFailed,
@@ -9,7 +10,7 @@ import {
   memoryNotesByTrack,
   prependTrackIds,
 } from "@/db/repositories";
-import type { Track } from "@/db/types";
+import type { Track, TrackEnrichment } from "@/db/types";
 import { log } from "@/lib/logger";
 import {
   generatedTrackMemoryNote,
@@ -64,13 +65,19 @@ export function createDjEngine(deps: {
       readyRecent.map((t) => t.id),
       db,
     );
+    // Fold external genre enrichment (MusicBrainz/QQ/…) into the DJ context so imported
+    // tracks — which have no brief and often no file genre — still steer generation by style.
+    const enrichByTrack = await getEnrichmentsByTrackIds(
+      readyRecent.map((t) => t.id),
+      db,
+    );
     const recent: RecentTrack[] = readyRecent.map((t) => {
       const memories = notesByTrack.get(t.id) ?? [];
       const note = memories.length > 0 ? memories.join(" · ") : t.note;
       return {
         title: t.title,
         caption: t.brief?.caption ?? (t.origin === "uploaded" ? `uploaded ${t.kind}` : t.title),
-        metadata: recentTrackMetadata(t),
+        metadata: recentTrackMetadata(t, enrichByTrack.get(t.id)),
         tags: t.tags,
         note,
       };
@@ -179,13 +186,37 @@ export function createDjEngine(deps: {
   return { draft, materializeNext, refillIfNeeded };
 }
 
-function recentTrackMetadata(track: Track): RecentTrack["metadata"] | undefined {
+function recentTrackMetadata(
+  track: Track,
+  enrichment?: TrackEnrichment,
+): RecentTrack["metadata"] | undefined {
   const metadata = track.mediaMetadata;
-  if (!metadata) return undefined;
   const result: NonNullable<RecentTrack["metadata"]> = {};
-  if (metadata.artists?.length) result.artists = metadata.artists;
-  if (metadata.album) result.album = metadata.album;
-  if (metadata.genres?.length) result.genres = metadata.genres;
-  if (metadata.year) result.year = metadata.year;
+  if (metadata?.artists?.length) result.artists = metadata.artists;
+  if (metadata?.album) result.album = metadata.album;
+  const genres = mergeGenres(metadata?.genres, enrichment);
+  if (genres.length > 0) result.genres = genres;
+  if (metadata?.year) result.year = metadata.year;
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/** File-parsed genres ∪ external enrichment (genres + styles), case-insensitively de-duped. */
+function mergeGenres(fileGenres: string[] | undefined, enrichment?: TrackEnrichment): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (arr?: string[]) => {
+    for (const g of arr ?? []) {
+      const key = g.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(g);
+      }
+    }
+  };
+  add(fileGenres);
+  if (enrichment?.status === "found") {
+    add(enrichment.genres);
+    add(enrichment.styles);
+  }
+  return out.slice(0, 10);
 }

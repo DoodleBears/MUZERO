@@ -37,6 +37,8 @@ import {
 import type { ImportFolder, SetDisplayMode, StreamSourceId, Track } from "@/db/types";
 import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
+import { runAutoEnrich } from "@/enrich/auto-enrich";
+import { resolveEnrichmentProvider } from "@/enrich/registry";
 import i18n from "@/i18n/i18n";
 import { hasFolderAccess, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { createTraceId, type DiagnosticContext, sanitizeUrlForTrace } from "@/lib/diagnostics";
@@ -467,6 +469,10 @@ let streamSkipRunTrackIds = new Set<string>();
 const MAX_STREAM_SKIP_RUN = 30;
 let lyricsAbort: AbortController | null = null;
 let lyricsTimer: ReturnType<typeof setTimeout> | null = null;
+// Genre-enrichment auto-fetch, same fire-and-forget discipline as lyrics (module scope,
+// not store state → per-frame playback never re-renders on it, rule 6).
+let enrichAbort: AbortController | null = null;
+let enrichTimer: ReturnType<typeof setTimeout> | null = null;
 // The id of the live match-progress toast, so a track switch / new match can
 // dismiss or replace it in place (never stacks). Module scope, not store state.
 let lyricsToastId: string | null = null;
@@ -4421,6 +4427,40 @@ function triggerLyricsAutoFetch(track: Track): void {
   }, 350);
 }
 
+/**
+ * Fire-and-forget genre enrichment for the now-current track (mirrors
+ * {@link triggerLyricsAutoFetch}). Module scope, debounced, aborts on track change; generated
+ * tracks skip (they carry brief genre). Bounded to the played track — never a whole-library
+ * sweep — so egress + the enrichment write stay one-per-track. All gating lives in runAutoEnrich.
+ */
+function triggerEnrichAutoFetch(track: Track): void {
+  enrichAbort?.abort();
+  if (enrichTimer !== null) clearTimeout(enrichTimer);
+  enrichTimer = null;
+  if (track.origin === "generated") return;
+  const controller = new AbortController();
+  enrichAbort = controller;
+  // Debounce past rapid skipping; longer than lyrics' 350ms since MusicBrainz is rate-limited
+  // and enrichment is never user-visible-blocking.
+  enrichTimer = setTimeout(() => {
+    enrichTimer = null;
+    if (controller.signal.aborted) return;
+    void (async () => {
+      try {
+        const settings = await getSettings();
+        await runAutoEnrich({
+          track,
+          settings,
+          provider: resolveEnrichmentProvider(settings),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        log.warn("enrich", "auto-enrich trigger failed", err);
+      }
+    })();
+  }, 600);
+}
+
 /** Poll the live queue for a track id — the set watcher appends newly-added tracks async. */
 async function waitForQueueIndex(
   get: () => PlayerState,
@@ -4926,6 +4966,7 @@ async function ensureLoadedAndPlay(
       set({ durationSec: duration });
     }
     triggerLyricsAutoFetch(track);
+    triggerEnrichAutoFetch(track);
     // When auto-caching streamed content is on, also pull this track's remote cover into
     // a local blob on first play — so the backlight / palette / clean-texture effects get
     // CORS-clean bytes (and offline art) without an explicit "download to device". Tiny,

@@ -3,6 +3,7 @@ import type { LlmProviderPresetId } from "@/ai/llm-providers";
 import type { GroqWhisperModel } from "@/asr/groq-mapping";
 import type { AsrProviderId } from "@/asr/provider";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
+import type { EnrichmentRecord } from "@/enrich/provider";
 import type { AppIconId } from "@/lib/app-icon";
 import type {
   AudienceRequestPlaybackAction,
@@ -1153,6 +1154,13 @@ export interface AppSettings {
    * a track only matches once, so it can't spam.
    */
   lyricsMatchToasts?: boolean;
+  /**
+   * Auto-enrich uploaded/streamed tracks with genre/style tags (genre-enrichment PRD).
+   * Sends title/artist to the visible keyless source (MusicBrainz) for the now-playing
+   * track only — same bounded egress + privacy profile as {@link autoFetchLyrics}, so
+   * it defaults on. Generated tracks use their brief and never enrich.
+   */
+  autoEnrich?: boolean;
   // --- Voice DJ: ASR / speech-to-text (voice-DJ PRD) -------------------------
   // All optional + default-at-read (?? fallbacks) → additive, no Dexie bump.
   /** Master switch for speech input. Default false (opt-in). */
@@ -1243,6 +1251,21 @@ export interface TrackLyrics extends LyricsRecord {
   fetchedAt: number;
 }
 
+/**
+ * External genre/style enrichment for a track (1:1 via trackId). Its own table — NOT on
+ * the Track row — for the same reason as {@link TrackLyrics}: writing it on first-play must
+ * not fan out the virtualized queue/list liveQueries over the `tracks` table (rule 6; see the
+ * switch-song / like-toggle fan-out fixes). `status:"notFound"` doubles as a negative cache.
+ * Kept separate from `mediaMetadata.genres` (file-parsed) and user `tags` so it can be
+ * re-normalized / re-sourced without clobbering either. See the genre-enrichment PRD.
+ */
+export interface TrackEnrichment extends EnrichmentRecord {
+  /** `enr_…` */
+  id: string;
+  trackId: string;
+  fetchedAt: number;
+}
+
 /** One model exposed by a user-defined LLM endpoint. */
 export interface CustomLlmModel {
   id: string;
@@ -1294,6 +1317,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoCacheStreamed: true,
   lyricsProviderId: "auto",
   lyricsMatchToasts: true,
+  autoEnrich: true,
   theme: "dark",
   appIcon: "dark",
   electronWindowRadius: 12,

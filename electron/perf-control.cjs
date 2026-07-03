@@ -230,6 +230,10 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments.length === 2 && segments[0] === "playback") {
     return { kind: "playbackContext", payload: { action: segments[1], ...body } };
   }
+  // Enrichment feasibility probe: POST /enrich/probe { sourceId, search|externalId }
+  if (method === "POST" && segments.length === 2 && segments[0] === "enrich" && segments[1] === "probe") {
+    return { kind: "enrichProbe", payload: body };
+  }
   return null;
 }
 

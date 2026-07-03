@@ -1,4 +1,5 @@
 import type { TrackBrief } from "@/dj/dj-brief-schema";
+import type { EnrichmentRecord } from "@/enrich/provider";
 import {
   coverPaletteFields,
   coverPaletteFromThumbhash,
@@ -63,6 +64,7 @@ import {
   type SetOrigin,
   type StreamSourceId,
   type Track,
+  type TrackEnrichment,
   type TrackKind,
   type TrackLyrics,
   type TrackMediaMetadata,
@@ -1689,6 +1691,55 @@ export async function setTrackLyrics(
 /** Remove a track's lyrics row (re-enables auto-fetch). No-op if absent. */
 export async function clearTrackLyrics(trackId: string, db: MuzeroDB = defaultDb): Promise<void> {
   await db.lyrics.where("trackId").equals(trackId).delete();
+}
+
+// -------------------------------------------------------------- enrichment ----
+
+/** A track's genre/style enrichment row (or undefined). Own table (fan-out discipline). */
+export function getTrackEnrichment(
+  trackId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<TrackEnrichment | undefined> {
+  return db.enrichments.where("trackId").equals(trackId).first();
+}
+
+/**
+ * Batch-read enrichment rows for many tracks → `trackId → row` map. Lets the DJ fold genres
+ * into its RecentTrack context in one query instead of N (the recent window is small).
+ */
+export async function getEnrichmentsByTrackIds(
+  trackIds: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<Map<string, TrackEnrichment>> {
+  if (trackIds.length === 0) return new Map();
+  const rows = await db.enrichments.where("trackId").anyOf(trackIds).toArray();
+  return new Map(rows.map((r) => [r.trackId, r]));
+}
+
+/**
+ * Upsert a track's enrichment (auto-fetched or manual). Reuses the existing row id so the
+ * 1:1 mapping stays stable. `record.status === "notFound"` is the negative cache that stops
+ * re-hitting the API. Writes the `enrichments` table, NOT the track row (no list fan-out).
+ */
+export async function setTrackEnrichment(
+  input: { trackId: string; record: EnrichmentRecord; fetchedAt?: number },
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  const existing = await getTrackEnrichment(input.trackId, db);
+  await db.enrichments.put({
+    id: existing?.id ?? newId("enr"),
+    trackId: input.trackId,
+    ...input.record,
+    fetchedAt: input.fetchedAt ?? Date.now(),
+  });
+}
+
+/** Remove a track's enrichment row (re-enables auto-enrich). No-op if absent. */
+export async function clearTrackEnrichment(
+  trackId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.enrichments.where("trackId").equals(trackId).delete();
 }
 
 /**
