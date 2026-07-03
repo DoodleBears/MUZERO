@@ -158,6 +158,9 @@ function routeToCommand(method, segments, body) {
   if (method === "GET" && segments.length === 1 && segments[0] === "notifications") {
     return { kind: "notifications" };
   }
+  if (method === "GET" && segments.length === 2 && segments[0] === "chat" && segments[1] === "trace") {
+    return { kind: "chatTrace" };
+  }
   if (method === "GET" && segments.length === 1 && segments[0] === "sessions") {
     return { kind: "sessions" };
   }

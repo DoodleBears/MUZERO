@@ -27,6 +27,8 @@
 | 10 | Round-3 修复（手测/E2E 反馈）：dj_say 有时把 `AgentWriteResult` JSON 当回话显示/朗读 + Fish 选中音色持久化（记入「用过的音色」列表，不用每次搜） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 11 | Round-3 优化：DJ 复用已有歌单——每回合注入已有歌单名列表 + prompt 引导，避免重复建（空）集 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 12 | Round-3 优化：歌单来源 UI 过滤（AI 创建 / human 创建 / 导入） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 13 | Round-3 E2E harness：控制端点读活跃会话 tool-call trace（观测 DJ 实际工具序列，找不合理设计） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 14 | Round-3 优化：基于 trace 观测优化不合理的 tool-call 设计 | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -726,12 +728,25 @@ dj_say: tool({
 - [x] 四语言 prompt 引导改指向 `set_list`；`dj-chat-i18n.test.ts` 特征短语不变仍过。
 - [x] `make check`（typecheck + biome + 3547 测试）全绿。
 
+### Phase 13：E2E harness——控制端点读 tool-call trace（Round-3，观测工具设计）
+
+**背景**：之前只能读通知/歌单计数，**看不到 DJ 内部 tool-call 序列**，无法程序化验证「有没有先 set_list 再复用」这类行为、也难发现不合理的工具设计。
+
+- 纯函数 `dj-chat-trace.extractToolCalls(messages)`（用 `isToolUIPart`/`getToolName` 展平所有 tool-call：名字/state/input/output，按顺序）+ `summarizeToolCalls`（per-tool 计数）。
+- 控制端点 `GET /chat/trace`（`perf-control.cjs` route + `perf-control-bridge.readChatTrace` 读活跃会话 `messagesJson` → 展平 + input/output 截断 300 字，非密）。dev-only、打包态永不启用。
+
+**Phase 13 Checklist**
+- [x] `extractToolCalls`：展平 tool-call（名字/state/input/output、忽略 text/user、保留 in-flight）；`summarizeToolCalls` 计数。4 测。
+- [x] `GET /chat/trace` 端点接线（route + bridge dep + 截断）。`node --check electron/perf-control.cjs` + typecheck 通过。
+- [x] `make check` 通过。（下一步用它跑 E2E 观测、找不合理工具设计 → Phase 14。）
+
 ---
 
 ## 11. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-3) | **Phase 13 完成**：E2E harness——`GET /chat/trace` 控制端点读活跃会话 tool-call trace（纯函数 `extractToolCalls`/`summarizeToolCalls` + bridge `readChatTrace` 截断非密载荷）。让 E2E 能程序化观测 DJ 实际调了哪些工具、传了什么，用于发现不合理设计。4 新测，`make check` + `node --check` 通过。 |
 | 2026-07-03 | Claude (round-3) | **Phase 11.1**：按用户反馈把 Phase 11 的"每回合注入 40 个歌单名"改为**可搜索/分页的 `set_list` 工具**（`query` 名字过滤+留空=updated 倒序、`cursor`/`limit`+`nextCursor`+`total`），`buildSetsContext` 瘦身为一行 count 提示（`db.sessions.count()`、不 dump），四语言 prompt/工具描述改指向 set_list。适配大量歌单、token 恒定。`executeSetList` +3 测，`make check`（3547 测试）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 12 完成**：歌单来源 UI 过滤（AI/human/导入）。加 `DjSession.origin?`（additive）+ `createSession` 接线 + DJ `set_create` 打 `origin:"ai"`；纯分类器 `src/lib/set-origin.ts` `resolveSetOrigin`（显式优先，否则 imported/ai/human 推断，忽略默认为 true 的 autoExtend）+ `filterSetsByOrigin`，6 测；search-page「歌单」墙加 3 个来源 `FilterChip` + `shown` 过滤，i18n×4 `gallery.origin.*`。`make check`（3548 测试）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 11 完成**：DJ 复用已有歌单、避免重复建空集（接 Phase 10 里模型重复建「专注」空集的反馈）。`buildSetsContext` 每回合注入已有歌单名/#S id/曲数（newest-first、上限 40、超出指向 `set_list`），`dj-chat-agent` 与 now-playing 顺序注入；四语言 prompt 加「先复用再新建、别留空集」引导。`buildSetsContext` 5 测 + i18n 断言，`make check`（chat 127 测）全绿。 |

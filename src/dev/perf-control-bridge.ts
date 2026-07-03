@@ -74,7 +74,8 @@ export interface PerfControlCommand {
     | "downloadQueue"
     | "playbackContext"
     | "voiceTranscript"
-    | "notifications";
+    | "notifications"
+    | "chatTrace";
   actionId?: string;
   /** voiceTranscript: the text to feed into the voice→DJ pipeline (no mic). */
   text?: string;
@@ -112,6 +113,8 @@ interface PerfCommandHandlerDeps {
   injectVoiceTranscript?: (text: string) => void;
   /** Read the current notification queue (the dj_say reply lands here). */
   readNotifications?: () => unknown;
+  /** Read the active chat session's tool-call trace (E2E: observe what the DJ did). */
+  readChatTrace?: () => Promise<unknown>;
   /** List sessions (id/name/trackCount) so a perf run can switch playlists by size. */
   listSessions?: () => Promise<unknown>;
   /** Seed a small playable set for harnesses that run against a fresh profile DB. */
@@ -319,6 +322,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         if (!deps.readNotifications) throw new Error("readNotifications not wired");
         return deps.readNotifications();
       }
+      case "chatTrace": {
+        if (!deps.readChatTrace) throw new Error("readChatTrace not wired");
+        return deps.readChatTrace();
+      }
       case "sessions": {
         if (!deps.listSessions) throw new Error("listSessions not wired");
         return deps.listSessions();
@@ -396,6 +403,32 @@ export function startPerfControlBridge(): void {
         actions: n.actions?.map((a) => a.label),
       })),
     }),
+    // The active chat session's tool-call trace — E2E observes which tools the DJ
+    // called (and with what) to spot redundant/chatty designs. Payloads truncated;
+    // set names/queries/ids are non-secret.
+    readChatTrace: async () => {
+      const { getChatSession, parseChatMessages } = await import("@/chat/dj-chat-sessions");
+      const { extractToolCalls, summarizeToolCalls } = await import("@/chat/dj-chat-trace");
+      const sessionId = (await getSettings()).lastChatSessionId as string | undefined;
+      if (!sessionId) return { sessionId: null, counts: {}, calls: [] };
+      const session = await getChatSession(sessionId);
+      const raw = extractToolCalls(parseChatMessages(session?.messagesJson ?? "[]"));
+      const clip = (v: unknown) => {
+        if (v === undefined) return undefined;
+        const s = JSON.stringify(v);
+        return s.length > 300 ? `${s.slice(0, 300)}…` : s;
+      };
+      return {
+        sessionId,
+        counts: summarizeToolCalls(raw),
+        calls: raw.map((c) => ({
+          tool: c.tool,
+          state: c.state,
+          input: clip(c.input),
+          output: clip(c.output),
+        })),
+      };
+    },
     saveSettings: (patch) => saveSettings(patch as never),
     // Whitelist of non-secret display/perf settings — NEVER return BYOK keys/endpoints
     // over the control endpoint (CLAUDE.md rule 2). Enough for switch-fps A/B snapshots.
