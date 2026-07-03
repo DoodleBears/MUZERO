@@ -1161,6 +1161,15 @@ export interface AppSettings {
    * it defaults on. Generated tracks use their brief and never enrich.
    */
   autoEnrich?: boolean;
+  /**
+   * BYOK Last.fm application api_key (genre-enrichment PRD). When set, Last.fm's per-track
+   * top-tags are tried first (densest Western folksonomy); absent → MusicBrainz-only baseline.
+   * Device-local (settings row) only — never bundled/logged (rule 2). Desktop-only (no CORS).
+   */
+  lastfmApiKey?: string;
+  /** BYOK Discogs personal-access token — adds the curated genre/style taxonomy. Same key
+   *  discipline as {@link lastfmApiKey}. */
+  discogsToken?: string;
   // --- Voice DJ: ASR / speech-to-text (voice-DJ PRD) -------------------------
   // All optional + default-at-read (?? fallbacks) → additive, no Dexie bump.
   /** Master switch for speech input. Default false (opt-in). */

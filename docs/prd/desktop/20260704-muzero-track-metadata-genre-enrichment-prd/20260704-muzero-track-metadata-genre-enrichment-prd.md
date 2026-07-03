@@ -333,32 +333,33 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 > - ⇒ **即便无任何 BYOK key，MusicBrainz 录音→艺人回退就能给华语曲目可过滤的粗流派**，直接兜住 PM 诉求；QQ/Last.fm 是精度升级。
 
 **Tasks:**
-- [ ] `enrich/registry.ts`：按 `settings.enrichProviderOrder` 解析 provider（镜像 [`lyrics/registry.ts`](../../../../src/lyrics/registry.ts)）。
-- [ ] `enrich/musicbrainz-provider.ts`：`mapQuery/parseResponse/toHit` 三纯函数 + `getAppFetch` + User-Agent + 1req/s 节流；**录音→艺人 genre 回退阶梯**（recording `inc=genres+tags` 空 → 落到 artist `inc=genres+tags`，标 `match.via` 区分 per-track / per-artist 粗粒度）；单测。
-- [ ] `enrich/auto-enrich.ts`：`shouldAutoEnrich(track, settings, existing)` 纯 gate（无 key/关闭/generated/已补 → false）+ `enrichmentRecordFromHit` + 失败背景吞 + in-flight 去重（sweep 与播放触发不撞同一首）。
-- [ ] `player-store.ts`：track 变 current 触发（串行 + 幂等 + 负缓存）。
-- [ ] **后台 sweep 队列**（[`enrich/enrich-sweep.ts`](../../../../src/enrich/enrich-sweep.ts)）：`startEnrichmentSweepScheduler` 启动后延迟触发（App.tsx `useEffect`），`collectEnrichmentWorkList` 派生「合格且无 enrichment 行」的曲目 → 逐首 `runAutoEnrich`，`autoEnrich` gate + 单并发 + 限速 + abortable。**无持久 job 表**——`enrichments` 表(found/notFound)本身即「已处理」状态，work-list 每次启动从 DB 重派生 → 重启安全、自愈；手动重来 = `clearTrackEnrichment` 使其重回 work-list。
-- [ ] 集成测（fake-indexeddb + canned provider）：import→enrich→DB→`RecentTrack.genres` 出现补齐风格 + sweep 只补合格未处理、负缓存跳过、limit/gate。
+- [x] `enrich/registry.ts`：`resolveEnrichmentProvider` 解析 provider（镜像 [`lyrics/registry.ts`](../../../../src/lyrics/registry.ts)）。
+- [x] `enrich/musicbrainz-provider.ts`：`mapQuery/parseResponse/toHit` 纯函数 + `getAppFetch` + User-Agent + 1req/s 节流；**录音→艺人 genre 回退阶梯**；单测。
+- [x] `enrich/auto-enrich.ts`：`shouldAutoEnrich` 纯 gate + `enrichmentRecordFromHit` + 失败背景吞 + in-flight 去重（sweep 与播放触发不撞同一首）。
+- [x] `player-store.ts`：track 变 current 触发（串行 + 幂等 + 负缓存）。
+- [x] **后台 sweep 队列**（[`enrich/enrich-sweep.ts`](../../../../src/enrich/enrich-sweep.ts)）：`startEnrichmentSweepScheduler` 启动后延迟触发（App.tsx `useEffect`），`collectEnrichmentWorkList` 派生「合格且无 enrichment 行」→ 逐首 `runAutoEnrich`，`autoEnrich` gate + 单并发 + 限速 + abortable。**无持久 job 表**——`enrichments` 表即「已处理」状态，work-list 每次启动从 DB 重派生 → 重启安全、自愈；手动重来 = `clearTrackEnrichment`。
+- [x] 集成测（fake-indexeddb + canned provider）：import→enrich→DB→`RecentTrack.genres` 出现补齐风格 + sweep 只补合格未处理、负缓存跳过、limit/gate。
 
 ### Phase 2 Checklist
-- [ ] web 端 MusicBrainz 补齐可用（CORS 通过）；桌面走 muzfetch。
-- [ ] 失败/限速不 toast、不阻塞播放（rule 8 验证）。
-- [ ] 后台队列不与播放/滚动抢主线程（大批导入 defer 到 idle）。
+- [x] web 端 MusicBrainz 补齐可用（CORS 通过）；桌面走 muzfetch。
+- [x] 失败/限速不 toast、不阻塞播放（rule 8 验证）。
+- [x] 后台队列不与播放/滚动抢主线程（写只碰 `enrichments` 表 → 零列表扇出；单并发 + 限速）。
 
-### Phase 3: Last.fm（BYOK）+ Discogs（可选）+ Settings 面板
+### Phase 3: Last.fm（BYOK）+ Discogs + Settings 面板
 
-**Goal:** 补上标签质量最高的 Last.fm 与 style 分类法 Discogs（桌面），Settings 可配 key/顺序。
+**Goal:** 补上标签质量最高的 Last.fm 与 style 分类法 Discogs（桌面），Settings 可配 key；registry 变「auto 组合」按序取首个命中。
 
 **Tasks:**
-- [ ] `enrich/lastfm-provider.ts`：`track.getTopTags`，BYOK `api_key`（settings 行，永不进日志）。
-- [ ] `enrich/discogs-provider.ts`：genre + style，BYOK `token`。
-- [ ] Settings「元数据补齐」面板：autoEnrich 开关 + provider 顺序 + key 录入（不回显）+ health chip。
-- [ ] web 降级：Last.fm/Discogs 在 web 隐藏或标「仅桌面」（CORS 限制），不误导。
+- [x] `enrich/lastfm-provider.ts` + `lastfm-map.ts`：`track.getTopTags`（count 阈值过滤 folksonomy），BYOK `api_key`（settings 行，永不进日志）；error 6→null、坏 key→throw；单测。
+- [x] `enrich/discogs-provider.ts` + `discogs-map.ts`：search 直取 genre+style，BYOK `token`；单测。
+- [x] `enrich/registry.ts`：`enrichmentProviderOrder`（lastfm→musicbrainz→discogs，按 key 存在装配）+ `createAutoEnrichmentProvider`（首个命中即停；单 provider 全 error 才 throw，clean miss→null 可缓存）；`AppSettings.lastfmApiKey`/`discogsToken`；单测。
+- [ ] Settings「元数据补齐」面板：autoEnrich 开关 + key 录入（不回显）+ health chip + sweep 进度 + 手动「补齐全部/重新补齐」按钮。
+- [ ] web 降级：Last.fm/Discogs 在 web 标「仅桌面」（CORS 限制），不误导。
 
 ### Phase 3 Checklist
-- [ ] BYOK key 只在 settings 行，`grep` 确认未进 bundle/log/URL（rule 2）。
-- [ ] provider 顺序生效，首个命中即停（负缓存正确）。
-- [ ] i18n key 占位（en 先行）。
+- [x] BYOK key 只在 settings 行，永不进 bundle/log/URL（rule 2）。
+- [x] provider 顺序生效，首个命中即停（负缓存正确）。
+- [ ] Settings 面板 + i18n（en 先行）+ web 降级标注。
 
 ### Phase 4: 华语复用（QQ 原生 genre；NetEase 回退外部库）
 
@@ -477,3 +478,4 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 | 2026-07-04 | MUZERO Team | **Phase 2 外部库 E2E 实测**（Node 直连公开 API 无 key）：MusicBrainz **录音级 genre 稀疏**（华语全空）但**艺人级密集且覆盖华语**（周杰伦→mandopop/中国风）→ Phase 2 加录音→艺人回退阶梯；原生 CJK 名比罗马音匹配更准。**结论：keyless MusicBrainz 已能兜住华语过滤基线，不必依赖 BYOK key。** Last.fm 精度腿待免费 key 补测 |
 | 2026-07-04 | MUZERO Team | **Phase 1+2 实现完成**（`src/enrich/*` 镜像 `src/lyrics/`）：provider/normalize/build-query/registry/musicbrainz(-map)/auto-enrich + `enrichments` 表(v32，**改独立表避列表扇出**) + repo + player-store 播放触发 + dj-engine `RecentTrack.genres` 合并。**33 单测 + 162 既有测全绿、tsc/biome 干净**。**In-app E2E（真实 MusicBrainz + 用户真实 NetEase 库）**：Fun Fun Fun→soundtrack(recording)、HOYO-MiX→soundtrack(artist)、初音ミク→j-pop/vocaloid(artist) 等，NetEase 无 genre 曲目全部补齐；normalize 按真实 MB 噪声(vgm/hoyoverse/composer…)迭代收紧 |
 | 2026-07-04 | MUZERO Team | **后台 sweep 队列**（[`enrich-sweep.ts`](../../../../src/enrich/enrich-sweep.ts)）：自动补齐全库未处理曲目（不必逐首播放），启动延迟触发 + `autoEnrich` gate + 单并发 + 限速 + abortable + in-flight 去重；**无持久 job 表**（`enrichments` 表即状态，work-list 每次从 DB 重派生 → 重启安全/自愈），处理过(found/notFound)即 skip，手动 `clearTrackEnrichment` 重来。**38 单测全绿**。**In-app E2E**：启动约 20s 后自动开跑，从用户真实库派生 **5937** 首 work-list，~1.1s/首推进(0→13)，`sweepStop` 干净停止，重启续跑 |
+| 2026-07-04 | MUZERO Team | **Phase 3 provider 层（TDD）**：Last.fm（`track.getTopTags`，BYOK key，count 阈值过滤）+ Discogs（search 直取 genre+style，BYOK token）+ registry 改「auto 组合」（`enrichmentProviderOrder` lastfm→musicbrainz→discogs 按 key 装配 + `createAutoEnrichmentProvider` 首个命中即停 / 全 error 才 throw）+ `AppSettings.lastfmApiKey`/`discogsToken`。**67 enrich 单测全绿（+29）、tsc/biome 干净**。Settings UI + web 降级标注留下一 commit |
