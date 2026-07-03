@@ -14,7 +14,7 @@ import i18n from "@/i18n/i18n";
 import { canGenerateMusic, hasEnabledStreamSources } from "./dj-chat-availability";
 import { buildNowPlayingContext } from "./dj-chat-context";
 import { DEFAULT_CHAT_CONTEXT_BUDGET, selectContextWindow } from "./dj-chat-context-budget";
-import { DJ_CHAT_SYSTEM_PROMPT } from "./dj-chat-prompt";
+import { djChatSystemPrompt } from "./dj-chat-prompt";
 import {
   getChatSession,
   loadChatLocalIdRegistry,
@@ -47,12 +47,16 @@ export function createDjChatTransport({
       const localIds = await loadChatLocalIdRegistry(options.chatId, db);
       const persistLocalIds = () =>
         saveChatLocalIdRegistry(options.chatId, localIds.snapshot(), db);
+      // Localize the LLM-facing prompt + tool descriptions to the UI language
+      // (voice-DJ PRD §12 Phase 8); English is the fallback.
+      const locale = uiLocale();
       const tools = createDjChatTools({
         db,
         includeGenerate: canGenerateMusic(settings),
         includeOnline: hasEnabledStreamSources(settings),
         localIds,
         persistLocalIds,
+        locale,
       });
       // Refresh the now-playing snapshot every turn so the DJ always knows the
       // active set + track (with ids) without spending a now_playing_get call.
@@ -61,7 +65,7 @@ export function createDjChatTransport({
       const agent = new ToolLoopAgent({
         model,
         tools,
-        instructions: `${DJ_CHAT_SYSTEM_PROMPT}\n\n${listenerLanguageDirective(uiLocale())}\n\n${nowPlaying}`,
+        instructions: `${djChatSystemPrompt(locale)}\n\n${listenerLanguageDirective(locale)}\n\n${nowPlaying}`,
         stopWhen: stepCountIs(12),
         temperature: 0.7,
         // User-tunable (Settings); default generous so multi-step tool runs and

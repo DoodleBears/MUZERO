@@ -50,6 +50,7 @@ import {
   UnknownDjChatLocalIdError,
   WrongDjChatLocalIdTypeError,
 } from "./dj-chat-local-ids";
+import { toolDescription } from "./dj-chat-tool-descriptions";
 import { type DjReplyEvent, emitDjReply } from "./dj-reply-bus";
 
 export const agentWriteResultSchema = z.object({
@@ -368,6 +369,9 @@ export interface DjChatToolDeps {
   persistLocalIds?: () => Promise<void>;
   /** Sink for `dj_say` replies. Defaults to the module {@link emitDjReply} bus. */
   emitReply?: (event: DjReplyEvent) => void;
+  /** UI language (BCP-47) — localizes the LLM-facing tool descriptions to it;
+   *  English stays the fallback when a translation is missing. Default English. */
+  locale?: string;
 }
 
 /** Max length of a spoken `dj_say` reply (kept short — it's read aloud). */
@@ -1437,6 +1441,17 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
         }),
       ),
     });
+  }
+
+  // Localize the LLM-facing tool descriptions to the UI language (voice-DJ PRD
+  // §12 Phase 8). The inline English above stays canonical + the fallback, so a
+  // missing translation keeps English (and tool-selection accuracy). Applied last
+  // so it covers the conditionally-added online/generation tools too.
+  if (deps.locale) {
+    for (const [id, entry] of Object.entries(tools)) {
+      const localized = toolDescription(id, deps.locale);
+      if (localized) (entry as { description?: string }).description = localized;
+    }
   }
 
   return tools;
