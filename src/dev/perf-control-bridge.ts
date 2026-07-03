@@ -74,6 +74,7 @@ export interface PerfControlCommand {
     | "downloadQueue"
     | "playbackContext"
     | "voiceTranscript"
+    | "ttsPreview"
     | "notifications"
     | "chatTrace";
   actionId?: string;
@@ -111,6 +112,9 @@ interface PerfCommandHandlerDeps {
   liveRequest?: (payload: Record<string, unknown>) => Promise<unknown>;
   /** Voice-DJ E2E: feed a transcript into the voice pipeline as if spoken (no mic). */
   injectVoiceTranscript?: (text: string) => void;
+  /** TTS E2E: synthesize a given text via the REAL Fish provider (BYOK) and report
+   *  bytes/mime — proves emotion-marked text is accepted over the wire. No key returned. */
+  previewTts?: (text: string) => Promise<unknown>;
   /** Read the current notification queue (the dj_say reply lands here). */
   readNotifications?: () => unknown;
   /** Read the active chat session's tool-call trace (E2E: observe what the DJ did). */
@@ -318,6 +322,12 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         deps.injectVoiceTranscript(text);
         return { injected: text };
       }
+      case "ttsPreview": {
+        if (!deps.previewTts) throw new Error("previewTts not wired");
+        const text = String(command.text ?? command.payload?.text ?? "").trim();
+        if (!text) throw new Error("text required");
+        return deps.previewTts(text);
+      }
       case "notifications": {
         if (!deps.readNotifications) throw new Error("readNotifications not wired");
         return deps.readNotifications();
@@ -394,6 +404,16 @@ export function startPerfControlBridge(): void {
       runShortcutAction(actionId, createShortcutActionRunnerContext(useNavStore.getState().setTab)),
     listActionIds: listShortcutActionIds,
     injectVoiceTranscript: (text) => getVoiceInputController().injectTranscript(text),
+    // Real Fish synthesis of a given text (BYOK) — proves emotion-marked text is
+    // accepted over the wire. Bypasses the chat runtime (no post-restart dead-zone).
+    // Returns only byte count / mime / backend — NEVER the API key (CLAUDE.md rule 2).
+    previewTts: async (text) => {
+      const { synthesizeReply } = await import("@/voice/tts-playback-runtime");
+      const settings = await getSettings();
+      const backend = (settings.ttsModel as string | undefined) ?? "s2.1-pro-free";
+      const result = await synthesizeReply(text);
+      return { ok: true, bytes: result.blob.size, mime: result.mime, backend, sentText: text };
+    },
     // dj_say replies land in the notification queue — surfaced for the voice E2E.
     readNotifications: () => ({
       queue: useNotificationStore.getState().queue.map((n) => ({

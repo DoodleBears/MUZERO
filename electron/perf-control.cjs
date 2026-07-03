@@ -155,6 +155,9 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments[0] === "voice" && segments[1] === "transcript") {
     return { kind: "voiceTranscript", text: body.text, payload: body };
   }
+  if (method === "POST" && segments[0] === "tts" && segments[1] === "preview") {
+    return { kind: "ttsPreview", text: body.text, payload: body };
+  }
   if (method === "GET" && segments.length === 1 && segments[0] === "notifications") {
     return { kind: "notifications" };
   }

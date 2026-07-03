@@ -790,7 +790,8 @@ dj_say: tool({
 **Phase 16 Checklist**
 - [x] `emotion-markup.ts`（6 纯函数）+ 15 单测；`DjReplyEvent.parts`；`executeDjSay`/`dj_say` schema 改 say 数组 + 情绪；`deliverDjReply.speakText` + `postReply` 按 backend 构造。
 - [x] 四语言 prompt + zh/ja/ko 工具描述加 say-array/emotion 引导；`make check`（typecheck + biome + tts/chat/voice 208 测）全绿。
-- [~] **活 E2E 未能这轮完成**：控制端点注入的语音轮在强制 Electron 重启（touch `electron/main.cjs` 让深层渲染模块热重载）后不再产生 DJ 轮——重启清空了内存里的 active chat runtime，语音注入需 chat 面板处于活跃态才路由，无法 headless 重新激活。功能正确性由单测全覆盖；**模型是否真用 `say`+`emotion` 需在活跃 chat 面板下手测复验**（打开 DJ 对话面板后说话即可）。
+- [x] **emotion→Fish 请求形式核验**（用户「确保 emotion 正确以合理的形式请求到 fish」）：① 对照 Fish 官方文档确认 S2=`[emotion]` 方括号（自由文本、可任意位置）、S1=`(emotion)` 圆括号（固定集、句首），标记内联在 `/v1/tts` 的 `text` 字段、`normalize` 不影响标记（保留 `normalize:true`）；② **确定性集成测**（`fish-provider.test.ts` +3）：parts→`buildEmotionText`→`provider.synthesize`→捕获真实请求体，断言 `body.text` 逐字带标记、`normalize:true`、`model` 头与 backend 一致（4 backend 全覆盖，S2↔方括号 / S1↔圆括号 永不错配）；③ **活 Fish 请求**（新增 dev 控制端点 `POST /tts/preview {text}`→真 `synthesizeReply` 直连 Fish，绕开 chat-runtime 死区，只回 bytes/mime/backend 不回 key）：`[happy] Great pick! [gentle] Cueing it up.`→200 + 35KB mp3；中文 `[happy] 太棒了，恭喜你考完试！[gentle] …`→200 + 96KB mp3；无标记基线→200 + 45KB——**Fish 实际接受带情绪标记文本并返回真音频**。
+- [~] **模型行为仍待活跃面板手测**：模型是否真用 `say`+`emotion`（而非单 text）需在活跃 chat 面板下复验（强制重启会清空内存 active chat runtime、语音注入需面板活跃才路由，见 harness 记录）。
 
 ---
 
@@ -798,6 +799,7 @@ dj_say: tool({
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-3) | **Phase 16 emotion→Fish 请求核验**（用户「确保 emotion 正确以合理的形式请求到 fish」）：对照 Fish 官方文档确认标记形式（S2 `[emotion]`／S1 `(emotion)`、内联于 `text`、`normalize` 无碍）；加 3 个确定性集成测（`fish-provider.test.ts`：parts→buildEmotionText→synthesize→捕获真实 `/v1/tts` 请求体，断言逐字标记 + `normalize:true` + model 头↔backend 一致，4 backend 全覆盖）；新增 dev 控制端点 `POST /tts/preview`（真 `synthesizeReply` 直连 Fish、绕开 chat-runtime 死区、不回 key），**活测**：`[happy]…[gentle]…`（EN 35KB / 中文 96KB mp3）+ 无标记基线 45KB 均 200——Fish 实接受带情绪标记文本。`make check` 全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 16 完成（代码）**：`dj_say` 多 part 回话 + 每 part 情绪 → Fish 情绪标记（用户反馈：一次回话可拆多 part，结合 Fish emotion control）。新增纯函数 `src/tts/emotion-markup.ts`（normalizeReplyParts/plainReplyText/usesParenEmotion/emotionMarker/buildEmotionText——S2 `[emotion]`、S1 `(emotion)`，15 单测）；`DjReplyEvent.parts`；`executeDjSay`/`dj_say` schema 改 `say:[{text,emotion?}]`（去重仍看纯文本）；`deliverDjReply.speakText`（通知纯文本、朗读带标记）+ `postReply` 按 `ttsModel` backend 构造；四语言 prompt + zh/ja/ko 工具描述加引导。`make check`（tts/chat/voice 208 测）全绿。**活 E2E 受限**：强制 Electron 重启后语音注入不再路由（内存 active chat runtime 被清、需 chat 面板活跃），`say`+`emotion` 的模型行为需活跃面板下手测复验。 |
 | 2026-07-03 | Claude (round-3) | **Phase 15 完成**：删除 `set_add_by_search` 工具（用户拍板）。软引导（Phase 9/14）压不住模型偏爱「搜索即整批加入」的捷径——移除工具本身，把策展唯一路径收敛为 `library_search`（拿 `#T` id）→ 世界知识判断 → `set_add_tracks`。删 schema/execute/工具注册/图标/metadata（parity 23→22）/三语 override/四语言 i18n 键 + 四语言 prompt 策展段重写（删「脚踏两条船」句）；测试 tools.test −2、i18n.test 改 parity+字面 token。`make check`（typecheck + biome + chat 133 测）全绿。用工具形状而非 prompt 措辞强制判断式策展。 |
 | 2026-07-03 | Claude (round-3) | **Phase 14 完成**：用 Phase 13 `/chat/trace` 实测（128 tool-call）找到并修两个不合理设计——① **dj_say 刷屏**（连续 4 次同句）→ `emitDjReply` 连续去重（+`resetDjReplyDedup`）；② **策展脚踏两条船**（同集 set_add_tracks + set_add_by_search 都做→膨胀 100 首）→ 四语言 prompt 加「dj_say 每回合一次」+「别脚踏两条船（二选一）」。2 新测，`make check`（chat+voice 172 测）全绿。 |
