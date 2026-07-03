@@ -14,7 +14,7 @@
 | 1 | 数据模型 + enrichment 契约（独立 `enrichments` 表 + Zod schema + 纯 normalize 映射） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Provider registry + MusicBrainz（keyless / web 可用）+ 后台 auto-enrich 队列 + DJ 接线 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Last.fm（BYOK，标签质量最高）+ Discogs（style 分类法）+ auto 组合 + Settings 面板 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 华语复用：QQ 原生 genre（实测✅）灌入 enrichment；NetEase（实测❌）回退外部库 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 华语复用：QQ 原生 genre provider（排首、自我 gate）；NetEase 回退外部库 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 消费方接线：DJ 续歌 + chat agent 过滤 + 搜索 + 手动补齐 + 可选 LLM 归一化 + i18n | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | （可选 / 可拆独立 PRD）Essentia.js 内容分析兜底：零元数据也能出风格 | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
 
@@ -370,16 +370,19 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 > - **NetEase `v3/song/detail`** → `genreFields: []`（周杰伦《稻香》、林俊杰《江南》官方版均无）。**NetEase 不产 genre**，只能提供 artist/title 供 Last.fm/MusicBrainz 查。
 > - 证据脚本 + renderer 探测：[`scripts/enrich-probe.mjs`](../../../../scripts/enrich-probe.mjs) + [`src/dev/enrich-probe.ts`](../../../../src/dev/enrich-probe.ts)（`POST /enrich/probe`）。
 
+**实现方式（比原「import 时捕获」更干净）**：做成 **QQ enrichment provider**（[`enrich/qq-provider.ts`](../../../../src/enrich/qq-provider.ts)）进 auto 组合、排**首位**，按 `EnrichmentQuery.streamSourceId==="qq"` **自我 gate**（非 QQ 曲直接 null、零网络）→ 覆盖**所有** QQ 曲（不止 import 那批），复用 sweep/播放触发。QQ 签名/URL 留在 [`streamsrc/qq/qq-genre.ts`](../../../../src/streamsrc/qq/qq-genre.ts)（`parseQqNativeGenre` 纯 + `fetchQqNativeGenre` 复用导出 crypto），enrich 只注入 `fetchNativeGenre`（可单测、不含签名）。
+
 **Tasks:**
-- [ ] **QQ**：给 [`qq-source.ts`](../../../../src/streamsrc/qq/qq-source.ts) 加原生 genre/lan 提取（从 `get_song_detail_yqq` 的 `data.info.genre`/`info.lan` 取 `content[].value`）→ 映射进 `EnrichmentRecord`（`source: "qq"`）；复用现有 `getTracksByIds`/详情请求，不发新 HTTP。**导入 QQ 曲目时就能落 genre。**
-- [ ] **NetEase**：不实现原生 genre（实测无）；导入时把 artist/title/album 作为 `EnrichmentQuery` 交给 Phase 2/3 的外部 provider（Last.fm/MusicBrainz）补齐。
-- [ ] `EnrichmentQuery.externalId` 打通：QQ 命中源站 mid 免模糊搜索直取详情。
-- [ ] 合并策略：QQ 原生 genre 优先；与 Last.fm/MusicBrainz 结果去重合并（避免 Pop 与 pop 重复）。
+- [x] **QQ**：`streamsrc/qq/qq-genre.ts`（`parseQqNativeGenre` 从 `data.info.genre`/`info.lan` 取 `content[].value` + `fetchQqNativeGenre` guest 详情）+ `enrich/qq-provider.ts`（gate `streamSourceId==="qq"`、normalize、`source:"qq"` via `native`、confidence 0.85）；registry 装配（guest，cookie 可选）。TDD：解析器用**真实 E2E 响应形状**测。
+- [x] **NetEase**：不实现原生 genre（实测无）；`streamSourceId` 非 qq → QQ provider 自我跳过 → artist/title 落到 Last.fm/MusicBrainz。
+- [x] `EnrichmentQuery.streamSourceId` + `externalId` 打通：QQ 用 mid 直取详情，其它源不误伤。
+- [x] 合并顺序：QQ 原生排首、首个命中即停；`normalize` 统一小写去重（Pop→pop）。
 
 ### Phase 4 Checklist
-- [ ] QQ 曲目导入后 `enrichment.genres` 非空（实测已证数据存在）。
-- [ ] NetEase 曲目走外部 provider 补齐，不误报「无来源」。
-- [ ] QQ 侧无新增出站请求（复用 `get_song_detail_yqq` 响应）。
+- [x] QQ provider 对 QQ 曲返回 native genre（解析器 vs 真实 `get_song_detail_yqq` 形状单测：稻香→Pop/国语）。
+- [x] NetEase / 其它源曲目：QQ provider 自我跳过、不误报、落外部 provider。
+- [x] QQ 侧复用 `get_song_detail_yqq`（同早先 live 实测的请求）；guest 可用。
+- [ ] （待）用户库含 QQ 曲时的 in-app pipeline E2E（当前测试库全 NetEase；原始详情 + 解析器已验证）。
 
 ### Phase 5: 消费方接线 + 可选 LLM 归一化 + i18n
 
@@ -480,3 +483,4 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 | 2026-07-04 | MUZERO Team | **后台 sweep 队列**（[`enrich-sweep.ts`](../../../../src/enrich/enrich-sweep.ts)）：自动补齐全库未处理曲目（不必逐首播放），启动延迟触发 + `autoEnrich` gate + 单并发 + 限速 + abortable + in-flight 去重；**无持久 job 表**（`enrichments` 表即状态，work-list 每次从 DB 重派生 → 重启安全/自愈），处理过(found/notFound)即 skip，手动 `clearTrackEnrichment` 重来。**38 单测全绿**。**In-app E2E**：启动约 20s 后自动开跑，从用户真实库派生 **5937** 首 work-list，~1.1s/首推进(0→13)，`sweepStop` 干净停止，重启续跑 |
 | 2026-07-04 | MUZERO Team | **Phase 3 provider 层（TDD）**：Last.fm（`track.getTopTags`，BYOK key，count 阈值过滤）+ Discogs（search 直取 genre+style，BYOK token）+ registry 改「auto 组合」（`enrichmentProviderOrder` lastfm→musicbrainz→discogs 按 key 装配 + `createAutoEnrichmentProvider` 首个命中即停 / 全 error 才 throw）+ `AppSettings.lastfmApiKey`/`discogsToken`。**67 enrich 单测全绿（+29）、tsc/biome 干净**。Settings UI + web 降级标注留下一 commit |
 | 2026-07-04 | MUZERO Team | **Phase 3 Settings UI 完成**：`genre-enrichment-settings.tsx`（AI section「风格标签」，图标 tags）= autoEnrich 开关 + Last.fm/Discogs key（password/失焦保存）+ sweep 进度轮询 + 立即补齐/停止/重试未找到按钮 + web 降级说明；`clearFailedEnrichments`（TDD，只清 notFound）；i18n en/zh/ja/ko 全量。**全量 3637 测全绿（+30）**。Phase 3 完成 |
+| 2026-07-04 | MUZERO Team | **Phase 4 QQ 原生 genre（TDD）**：`streamsrc/qq/qq-genre.ts`（`parseQqNativeGenre` 纯 + `fetchQqNativeGenre` guest 详情，复用导出签名）+ `enrich/qq-provider.ts`（`streamSourceId==="qq"` 自我 gate、via `native`、conf 0.85）；`EnrichmentQuery.streamSourceId`；registry auto 组合 QQ 排首。解析器用**真实 E2E 响应形状**测。**74 enrich 单测全绿（+7）、tsc/biome 干净**。Phase 4 完成（待用户库含 QQ 曲时补 in-app pipeline E2E） |

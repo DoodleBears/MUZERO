@@ -18,8 +18,9 @@ export function buildEnrichmentQuery(track: Track): EnrichmentQuery | null {
     trackName,
     artistName,
     albumName: trackAlbum(track),
-    // Native-detail path (Phase 4): a streamed track carries the source's own id.
+    // Native-detail path (Phase 4): a streamed track carries the source's own id + source.
     externalId: track.streamExternalId,
+    streamSourceId: track.streamSourceId,
     // Exact MB lookup when a file's ID3 already carried an MBID.
     musicBrainzRecordingId: track.mediaMetadata?.musicBrainzRecordingId,
   };

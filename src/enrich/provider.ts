@@ -16,6 +16,7 @@
  */
 
 import { z } from "zod";
+import type { StreamSourceId } from "@/db/types";
 
 /**
  * Every enrichment provenance value. Single source of truth for the {@link EnrichmentSource}
@@ -68,6 +69,9 @@ export interface EnrichmentQuery {
   albumName?: string;
   /** Source track id (QQ mid / NetEase id) for the native-detail path (Phase 4). */
   externalId?: string;
+  /** Which stream source `externalId` belongs to — lets a source-specific provider (e.g. QQ
+   *  native genre) self-skip tracks from other sources instead of mis-resolving the id. */
+  streamSourceId?: StreamSourceId;
   /** MBID from a file's ID3 (`mediaMetadata.musicBrainzRecordingId`) → exact MB lookup. */
   musicBrainzRecordingId?: string;
 }

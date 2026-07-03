@@ -16,12 +16,13 @@ function p(id: MetadataEnrichmentProvider["id"], result: EnrichmentHit | null | 
 const hit = (source: EnrichmentHit["source"]): EnrichmentHit => ({ source, genres: ["pop"] });
 
 describe("enrichmentProviderOrder", () => {
-  it("is MusicBrainz-only with no BYOK keys", () => {
-    expect(enrichmentProviderOrder(DEFAULT_SETTINGS)).toEqual(["musicbrainz"]);
+  it("is QQ (native, self-skips non-QQ) then MusicBrainz with no BYOK keys", () => {
+    expect(enrichmentProviderOrder(DEFAULT_SETTINGS)).toEqual(["qq", "musicbrainz"]);
   });
 
-  it("puts Last.fm first when a key is set (per-track tags beat the baseline)", () => {
+  it("puts Last.fm ahead of the baseline when a key is set (per-track tags)", () => {
     expect(enrichmentProviderOrder({ ...DEFAULT_SETTINGS, lastfmApiKey: "k" })).toEqual([
+      "qq",
       "lastfm",
       "musicbrainz",
     ]);
@@ -30,7 +31,7 @@ describe("enrichmentProviderOrder", () => {
   it("appends Discogs when a token is set", () => {
     expect(
       enrichmentProviderOrder({ ...DEFAULT_SETTINGS, lastfmApiKey: "k", discogsToken: "t" }),
-    ).toEqual(["lastfm", "musicbrainz", "discogs"]);
+    ).toEqual(["qq", "lastfm", "musicbrainz", "discogs"]);
   });
 });
 
