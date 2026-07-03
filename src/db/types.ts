@@ -17,6 +17,8 @@ import type {
   SystemGlobalShortcutActionId,
   SystemShortcutBinding,
 } from "@/shortcuts/system-global";
+import type { FishTtsBackend, TtsAudioFormat } from "@/tts/fish-mapping";
+import type { TtsProviderId } from "@/tts/provider";
 import type { VisualizerStyleId } from "@/visualizer/types";
 
 /** Lifecycle of a single track. Uploaded tracks are born "ready". */
@@ -636,6 +638,15 @@ export type LlmProviderId = "openai" | "anthropic";
  *  only in-app; global background degrades to press-start + auto-stop, see the
  *  voice-DJ PRD). `toggle` = press once to start, again to stop. */
 export type VoiceInputMode = "hold" | "toggle";
+
+/** Slimmed voice-model info cached on-device for pasted public voices, so the
+ *  Settings list renders instantly without re-fetching (mirrors anysoul). */
+export interface CachedVoiceModel {
+  id: string;
+  title: string;
+  coverImage?: string;
+  samples?: Array<{ audio: string; text?: string }>;
+}
 export type AudienceRequestSearchScope = "active-set" | "all-library";
 export type AudienceRequestSourceStatus = "testing" | "active" | "disabled";
 export type AudienceRequestSourceAuthMode = "open" | "secret";
@@ -1146,6 +1157,29 @@ export interface AppSettings {
   asrInputDeviceId?: string;
   /** Push-to-talk trigger style. Default "hold" (PRD Q2). */
   voiceInputMode?: VoiceInputMode;
+  // --- Voice DJ: TTS / text-to-speech (voice-DJ PRD) ------------------------
+  /** Master switch for the DJ speaking replies. Default false. */
+  ttsEnabled?: boolean;
+  /** Which TTS provider speaks. Default "fish-audio". */
+  ttsProvider?: TtsProviderId;
+  /** BYOK Fish Audio key. Device-local only, never bundled. */
+  fishAudioApiKey?: string;
+  /** Selected Fish voice model id (`reference_id`). */
+  ttsVoiceId?: string;
+  /** Fish synthesis backend. Default "s1". */
+  ttsModel?: FishTtsBackend;
+  /** Speaking rate 0.5–2.0. Default 1. */
+  ttsSpeed?: number;
+  /** Output container. Default "mp3" (best decode/`<audio>` support). */
+  ttsFormat?: TtsAudioFormat;
+  /** Manually-added public voice model ids (pasted). */
+  ttsAddedVoiceIds?: string[];
+  /** Slim on-device cache of added voices (instant render, no re-fetch). */
+  ttsAddedVoiceCache?: CachedVoiceModel[];
+  /** Duck the music while the DJ speaks. Default true. */
+  djVoiceDuckMusic?: boolean;
+  /** Duck target music volume 0–1. Default 0.25. */
+  djVoiceDuckVolume?: number;
 }
 
 /**

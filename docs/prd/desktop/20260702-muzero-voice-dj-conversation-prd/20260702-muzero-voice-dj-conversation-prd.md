@@ -16,7 +16,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | ASR 基础设施：`src/asr` provider registry + Groq + 麦克风录制编排 + Settings「Speech-to-Text」面板 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | TTS 基础设施：`src/tts` provider registry + Fish Audio + 音色拉取/搜索/添加 + Settings「Text-to-Speech」面板 + 试听播放 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | TTS 基础设施：`src/tts` provider registry + Fish Audio + 音色拉取/搜索/添加 + Settings「Text-to-Speech」面板 + 试听播放 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 语音对话闭环：`voice.talkToDj`（默认 hold/不绑定）→ ASR → **当前活跃**会话 `DjChatRuntimeActor` + **动态滑动窗口** → `dj_say` reply 工具 → 左上角通知 + 自动朗读（渐变 ducking）+ 付费确认 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 平台 QA / 权限边界 / i18n×4 校对 / VAD 静音自动停 (可选增强) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -451,21 +451,21 @@ dj_say: tool({
 **Goal:** 输入 Fish key → 拉到自己的音色、能搜、能粘 id 添加、能选中并试听一句——语音**输出**能力独立可用。
 
 **Tasks:**
-- [ ] `AppSettings` 增加 tts 相关 optional 字段（§3.1）。
-- [ ] `src/tts/provider.ts`（接口）+ `fish-mapping.ts`（`mapReplyToTtsBody` / `parseVoiceModel` / `parseVoiceModelList`，纯函数单测）+ `fish-provider.ts`（`listVoices`/`getVoice`/`synthesize`，直连 `getAppFetch()`，`Authorization: Bearer` + `model` header）+ `registry.ts`（`resolveTtsProvider` / `isTtsReady`）。
-- [ ] `src/voice/tts-playback.ts`：合成结果 → object-URL → `<audio>` 播放；reply 串行队列；`djVoiceDuckMusic` 时 `MediaEngine.setVolume(duck)` 念完恢复；revoke-before-replace（规则 9）。
-- [ ] `src/components/settings/voice-tts-settings.tsx` + `SETTINGS_NAV` 注册：key 表单 + My Voices（TanStack Query，`self_only=true`）+ 搜索框（`title=`）+ Add-by-id + 试听 + 选中 + 朗读/ducking 开关。
-- [ ] i18n×4：`settings.navVoiceTts` + `voice.tts.*`。
+- [x] `AppSettings` 增加 tts 相关 optional 字段（§3.1；`ttsEnabled`/`ttsProvider`/`fishAudioApiKey`/`ttsVoiceId`/`ttsModel`/`ttsSpeed`/`ttsFormat`/`ttsAddedVoiceIds`/`ttsAddedVoiceCache` + `djVoiceDuckMusic`/`djVoiceDuckVolume` + `CachedVoiceModel` 类型）。
+- [x] `src/tts/provider.ts`（接口 + `TtsError`/`VoiceModel`）+ `fish-mapping.ts`（`mapReplyToTtsBody` / `parseVoiceModel` / `parseVoiceModelList` / `classifyFishError`，纯函数穷举单测）+ `fish-provider.ts`（`listVoices(self_only/title)`/`getVoice(404→null)`/`synthesize`，直连 `getAppFetch()`，`Authorization: Bearer` + `model` header，注入 fetch 可测）+ `registry.ts`（`resolveTtsProvider` / `isTtsReady`）。
+- [x] `src/voice/tts-playback.ts`：注入式引擎——合成 → object-URL → sink 播放；reply 串行队列（synth→play 不重叠）；批级 duck（进队降、清空恢复）；revoke-before-replace（规则 9）；synth 失败降级不抛。`tts-playback-runtime.ts` 生产 wiring（`synthesizeReply` + `createAudioSink` 独立 `<audio>` + `createMediaEngineDucker` 写元素音量不覆盖持久 volume）。
+- [x] `src/components/settings/voice-tts-settings.tsx` + `SETTINGS_NAV`（`voice-tts`, icon `volume-2`）+ settings-page 渲染 + sidebar 图标：key 表单 + My Voices（TanStack Query，`self_only=true`）+ 搜索框（`title=` 防抖）+ Add-by-id（缓存 `ttsAddedVoiceCache`）+ 样例试听 + 「Preview reply」合成试听 + 选中 + 后端/语速/ducking 控件。
+- [x] i18n×4：`settings.navVoiceTts` + `voice.tts.*`（en 源 → zh/ja/ko）。
 
 ### Phase 2 Checklist
 
-- [ ] 输入有效 Fish key → 显示「My Voices」列表；搜索框按名字过滤；空态/加载态友好。
-- [ ] 粘贴一个公开 model id → 解析并出现在「Added」，可移除；选中任一音色 → 「Preview reply」能念出示例句。
-- [ ] TTS 失败 → 降级文字（不吞动作）；`ttsFormat=mp3` 能被 `<audio>`/AudioContext 解码。
-- [ ] 朗读时音乐音量被 duck、念完恢复；连续两条 reply 串行不重叠；object-URL 无泄漏。
-- [ ] 单测：`mapReplyToTtsBody`（speed/format/model 映射）、`parseVoiceModel(List)`（`_id`→`id`、samples、缺字段容错）、`tts-playback` 队列 + duck/restore（注入 fake audio + fake MediaEngine）。
-- [ ] Fish 调用走 `getAppFetch()`；无散落 `if (provider==="fish-audio")`；无 `console.*`。
-- [ ] `make check` 通过。
+- [x] 输入有效 Fish key → 显示「My Voices」列表；搜索框按名字过滤（防抖 300ms）；空态/加载态友好（`needKey`/`loading`/`noVoices`）。
+- [x] 粘贴一个/多个公开 model id → `getVoice` 解析并出现在「Added」，可移除（移除即清选中）；选中任一音色 → 「Preview reply」`synthesizeReply` 念出示例句。
+- [x] TTS 失败 → 降级文字（`ttsErrorKey` 映射 auth/rate-limit/network/generic，不吞）；`ttsFormat=mp3` 默认（`<audio>`/解码最稳）。
+- [x] 朗读时音乐音量被 duck、念完恢复；连续两条 reply 串行不重叠；object-URL 全部 revoke（无泄漏，单测断言 created===revoked）。
+- [x] 单测：`mapReplyToTtsBody`（speed/format/mp3_bitrate 映射）、`parseVoiceModel(List)`（`_id`→`id`、cover_image、samples 去无 audio、缺字段容错）、`classifyFishError`、`fish-provider`（self_only/title/bearer/model header/401/network/无 key/404）、`registry`、`tts-playback`（串行、批级 duck/restore、revoke、失败降级、stop）。共 32 测。
+- [x] Fish 调用走 `getAppFetch()`；无散落 `if (provider==="fish-audio")`（registry 唯一裁决）；无 `console.*`（走 `createDiagnosticLogger("voice.tts")`，只记 bytes）。
+- [x] `make check` 通过（typecheck + biome + 3477 测试全绿）。
 
 ### Phase 3: 语音对话闭环（快捷键 → ASR → DJ → dj_say → 通知 + 朗读）
 
@@ -594,4 +594,5 @@ dj_say: tool({
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |
 | 2026-07-02 | DoodleBear | PM 拍板 Q1-Q5/Q7：用 `dj_say` 工具；push-to-talk **默认 hold**（Settings 可选，暴露后台无 key-up 的退化约束）；朗读 duck **渐变过渡**（`djVoiceDuckRampMs`）；**不开专用会话、继承当前活跃会话** + 上下文改**动态滑动窗口**（新增 §3.4 `selectContextWindow`，替代 `contextStartIndex`/compaction）；付费生成**要确认**；快捷键**默认不绑定**。Q6/Q8 采用默认。相应更新 §2.2/§2.3/§3.1/§3.4/§4.4/§4.5/§5.2/§6 Phase 3/§10。 |
+| 2026-07-03 | Claude (TDD) | **Phase 2 完成**：TTS 基础设施落地。新增 `src/tts/`（`provider.ts` 接口 + `TtsError`/`VoiceModel`；`fish-mapping.ts` 四纯函数；`fish-provider.ts` `listVoices`/`getVoice`/`synthesize` 直连 `getAppFetch()`；`registry.ts` `resolveTtsProvider`/`isTtsReady`）+ `src/voice/`（`tts-playback.ts` 注入式串行队列+批级 duck+URL 生命周期 + `tts-playback-runtime.ts` `synthesizeReply`/`createAudioSink`/`createMediaEngineDucker`）+ `voice-tts-settings.tsx`（Settings「Text-to-Speech」+ My Voices/搜索/Add-by-id/试听/Preview reply/后端·语速·ducking + `SETTINGS_NAV` `voice-tts`/volume-2 + sidebar 图标）+ `AppSettings` tts/duck optional 字段 + `CachedVoiceModel` + i18n×4（`settings.navVoiceTts` + `voice.tts.*`）。TDD：32 个新 Phase-2 单测，`make check`（typecheck+biome+3477 测试）全绿。 |
 | 2026-07-03 | Claude (TDD) | **Phase 1 完成**：ASR 基础设施落地。新增 `src/asr/`（`provider.ts` 接口 + `AsrError`；`groq-mapping.ts` 四纯函数；`groq-provider.ts` 直连 `getAppFetch()`；`registry.ts` `resolveAsrProvider`/`isAsrConfigured`/`resolveGroqApiKey` 复用 DJ Groq key）+ `src/voice/`（`voice-input-controller.ts` 注入式录音状态机 + `voice-input-runtime.ts` 生产 wiring/单例）+ `voice-asr-settings.tsx`（Settings「Speech-to-Text」面板 + `SETTINGS_NAV` `voice-asr`/mic + settings-page 渲染 + sidebar mic 图标）+ `AppSettings` asr/voice optional 字段（不 bump DB）+ i18n×4（`settings.navVoiceAsr` + `voice.asr.*`）。TDD：32 个新单测（映射/provider/registry/controller），`make check`（typecheck+biome+3455 测试）全绿。 |

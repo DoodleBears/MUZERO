@@ -58,6 +58,7 @@ export const SETTINGS_NAV = [
       { id: "ai-dj-model", labelKey: "settings.navDjModel", icon: "brain-circuit" },
       { id: "live-requests", labelKey: "settings.liveRequestsTitle", icon: "radio" },
       { id: "ai-music-generation", labelKey: "settings.musicTitle", icon: "sparkles" },
+      { id: "voice-tts", labelKey: "settings.navVoiceTts", icon: "volume-2" },
       { id: "voice-asr", labelKey: "settings.navVoiceAsr", icon: "mic" },
     ],
   },

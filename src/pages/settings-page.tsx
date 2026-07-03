@@ -39,6 +39,7 @@ import { TraceDiagnostics } from "@/components/settings/trace-diagnostics";
 import { VersionHistorySettings } from "@/components/settings/version-history-settings";
 import { VisualizerSettings } from "@/components/settings/visualizer-settings";
 import { VoiceAsrSettings } from "@/components/settings/voice-asr-settings";
+import { VoiceTtsSettings } from "@/components/settings/voice-tts-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPicker } from "@/components/ui/color-picker";
@@ -979,6 +980,8 @@ export function SettingsPage({ pageActive }: { pageActive?: boolean } = {}) {
             )}
 
             {activeItem === "live-requests" && <LiveRequestSettings />}
+
+            {activeItem === "voice-tts" && <VoiceTtsSettings />}
 
             {activeItem === "voice-asr" && <VoiceAsrSettings />}
 
