@@ -10,6 +10,7 @@ import { llmSelectionForChatSession } from "@/ai/llm-providers";
 import { resolveDjModel } from "@/ai/model";
 import type { MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
+import i18n from "@/i18n/i18n";
 import { canGenerateMusic, hasEnabledStreamSources } from "./dj-chat-availability";
 import { buildNowPlayingContext } from "./dj-chat-context";
 import { DEFAULT_CHAT_CONTEXT_BUDGET, selectContextWindow } from "./dj-chat-context-budget";
@@ -60,7 +61,7 @@ export function createDjChatTransport({
       const agent = new ToolLoopAgent({
         model,
         tools,
-        instructions: `${DJ_CHAT_SYSTEM_PROMPT}\n\n${nowPlaying}`,
+        instructions: `${DJ_CHAT_SYSTEM_PROMPT}\n\n${listenerLanguageDirective(uiLocale())}\n\n${nowPlaying}`,
         stopWhen: stepCountIs(12),
         temperature: 0.7,
         // User-tunable (Settings); default generous so multi-step tool runs and
@@ -85,6 +86,26 @@ export function createDjChatTransport({
       return null;
     },
   };
+}
+
+/** Language name per UI locale, so the DJ answers in the app's language. */
+const LOCALE_LANGUAGE: Record<string, string> = {
+  en: "English",
+  zh: "Simplified Chinese (简体中文)",
+  ja: "Japanese (日本語)",
+  ko: "Korean (한국어)",
+};
+
+/** The effective UI language (what i18next actually shows), NOT the possibly-stale
+ *  `settings.locale` mirror — that only syncs on an explicit Settings change. */
+function uiLocale(): string {
+  return (i18n.language || "en").slice(0, 2);
+}
+
+/** Tell the DJ to write listener-facing text (dj_say + chat replies) in the app's UI language. */
+function listenerLanguageDirective(locale: string | undefined): string {
+  const language = LOCALE_LANGUAGE[locale ?? "en"] ?? "English";
+  return `Always write your listener-facing replies — dj_say lines and chat messages — in ${language}, regardless of the language the request came in.`;
 }
 
 async function defaultResolveModel({
