@@ -1833,8 +1833,6 @@
       "synthFailed": "이 답변을 읽어 줄 수 없어 텍스트로 표시합니다.",
       "title": "음성 합성 (Fish Audio)",
       "subtitle": "Fish Audio(BYOK)로 DJ에게 목소리를 주어 답변을 읽어 주게 합니다.",
-      "enable": "음성 합성 사용",
-      "enableHint": "DJ가 말할 수 있게 됩니다. 아래에서 음성을 선택하고 자동 읽기를 켜세요.",
       "autoSpeak": "답변 자동으로 읽어주기",
       "autoSpeakHint": "DJ에게 말할 때 그 답변을 소리 내어 읽어 줍니다(음성 선택 필요).",
       "duckRamp": "페이드 시간: {{ms}}ms",

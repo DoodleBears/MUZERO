@@ -1158,8 +1158,8 @@ export interface AppSettings {
   /** Push-to-talk trigger style. Default "hold" (PRD Q2). */
   voiceInputMode?: VoiceInputMode;
   // --- Voice DJ: TTS / text-to-speech (voice-DJ PRD) ------------------------
-  /** Master switch for the DJ speaking replies. Default false. */
-  ttsEnabled?: boolean;
+  // No separate master switch: TTS is "ready" once a key + voice are set, and a
+  // single `djReplyAutoSpeak` toggle turns speaking on (merged the redundant pair).
   /** Which TTS provider speaks. Default "fish-audio". */
   ttsProvider?: TtsProviderId;
   /** BYOK Fish Audio key. Device-local only, never bundled. */

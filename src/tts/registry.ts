@@ -30,11 +30,9 @@ export function resolveTtsProvider(settings: AppSettings): TtsProvider | null {
   }
 }
 
-/** Whether the DJ can actually speak: enabled + key + a selected voice. */
+/** Whether the DJ can actually speak: a key + a selected voice are configured.
+ *  (No separate master switch — a single "auto-speak" toggle drives speaking; see
+ *  `djReplyAutoSpeak`.) */
 export function isTtsReady(settings: AppSettings): boolean {
-  return (
-    Boolean(settings.ttsEnabled) &&
-    Boolean(settings.fishAudioApiKey?.trim()) &&
-    Boolean(settings.ttsVoiceId)
-  );
+  return Boolean(settings.fishAudioApiKey?.trim()) && Boolean(settings.ttsVoiceId);
 }

@@ -1834,8 +1834,6 @@
       "synthFailed": "这句回话念不出来——已改为文字显示。",
       "title": "文字转语音 (Fish Audio)",
       "subtitle": "用 Fish Audio 给 DJ 一个声音（BYOK），让它把回话念出来。",
-      "enable": "启用文字转语音",
-      "enableHint": "让 DJ 能开口。在下方选一个音色并打开自动朗读。",
       "autoSpeak": "自动朗读回话",
       "autoSpeakHint": "当你对 DJ 说话时，把它的回话念出来（需先选中一个音色）。",
       "duckRamp": "渐变时长：{{ms}}ms",

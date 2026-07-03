@@ -1865,8 +1865,6 @@
       "synthFailed": "Couldn't speak that reply — showing it as text.",
       "title": "Text-to-Speech (Fish Audio)",
       "subtitle": "Give the DJ a voice with Fish Audio (BYOK) so it can speak its replies aloud.",
-      "enable": "Enable text-to-speech",
-      "enableHint": "Lets the DJ speak. Pick a voice below and turn on auto-speak.",
       "autoSpeak": "Speak replies aloud automatically",
       "autoSpeakHint": "When you talk to the DJ, read its reply out loud (needs a selected voice).",
       "duckRamp": "Fade duration: {{ms}}ms",

@@ -93,7 +93,7 @@ MUZERO 已经有一个**工具调用式 AI DJ chat**（Vercel AI SDK `ToolLoopAg
  左上角通知栈               │   │                                              新增工具 dj_say({text})
  notification-store  ◀─────┼───┘  notify.info(replyText, {actions:[replay]})  ◀────────────┤
  (复用，不改)               │                    │                                          │
-                          │                    ▼ 若 ttsEnabled && djReplyAutoSpeak         │
+                          │                    ▼ 若 djReplyAutoSpeak && isTtsReady        │
                           │            resolveTtsProvider(settings).synthesize(text)  ◀─────┘
                           │            (Fish Audio POST /v1/tts, 直连) → audio blob
                           │                    │
@@ -185,7 +185,7 @@ electron/
 ```
 AppSettings（已有单行，扩 optional 字段——不 bump DB version）
   ├─ tts（文字转语音）
-  │   ├─ ttsEnabled?: boolean            默认 false（母开关）
+  │   ├─ (无独立母开关)                    ★TTS「就绪」= 有 key + 选中音色；朗读由单一 djReplyAutoSpeak 开关驱动（合并原 ttsEnabled，见 changelog 2026-07-03）
   │   ├─ ttsProvider?: TtsProviderId     "fish-audio"（union，未来可扩）
   │   ├─ fishAudioApiKey?: string        BYOK；只存本地；show/hide；永不入 bundle/log
   │   ├─ ttsVoiceId?: string             选中的 Fish model id（reference_id）
@@ -342,7 +342,7 @@ export interface TtsProvider {
 // src/tts/registry.ts
 export type TtsProviderId = "fish-audio";
 export function resolveTtsProvider(settings: AppSettings): TtsProvider | null;
-export function isTtsReady(settings: AppSettings): boolean; // ttsEnabled && key && voiceId
+export function isTtsReady(settings: AppSettings): boolean; // key && voiceId（无独立母开关）
 ```
 
 ### 4.4 新增 DJ 工具 — `dj_say`（reply）
@@ -411,7 +411,7 @@ dj_say: tool({
   - **My Voices**：TanStack Query 拉 `self_only=true`，卡片显示 title + id + 试听（`samples[0].audio` 用临时 `<audio>` 播放，镜像 anysoul `VoiceModelCard`）；顶部**搜索框**（`title=` query，防抖）。
   - **Add a voice**：粘贴一个/多个 model id（逗号/空格/换行分隔）→ `getVoice(id)` 解析 → 存 `ttsAddedVoiceIds` + 缓存；可移除。
   - **选中音色** = `ttsVoiceId`（radio / 高亮）；「Preview reply」用当前音色合成一句示例并播放。
-  - `ttsEnabled`、`ttsModel`(s1/s2-pro)、`ttsSpeed`(slider)、`djReplyAutoSpeak`、`djVoiceDuckMusic` + `djVoiceDuckVolume`(slider) + `djVoiceDuckRampMs`(渐变时长，默认 200ms)。
+  - `djReplyAutoSpeak`（单一开关：开=DJ 出声，无独立母开关）、`ttsModel`(s1/s2-pro)、`ttsSpeed`(slider)、`djVoiceDuckMusic` + `djVoiceDuckVolume`(slider) + `djVoiceDuckRampMs`(渐变时长，默认 200ms)。
 - **DJ reply 通知**：`notify.info(replyText, { duration: 8000, dismissible: true, actions: [{ label: t("voice.reply.replay"), onClick: replay, keepOpen: true }, { label: t("voice.reply.open"), onClick: openDjChat }] })`。朗读中可用 `notify.loading` 起手、念完 `update` 成 info（可选）。
 - **录音指示**：录音时左上角一条 `notify.loading(t("voice.listening"))`（阈值门控，避免瞬时闪现），停止即 dismiss——沿用 [`20260622-unified-background-progress-notification`](../20260622-muzero-unified-background-progress-notification-prd/20260622-muzero-unified-background-progress-notification-prd.md) 的 indicator 模式。可选：Now Playing / dock 一个微弱的「mic 脉冲」发光。
 
@@ -595,6 +595,7 @@ dj_say: tool({
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |
 | 2026-07-02 | DoodleBear | PM 拍板 Q1-Q5/Q7：用 `dj_say` 工具；push-to-talk **默认 hold**（Settings 可选，暴露后台无 key-up 的退化约束）；朗读 duck **渐变过渡**（`djVoiceDuckRampMs`）；**不开专用会话、继承当前活跃会话** + 上下文改**动态滑动窗口**（新增 §3.4 `selectContextWindow`，替代 `contextStartIndex`/compaction）；付费生成**要确认**；快捷键**默认不绑定**。Q6/Q8 采用默认。相应更新 §2.2/§2.3/§3.1/§3.4/§4.4/§4.5/§5.2/§6 Phase 3/§10。 |
+| 2026-07-03 | Claude | **TTS 双开关合并（用户反馈）**：原「启用文字转语音」(`ttsEnabled` 母开关) 与「自动朗读回话」(`djReplyAutoSpeak`) 对主用例重复——两个都得开才出声。合并为**单一** `djReplyAutoSpeak`：删除 `ttsEnabled` 字段 + UI 开关 + `voice.tts.enable/enableHint` i18n×4；`isTtsReady` 改为 `key && voiceId`（配好即就绪，Preview/重播只看 key+音色）。registry 测试更新，`make check` 全绿。 |
 | 2026-07-03 | Claude (TDD) | **Phase 4 完成**：QA / 权限 / i18n 收口。Electron 麦克风权限接线（`main.cjs` `setPermissionRequestHandler` grant + `package.json` `build.mac.extendInfo.NSMicrophoneUsageDescription`）；log 扫描确认新模块无 `console.*`、日志无文本/key/audio（仅 provider/bytes/quota）；i18n×4 脚本核对 `voice.*` 81 键 + `chat.tools.dj_say` + nav/shortcut 键完全一致；`vite build`（✓ 5.48s）+ `node --check electron/main.cjs` 通过。VAD 静音自动停 deferred（字段预留）。PRD 状态转 Implemented。 |
 | 2026-07-03 | Claude (TDD) | **Phase 3 完成**：语音对话闭环接线。`voice.talkToDj` 快捷键（in-app hold keydown/keyup + 后台 toggle 退化；默认不绑定）→ `VoiceInputController` → `use-voice-dj` wiring（`getActiveDjChatRuntimeActor` 继承当前会话；`routeVoiceTranscript` send/interrupt；`dj-reply-bus` + `dj_say` 工具/`executeDjSay` → `notify.info` + `postReply`；`lastAssistantPreview` 兜底；`decideApproval` 付费审批通知/`voiceAutoApproveGenerate`）+ `selectContextWindow` 动态滑动窗口（接入 `dj-chat-agent.sendMessages`，`contextStartIndex` 取 max）+ `createGradientDucker`（`MediaEngine.getVolume()` 新增）+ Settings 加 autoSpeak/duckRamp/autoApprove/inputMode 控件 + AppSettings Phase-3 字段 + i18n×4。TDD：21 个新单测（`selectContextWindow`/`dj_say`/`voice-dj-logic`），`make check`（typecheck+biome+3498 测试）全绿。 |
 | 2026-07-03 | Claude (TDD) | **Phase 2 完成**：TTS 基础设施落地。新增 `src/tts/`（`provider.ts` 接口 + `TtsError`/`VoiceModel`；`fish-mapping.ts` 四纯函数；`fish-provider.ts` `listVoices`/`getVoice`/`synthesize` 直连 `getAppFetch()`；`registry.ts` `resolveTtsProvider`/`isTtsReady`）+ `src/voice/`（`tts-playback.ts` 注入式串行队列+批级 duck+URL 生命周期 + `tts-playback-runtime.ts` `synthesizeReply`/`createAudioSink`/`createMediaEngineDucker`）+ `voice-tts-settings.tsx`（Settings「Text-to-Speech」+ My Voices/搜索/Add-by-id/试听/Preview reply/后端·语速·ducking + `SETTINGS_NAV` `voice-tts`/volume-2 + sidebar 图标）+ `AppSettings` tts/duck optional 字段 + `CachedVoiceModel` + i18n×4（`settings.navVoiceTts` + `voice.tts.*`）。TDD：32 个新 Phase-2 单测，`make check`（typecheck+biome+3477 测试）全绿。 |

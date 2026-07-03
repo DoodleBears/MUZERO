@@ -1834,8 +1834,6 @@
       "synthFailed": "この返答は読み上げられませんでした——テキストで表示します。",
       "title": "音声合成 (Fish Audio)",
       "subtitle": "Fish Audio（BYOK）で DJ に声を与え、返答を読み上げさせます。",
-      "enable": "音声合成を有効化",
-      "enableHint": "DJ が話せるようになります。下で音声を選び、自動読み上げをオンにします。",
       "autoSpeak": "返答を自動で読み上げる",
       "autoSpeakHint": "DJ に話しかけたとき、その返答を読み上げます（音声の選択が必要）。",
       "duckRamp": "フェード時間: {{ms}}ms",

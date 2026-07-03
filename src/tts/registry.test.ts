@@ -16,12 +16,10 @@ describe("resolveTtsProvider", () => {
 });
 
 describe("isTtsReady", () => {
-  it("requires enabled + key + selected voice", () => {
+  it("requires a key + a selected voice (single-switch model)", () => {
     expect(isTtsReady(base)).toBe(false);
     expect(isTtsReady({ ...base, fishAudioApiKey: "k" })).toBe(false);
-    expect(isTtsReady({ ...base, ttsEnabled: true, fishAudioApiKey: "k" })).toBe(false);
-    expect(isTtsReady({ ...base, ttsEnabled: true, fishAudioApiKey: "k", ttsVoiceId: "v" })).toBe(
-      true,
-    );
+    expect(isTtsReady({ ...base, ttsVoiceId: "v" })).toBe(false);
+    expect(isTtsReady({ ...base, fishAudioApiKey: "k", ttsVoiceId: "v" })).toBe(true);
   });
 });

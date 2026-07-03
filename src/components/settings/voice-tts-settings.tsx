@@ -254,21 +254,7 @@ export function VoiceTtsSettings() {
         <p className="text-muted-foreground text-xs">{t("voice.tts.subtitle")}</p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {/* Master enable */}
-        <label className="flex items-start gap-3 rounded-md border border-border p-3">
-          <input
-            type="checkbox"
-            checked={Boolean(settings.ttsEnabled)}
-            onChange={(e) => void saveSettings({ ttsEnabled: e.currentTarget.checked })}
-            className="mt-1 size-4 accent-primary"
-          />
-          <span className="flex flex-col gap-1">
-            <span className="font-medium text-sm">{t("voice.tts.enable")}</span>
-            <span className="text-muted-foreground text-xs">{t("voice.tts.enableHint")}</span>
-          </span>
-        </label>
-
-        {/* Auto-speak DJ replies */}
+        {/* Auto-speak DJ replies — the single switch that turns the DJ's voice on. */}
         <label className="flex items-start gap-3 rounded-md border border-border p-3">
           <input
             type="checkbox"
