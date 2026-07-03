@@ -12,6 +12,7 @@ import type { MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
 import { canGenerateMusic, hasEnabledStreamSources } from "./dj-chat-availability";
 import { buildNowPlayingContext } from "./dj-chat-context";
+import { DEFAULT_CHAT_CONTEXT_BUDGET, selectContextWindow } from "./dj-chat-context-budget";
 import { DJ_CHAT_SYSTEM_PROMPT } from "./dj-chat-prompt";
 import {
   getChatSession,
@@ -67,7 +68,18 @@ export function createDjChatTransport({
         maxOutputTokens: settings.chatMaxOutputTokens ?? 32_000,
       });
       const transport = new DirectChatTransport({ agent });
-      return transport.sendMessages(options);
+      // Dynamic sliding context window (voice-DJ PRD §3.4): trim to the most
+      // recent messages that fit the budget so hands-free voice chats never grow
+      // until they block. `contextStartIndex` (manual compaction) is the floor.
+      const session = await getChatSession(options.chatId, db);
+      const windowTokens =
+        settings.chatContextWindowTokens ??
+        Math.floor((settings.chatMaxContextTokens ?? DEFAULT_CHAT_CONTEXT_BUDGET.maxTokens) * 0.5);
+      const messages = selectContextWindow(options.messages, {
+        maxTokens: windowTokens,
+        minStartIndex: session?.contextStartIndex ?? 0,
+      });
+      return transport.sendMessages({ ...options, messages });
     },
     async reconnectToStream() {
       return null;

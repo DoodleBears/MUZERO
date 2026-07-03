@@ -58,17 +58,49 @@ export function createAudioSink(): TtsPlaybackSink {
 }
 
 /**
- * Duck the music element while the DJ speaks, restoring to the user's configured
- * volume afterward. Writes the element volume directly (not the persisted store
- * value), so the user's saved volume is never overwritten by a duck.
+ * Duck the music element while the DJ speaks, gradient-fading down then back up to
+ * the user's configured volume (voice-DJ PRD Q3). Writes the element volume
+ * directly (not the persisted store value), so the user's saved volume is never
+ * overwritten. `getRampMs` is read per fade so a Settings change takes effect.
  */
-export function createMediaEngineDucker(): MusicDucker {
+export function createGradientDucker(getRampMs: () => number): MusicDucker {
+  let current = usePlayerStore.getState().volume;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  function fadeTo(target: number): void {
+    if (timer) clearTimeout(timer);
+    const engine = getMediaEngine();
+    if (!engine) {
+      current = target;
+      return;
+    }
+    const ms = Math.max(0, getRampMs());
+    const stepMs = 30;
+    const steps = Math.max(1, Math.round(ms / stepMs));
+    const from = current;
+    let i = 0;
+    const tick = () => {
+      i++;
+      current = from + (target - from) * (i / steps);
+      engine.setVolume(current);
+      if (i < steps) timer = setTimeout(tick, stepMs);
+      else timer = null;
+    };
+    if (steps <= 1 || ms === 0) {
+      current = target;
+      engine.setVolume(target);
+    } else {
+      tick();
+    }
+  }
+
   return {
     duck(target: number) {
-      getMediaEngine()?.setVolume(target);
+      current = getMediaEngine()?.getVolume() ?? usePlayerStore.getState().volume;
+      fadeTo(target);
     },
     restore() {
-      getMediaEngine()?.setVolume(usePlayerStore.getState().volume);
+      fadeTo(usePlayerStore.getState().volume);
     },
   };
 }

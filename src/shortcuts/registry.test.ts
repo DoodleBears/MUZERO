@@ -15,12 +15,16 @@ describe("SHORTCUT_ACTIONS registry", () => {
     expect(Object.keys(SHORTCUT_ACTIONS_BY_ID).length).toBe(ids.length);
   });
 
-  it("every action carries scope, category, label and at least one binding", () => {
+  it("every action carries scope, category, label and (usually) a binding", () => {
+    // Actions intentionally shipped with NO default gesture (user must bind them).
+    const UNBOUND_BY_DEFAULT = new Set(["voice.talkToDj"]);
     for (const action of SHORTCUT_ACTIONS) {
       expect(action.scope).toBeTruthy();
       expect(action.category).toBeTruthy();
       expect(action.labelKey.startsWith("shortcuts.action.")).toBe(true);
-      expect(action.defaultBindings.length).toBeGreaterThan(0);
+      if (!UNBOUND_BY_DEFAULT.has(action.id)) {
+        expect(action.defaultBindings.length).toBeGreaterThan(0);
+      }
     }
   });
 

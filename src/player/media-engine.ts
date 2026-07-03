@@ -305,6 +305,10 @@ export class MediaEngine {
     this.audioEl.volume = Math.min(1, Math.max(0, volume));
   }
 
+  getVolume(): number {
+    return this.audioEl.volume;
+  }
+
   stop(): void {
     this.audioEl.pause();
     this.videoEl.pause();

@@ -189,6 +189,7 @@ export function VoiceTtsSettings() {
   const shownKey = keyDraft ?? settings.fishAudioApiKey ?? "";
   const speed = settings.ttsSpeed ?? 1;
   const duckVolume = Math.round((settings.djVoiceDuckVolume ?? 0.25) * 100);
+  const duckRamp = settings.djVoiceDuckRampMs ?? 200;
 
   const renderVoice = (voice: VoiceModel, removable: boolean) => {
     const selected = settings.ttsVoiceId === voice.id;
@@ -264,6 +265,20 @@ export function VoiceTtsSettings() {
           <span className="flex flex-col gap-1">
             <span className="font-medium text-sm">{t("voice.tts.enable")}</span>
             <span className="text-muted-foreground text-xs">{t("voice.tts.enableHint")}</span>
+          </span>
+        </label>
+
+        {/* Auto-speak DJ replies */}
+        <label className="flex items-start gap-3 rounded-md border border-border p-3">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.djReplyAutoSpeak)}
+            onChange={(e) => void saveSettings({ djReplyAutoSpeak: e.currentTarget.checked })}
+            className="mt-1 size-4 accent-primary"
+          />
+          <span className="flex flex-col gap-1">
+            <span className="font-medium text-sm">{t("voice.tts.autoSpeak")}</span>
+            <span className="text-muted-foreground text-xs">{t("voice.tts.autoSpeakHint")}</span>
           </span>
         </label>
 
@@ -428,6 +443,17 @@ export function VoiceTtsSettings() {
                   value={duckVolume}
                   onValueChange={(v) => void saveSettings({ djVoiceDuckVolume: v / 100 })}
                   aria-label={t("voice.tts.duckVolume", { pct: duckVolume })}
+                />
+                <span className="text-muted-foreground text-xs">
+                  {t("voice.tts.duckRamp", { ms: duckRamp })}
+                </span>
+                <Slider
+                  min={0}
+                  max={600}
+                  step={50}
+                  value={duckRamp}
+                  onValueChange={(v) => void saveSettings({ djVoiceDuckRampMs: v })}
+                  aria-label={t("voice.tts.duckRamp", { ms: duckRamp })}
                 />
               </>
             )}

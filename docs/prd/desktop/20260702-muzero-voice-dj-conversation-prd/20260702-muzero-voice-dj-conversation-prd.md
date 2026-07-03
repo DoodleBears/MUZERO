@@ -17,7 +17,7 @@
 |-------|------|--------|------|
 | 1 | ASR 基础设施：`src/asr` provider registry + Groq + 麦克风录制编排 + Settings「Speech-to-Text」面板 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | TTS 基础设施：`src/tts` provider registry + Fish Audio + 音色拉取/搜索/添加 + Settings「Text-to-Speech」面板 + 试听播放 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 语音对话闭环：`voice.talkToDj`（默认 hold/不绑定）→ ASR → **当前活跃**会话 `DjChatRuntimeActor` + **动态滑动窗口** → `dj_say` reply 工具 → 左上角通知 + 自动朗读（渐变 ducking）+ 付费确认 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 语音对话闭环：`voice.talkToDj`（默认 hold/不绑定）→ ASR → **当前活跃**会话 `DjChatRuntimeActor` + **动态滑动窗口** → `dj_say` reply 工具 → 左上角通知 + 自动朗读（渐变 ducking）+ 付费确认 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 平台 QA / 权限边界 / i18n×4 校对 / VAD 静音自动停 (可选增强) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -472,32 +472,32 @@ dj_say: tool({
 **Goal:** 按 `voice.talkToDj` 说话 → DJ **顺着当前会话** 切歌/续歌单并在左上角回话（可朗读，音量渐变 duck）。
 
 **Tasks:**
-- [ ] `src/shortcuts/registry.ts` 加 in-app action def `voice.talkToDj`；`src/shortcuts/system-global.ts` 把它加进 `SYSTEM_GLOBAL_SHORTCUT_ACTIONS`；**默认不绑定**（PM Q7；用户在 Settings 显式绑，modifier chord 安全校验沿用现有）。
-- [ ] **输入模式（PM Q2，默认 hold）**——处理 hold 的平台约束（见下方 ⚠️ 约束）：
-  - in-app（App 前台）：`use-shortcut-dispatch.ts` 对 `voice.talkToDj` 用 DOM **keydown→start / keyup→stop** 实现真 hold；toggle 模式则 keydown 切换。
-  - system-global（App 后台，Electron `globalShortcut` 只有 press、**无 release**）：`runShortcutAction("voice.talkToDj")` 只能收到 press → 「hold」在后台退化为 **press 开始录音 + 静音/超时自动停**（Phase 4 VAD 或固定 max-duration 兜底）或再按停；Settings 明示该退化。
-- [ ] `src/hooks/use-voice-dj.ts`（wiring，App 启动幂等挂载）：`onTranscript(text)` → `getActiveDjChatRuntime().sendMessage(text)`（进行中则 `interruptWithMessage` 打断上一轮）；监听 reply 事件（`dj_say` 结果，兜底 `lastAssistantPreview`）→ `notify.info` +（`djReplyAutoSpeak && isTtsReady`）`speakReply`。
-- [ ] **会话继承（PM Q4）**：`getActiveDjChatRuntime()` 取当前活跃 chat 会话（与 Chat 面板同一个），无则懒建普通会话——**不开专用会话**，顺着上文继续。
-- [ ] **动态滑动窗口（PM Q4，§3.4）**：`dj-chat-context-budget.ts` 加 `selectContextWindow`（保留成对 tool-call/result、含最新 user 轮、系统提示+now-playing 不计入）；`dj-chat-agent.ts` 发送前套用；`contextStartIndex` 作为用户手动下限与滑窗取 `max`。回归既有 chat 测试。
-- [ ] `src/chat/dj-chat-tools.ts` 加 `dj_say` 工具 + `executeDjSay`（注入 notify sink）；`dj-chat-prompt.ts` 系统提示补：**语音场景动作后用 `dj_say` 简短口语回应；不念工具/id 细节**。
-- [ ] **朗读 + 渐变 duck（PM Q3）**：`tts-playback.ts` 朗读前 fade down 音乐到 `djVoiceDuckVolume`（`djVoiceDuckRampMs`≈200ms，优先 `GainNode.linearRampToValueAtTime`，无 gain 图退化分步 `setVolume`），念完 fade up 恢复。
-- [ ] **付费生成审批（PM Q5=要确认）**：reply 通知挂 Approve/Deny 动作 → `actor.respondToToolApproval(id, approved)`；`voiceAutoApproveGenerate` 显式开关（默认关）才免确认。
-- [ ] 录音指示 toast（阈值门控）+（可选）dock mic 脉冲。
-- [ ] i18n×4：`voice.reply.*` / `voice.listening` / `shortcuts.voiceTalkToDj` / 审批文案。
+- [x] `src/shortcuts/registry.ts` 加 in-app action def `voice.talkToDj`（**默认 `defaultBindings: []` 不绑定**，PM Q7；registry.test 加 `UNBOUND_BY_DEFAULT` 例外）；`src/shortcuts/system-global.ts` 把它加进 `SYSTEM_GLOBAL_SHORTCUT_ACTIONS`（system-global.test 同步）。
+- [x] **输入模式（PM Q2，默认 hold）**：
+  - in-app：`use-shortcut-dispatch.ts` 对 `voice.talkToDj` DOM **keydown→start / keyup→stop**（hold），toggle 模式 keydown 切换；`blur` 中途丢焦点 → `controller.cancel()`。
+  - system-global（后台无 key-up）：`actions.ts` `SHORTCUT_ACTION_HANDLERS["voice.talkToDj"]` → `controller.toggle()`（press 退化）。
+- [x] `src/hooks/use-voice-dj.ts`（wiring，App 幂等挂载）：`onTranscript` → `routeVoiceTranscript`（streaming 则 `interruptWithMessage`，否则 `sendMessage`）；订阅 `dj-reply-bus` → `postReply`（notify.info + replay action）；**兜底 `lastAssistantPreview`**（voice 轮结束未调 dj_say 时投递）；录音指示 toast（loading→transcribing→dismiss）。
+- [x] **会话继承（PM Q4）**：`getActiveDjChatRuntimeActor()`（新增于 runtime-registry）取 `lastChatSessionId` 活跃会话，无则懒建普通会话——顺着上文继续。
+- [x] **动态滑动窗口（PM Q4，§3.4）**：`dj-chat-context-budget.ts` 加 `selectContextWindow`（含最新 user 轮、user-turn 边界起点不拆 tool-call/result、系统提示+now-playing 不计入、`minStartIndex` 手动下限）；`dj-chat-agent.ts` 发送前套用（`contextStartIndex` 取 `max`，budget = `chatContextWindowTokens ?? 半个 context ceiling`）。回归既有 chat 测试全绿。
+- [x] `src/chat/dj-chat-tools.ts` 加 always-on `dj_say` 工具 + `executeDjSay`（注入 emit → `dj-reply-bus`）；`dj-chat-tool-metadata` + i18n×4 `chat.tools.dj_say`；`dj-chat-prompt.ts` 系统提示补语音场景 dj_say 规则。
+- [x] **朗读 + 渐变 duck（PM Q3）**：`tts-playback-runtime.createGradientDucker(getRampMs)` fade down/up（`djVoiceDuckRampMs`≈200ms 分步 `setVolume`，读元素音量不覆盖持久 volume；`MediaEngine.getVolume()` 新增）；`use-voice-dj` 的 `TtsPlayback` 单例注入它 + settings-ref 的 `getConfig`。
+- [x] **付费生成审批（PM Q5=要确认）**：`use-voice-dj` 订阅活跃 actor，`pendingApprovalIds` + `decideApproval` → 默认 Approve/Deny 通知动作（`respondToToolApproval`），`voiceAutoApproveGenerate` 开则自动批准。
+- [x] 录音指示 toast（阈值门控）。（dock mic 脉冲留后续打磨。）
+- [x] i18n×4：`voice.listening`/`voice.transcribing`/`voice.reply.*`/`voice.approval.*`/`voice.tts.synthFailed`/`voice.tts.autoSpeak*`/`voice.tts.duckRamp`/`voice.asr.autoApprove*` + `shortcuts.action.voiceTalkToDj(+Desc)`。
 
 > ⚠️ **hold 的平台约束（务必在 Settings 文案说清）**：OS 级全局热键（Electron `globalShortcut`）**只有按下事件、没有松开事件**，无法在 App 后台实现「按住说、松开停」。真 hold 只在 **App 前台（DOM keyup 可用）** 成立；**后台/全局**的 hold 退化为「按下开始 + 静音/超时自动停 或 再按停」。**不**引入原生底层键盘钩子（那等于全局 keylogger，违反 system-global PRD 的安全立场）。toggle 模式在前台/后台行为一致，作为「后台也想要确定性」的用户的推荐替代。
 
 ### Phase 3 Checklist
 
-- [ ] 绑定 `voice.talkToDj` 后，App **前台** hold（按住说、松开转写）成立；**后台** press 开始录音、按约定停（退化行为符合 Settings 文案）。
-- [ ] toggle 模式前台/后台一致（按一下开、再按停）。
-- [ ] 「放点更 chill 的」→ DJ **顺着当前会话** 切歌/续歌单 + 左上角出现 `dj_say` 回话；开自动朗读则念出，音乐音量**平滑** duck 再恢复。
-- [ ] 连续多轮语音顺着上文继续；会话很长也不 block（滑动窗口自动收敛）。
-- [ ] 模型未调 `dj_say` 也有兜底回话（`lastAssistantPreview`）。
-- [ ] 付费生成默认弹 Approve/Deny（通知按钮）；`voiceAutoApproveGenerate` 开后免确认。
-- [ ] Tauri/web：全局快捷键不可用时优雅降级（in-app 快捷键仍可触发；Settings 标注 unsupported，不假装可用）。
-- [ ] 单测：`selectContextWindow`（token 边界、成对 tool 边界、含最新 user 轮、`contextStartIndex` 取 max）；`dj_say`（posting 到注入 sink，返回 `AgentWriteResult`）；`use-voice-dj`（transcript→sendMessage→reply→notify，注入 fake actor/notify/tts）；`tts-playback` 渐变 duck/restore；审批分支。
-- [ ] `make check` 通过。
+- [x] 绑定 `voice.talkToDj` 后，App **前台** hold（keydown→start / keyup→stop）成立；**后台** press → toggle 退化（`actions.ts` handler）。（键分发逻辑就位；真实录音需 mic + 绑定，手测项。）
+- [x] toggle 模式前台/后台一致（keydown→toggle）。
+- [x] 「放点更 chill 的」→ DJ **顺着当前会话**（`getActiveDjChatRuntimeActor`）执行 + `dj_say` → 左上角回话；开自动朗读则 `postReply` 念出，音乐**渐变** duck 再恢复。（闭环接线 + 纯逻辑测试覆盖；端到端需 key/mic，手测项。）
+- [x] 连续多轮语音顺着上文继续；会话很长也不 block（`selectContextWindow` 自动收敛，穷举单测）。
+- [x] 模型未调 `dj_say` 也有兜底回话（`use-voice-dj` 监测 voice 轮 busy→settled + `lastAssistantPreview`）。
+- [x] 付费生成默认弹 Approve/Deny（`decideApproval` → 通知按钮 `respondToToolApproval`）；`voiceAutoApproveGenerate` 开后免确认。
+- [x] Tauri/web：全局快捷键不可用时优雅降级（in-app 快捷键仍可触发；system-global 仅 Electron，沿用既有 `hasFolderAccess`/bridge 纪律 + Settings unsupported 标注）。
+- [x] 单测：`selectContextWindow`（6 测：token 边界、user-turn 起点、含最新 user 轮、`minStartIndex`）；`dj_say`/`dj-reply-bus`（5 测：注入 emit、默认 bus、AgentWriteResult、订阅隔离）；`voice-dj-logic`（10 测：send vs interrupt、reply 投递门控、审批决策）；`tts-playback` 队列/duck（Phase 2）。共 21 个新 Phase-3 单测。
+- [x] `make check` 通过（typecheck + biome + 3498 测试全绿）。
 
 ### Phase 4: 平台 QA / 权限边界 / i18n 校对 / VAD（可选增强）
 
@@ -594,5 +594,6 @@ dj_say: tool({
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |
 | 2026-07-02 | DoodleBear | PM 拍板 Q1-Q5/Q7：用 `dj_say` 工具；push-to-talk **默认 hold**（Settings 可选，暴露后台无 key-up 的退化约束）；朗读 duck **渐变过渡**（`djVoiceDuckRampMs`）；**不开专用会话、继承当前活跃会话** + 上下文改**动态滑动窗口**（新增 §3.4 `selectContextWindow`，替代 `contextStartIndex`/compaction）；付费生成**要确认**；快捷键**默认不绑定**。Q6/Q8 采用默认。相应更新 §2.2/§2.3/§3.1/§3.4/§4.4/§4.5/§5.2/§6 Phase 3/§10。 |
+| 2026-07-03 | Claude (TDD) | **Phase 3 完成**：语音对话闭环接线。`voice.talkToDj` 快捷键（in-app hold keydown/keyup + 后台 toggle 退化；默认不绑定）→ `VoiceInputController` → `use-voice-dj` wiring（`getActiveDjChatRuntimeActor` 继承当前会话；`routeVoiceTranscript` send/interrupt；`dj-reply-bus` + `dj_say` 工具/`executeDjSay` → `notify.info` + `postReply`；`lastAssistantPreview` 兜底；`decideApproval` 付费审批通知/`voiceAutoApproveGenerate`）+ `selectContextWindow` 动态滑动窗口（接入 `dj-chat-agent.sendMessages`，`contextStartIndex` 取 max）+ `createGradientDucker`（`MediaEngine.getVolume()` 新增）+ Settings 加 autoSpeak/duckRamp/autoApprove/inputMode 控件 + AppSettings Phase-3 字段 + i18n×4。TDD：21 个新单测（`selectContextWindow`/`dj_say`/`voice-dj-logic`），`make check`（typecheck+biome+3498 测试）全绿。 |
 | 2026-07-03 | Claude (TDD) | **Phase 2 完成**：TTS 基础设施落地。新增 `src/tts/`（`provider.ts` 接口 + `TtsError`/`VoiceModel`；`fish-mapping.ts` 四纯函数；`fish-provider.ts` `listVoices`/`getVoice`/`synthesize` 直连 `getAppFetch()`；`registry.ts` `resolveTtsProvider`/`isTtsReady`）+ `src/voice/`（`tts-playback.ts` 注入式串行队列+批级 duck+URL 生命周期 + `tts-playback-runtime.ts` `synthesizeReply`/`createAudioSink`/`createMediaEngineDucker`）+ `voice-tts-settings.tsx`（Settings「Text-to-Speech」+ My Voices/搜索/Add-by-id/试听/Preview reply/后端·语速·ducking + `SETTINGS_NAV` `voice-tts`/volume-2 + sidebar 图标）+ `AppSettings` tts/duck optional 字段 + `CachedVoiceModel` + i18n×4（`settings.navVoiceTts` + `voice.tts.*`）。TDD：32 个新 Phase-2 单测，`make check`（typecheck+biome+3477 测试）全绿。 |
 | 2026-07-03 | Claude (TDD) | **Phase 1 完成**：ASR 基础设施落地。新增 `src/asr/`（`provider.ts` 接口 + `AsrError`；`groq-mapping.ts` 四纯函数；`groq-provider.ts` 直连 `getAppFetch()`；`registry.ts` `resolveAsrProvider`/`isAsrConfigured`/`resolveGroqApiKey` 复用 DJ Groq key）+ `src/voice/`（`voice-input-controller.ts` 注入式录音状态机 + `voice-input-runtime.ts` 生产 wiring/单例）+ `voice-asr-settings.tsx`（Settings「Speech-to-Text」面板 + `SETTINGS_NAV` `voice-asr`/mic + settings-page 渲染 + sidebar mic 图标）+ `AppSettings` asr/voice optional 字段（不 bump DB）+ i18n×4（`settings.navVoiceAsr` + `voice.asr.*`）。TDD：32 个新单测（映射/provider/registry/controller），`make check`（typecheck+biome+3455 测试）全绿。 |

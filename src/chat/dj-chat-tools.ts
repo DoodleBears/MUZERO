@@ -50,6 +50,7 @@ import {
   UnknownDjChatLocalIdError,
   WrongDjChatLocalIdTypeError,
 } from "./dj-chat-local-ids";
+import { type DjReplyEvent, emitDjReply } from "./dj-reply-bus";
 
 export const agentWriteResultSchema = z.object({
   status: z.enum(["ok", "error"]),
@@ -365,6 +366,32 @@ export interface DjChatToolDeps {
   localIds?: DjChatLocalIdRegistry;
   /** Persist the registry after a tool introduces or resolves local refs. */
   persistLocalIds?: () => Promise<void>;
+  /** Sink for `dj_say` replies. Defaults to the module {@link emitDjReply} bus. */
+  emitReply?: (event: DjReplyEvent) => void;
+}
+
+/** Max length of a spoken `dj_say` reply (kept short — it's read aloud). */
+export const DJ_SAY_MAX_CHARS = 400;
+
+/**
+ * `dj_say` execution — the DJ's one channel for talking back. Pure + injectable:
+ * it just broadcasts the reply (default the {@link emitDjReply} bus) and returns
+ * the standard {@link AgentWriteResult}. Notification + optional speech are the
+ * consumer's job (`use-voice-dj`), keeping this UI-free and testable.
+ */
+export function executeDjSay(
+  input: { text: string; tone?: DjReplyEvent["tone"] },
+  deps: { emit?: (event: DjReplyEvent) => void } = {},
+): AgentWriteResult {
+  const text = input.text.trim();
+  (deps.emit ?? emitDjReply)({ text, tone: input.tone });
+  return {
+    status: "ok",
+    commandId: "muzero.dj.say",
+    summary: "Replied to the listener.",
+    diff: { text },
+    warnings: [],
+  };
 }
 
 type LocalIdDeps = Pick<DjChatToolDeps, "localIds" | "persistLocalIds"> & {
@@ -1351,6 +1378,16 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
           persistLocalIds: deps.persistLocalIds,
         }),
       ),
+    }),
+    dj_say: tool({
+      description:
+        "Speak a SHORT, natural reply to the listener (one or two sentences) — what you did or are about to do, in the DJ's voice. Call this whenever you act on a spoken/voice request so the user gets a visible + optionally spoken response. Do NOT narrate tool mechanics or ids; keep it conversational.",
+      inputSchema: z.object({
+        text: z.string().min(1).max(DJ_SAY_MAX_CHARS),
+        /** Optional mood tag for future voice/tone selection; ignored for now. */
+        tone: z.enum(["neutral", "hype", "chill", "apologetic"]).optional(),
+      }),
+      execute: (input) => executeDjSay(input, { emit: deps.emitReply }),
     }),
   };
 

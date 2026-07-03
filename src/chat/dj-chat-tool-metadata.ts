@@ -39,6 +39,7 @@ export const DJ_CHAT_TOOL_METADATA = [
   tool("play_track", "player"),
   tool("memory_search", "memories"),
   tool("add_memory", "memories"),
+  tool("dj_say", "player"),
   tool("online_search_tracks", "online", "online"),
   tool("online_add_tracks", "online", "online"),
   tool("dj_propose_briefs", "generation", "generation"),

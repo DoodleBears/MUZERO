@@ -13,6 +13,7 @@ import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
 import { nextVisualizerPlacementPatch, resolveVisualizerPlacement } from "@/visualizer/placement";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
+import { getVoiceInputController } from "@/voice/voice-input-runtime";
 import { createTransportThrottle, TRANSPORT_SWITCH_MIN_INTERVAL_MS } from "./transport-throttle";
 
 const VOLUME_STEP = 0.05;
@@ -200,4 +201,8 @@ const SHORTCUT_ACTION_HANDLERS: Record<string, ShortcutActionHandler> = {
   "queue.toggle": (ctx) => ctx.toggleQueue(),
   "lyrics.toggleStage": (ctx) => void toggleLyricsVisible(ctx),
   "visualizer.cycleMode": (ctx) => void cycleVisualizerPlacement(ctx),
+  // OS-global press has no key-up, so background push-to-talk degrades to a
+  // press-to-toggle (voice-DJ PRD §6). In-app hold is handled in the DOM
+  // dispatcher (use-shortcut-dispatch), which preempts this path.
+  "voice.talkToDj": () => void getVoiceInputController().toggle(),
 };

@@ -28,9 +28,11 @@ describe("system global shortcut contract", () => {
       "playback.toggleShuffle",
       "playback.like",
       "playback.cycleRepeat",
+      "voice.talkToDj",
     ]);
 
     expect(isSystemGlobalShortcutAction("playback.next")).toBe(true);
+    expect(isSystemGlobalShortcutAction("voice.talkToDj")).toBe(true);
     expect(isSystemGlobalShortcutAction("nav.tabNow")).toBe(false);
     expect(isSystemGlobalShortcutAction("search.openGlobal")).toBe(false);
     expect(isSystemGlobalShortcutAction("library.open")).toBe(false);

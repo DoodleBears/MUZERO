@@ -1463,6 +1463,8 @@
       "playbackToggleShuffle": "Toggle shuffle",
       "playbackLike": "Like current track",
       "playbackToggleFullscreen": "Toggle fullscreen",
+      "voiceTalkToDj": "Talk to the DJ",
+      "voiceTalkToDjDesc": "Push-to-talk: speak a request to the AI DJ. Unbound by default — set a key here.",
       "navTabNow": "Go to Now Playing",
       "navTabLibrary": "Go to Library",
       "navTabSettings": "Go to Settings",
@@ -1805,6 +1807,10 @@
         "label": "Add memory",
         "description": "Attach a memory note to a chosen song or to whatever is playing now."
       },
+      "dj_say": {
+        "label": "Speak a reply",
+        "description": "Say a short, natural reply to the listener — shown in a notification and optionally spoken aloud."
+      },
       "online_search_tracks": {
         "label": "Search online sources",
         "description": "Search enabled streaming sources such as YouTube, Bilibili, or NetEase without spending generation credits."
@@ -1845,11 +1851,25 @@
     "homeTitleInput": "Chat title"
   },
   "voice": {
+    "listening": "Listening…",
+    "transcribing": "Transcribing…",
+    "reply": {
+      "replay": "Replay"
+    },
+    "approval": {
+      "prompt": "The DJ wants to generate new music (uses credits). Approve?",
+      "approve": "Approve",
+      "deny": "Deny"
+    },
     "tts": {
+      "synthFailed": "Couldn't speak that reply — showing it as text.",
       "title": "Text-to-Speech (Fish Audio)",
       "subtitle": "Give the DJ a voice with Fish Audio (BYOK) so it can speak its replies aloud.",
       "enable": "Enable text-to-speech",
-      "enableHint": "Lets the DJ speak. Pick a voice below; auto-speak is toggled where you talk to the DJ.",
+      "enableHint": "Lets the DJ speak. Pick a voice below and turn on auto-speak.",
+      "autoSpeak": "Speak replies aloud automatically",
+      "autoSpeakHint": "When you talk to the DJ, read its reply out loud (needs a selected voice).",
+      "duckRamp": "Fade duration: {{ms}}ms",
       "apiKey": "Fish Audio API key",
       "getKey": "Get a Fish Audio key",
       "reveal": "Show key",
@@ -1903,6 +1923,8 @@
       "modeHoldHint": "Press and hold to record, release to send. True hold works while MUZERO is focused; in the background it starts on press and stops on the next press or timeout.",
       "modeToggle": "Toggle",
       "modeToggleHint": "Press once to start, again to stop. Behaves the same in the foreground and background.",
+      "autoApprove": "Auto-approve music generation from voice",
+      "autoApproveHint": "Skip the Approve/Deny prompt when a spoken request generates new music. Off by default — generation uses paid credits.",
       "test": "Test microphone",
       "testHint": "Hold the button and say something; the transcript appears below.",
       "holdToTalk": "Hold to talk",

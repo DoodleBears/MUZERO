@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createDjChatTools } from "./dj-chat-tools";
 import { DJ_CHAT_TOOL_METADATA } from "./dj-chat-tool-metadata";
+import { createDjChatTools } from "./dj-chat-tools";
 
 describe("DJ chat tool metadata", () => {
   it("covers every supported tool call id", () => {

@@ -1441,6 +1441,8 @@
       "playbackToggleShuffle": "切换随机播放",
       "playbackLike": "红心当前歌曲",
       "playbackToggleFullscreen": "切换全屏",
+      "voiceTalkToDj": "对 DJ 说话",
+      "voiceTalkToDjDesc": "按键说话：对 AI DJ 说出你的请求。默认未绑定——在此设置按键。",
       "navTabNow": "前往正在播放",
       "navTabLibrary": "前往媒体库",
       "navTabSettings": "前往设置",
@@ -1774,6 +1776,10 @@
         "label": "添加回忆",
         "description": "给指定歌曲或当前正在播放的歌曲添加一条回忆备注。"
       },
+      "dj_say": {
+        "label": "开口回应",
+        "description": "对听众说一句简短自然的回话——显示为通知，并可选朗读出来。"
+      },
       "online_search_tracks": {
         "label": "搜索线上来源",
         "description": "搜索已启用的 YouTube、Bilibili、网易云等线上来源，不消耗生成额度。"
@@ -1814,11 +1820,25 @@
     "homeTitleInput": "对话标题"
   },
   "voice": {
+    "listening": "聆听中…",
+    "transcribing": "转写中…",
+    "reply": {
+      "replay": "重播"
+    },
+    "approval": {
+      "prompt": "DJ 想生成新音乐（会消耗额度）。批准吗？",
+      "approve": "批准",
+      "deny": "拒绝"
+    },
     "tts": {
+      "synthFailed": "这句回话念不出来——已改为文字显示。",
       "title": "文字转语音 (Fish Audio)",
       "subtitle": "用 Fish Audio 给 DJ 一个声音（BYOK），让它把回话念出来。",
       "enable": "启用文字转语音",
-      "enableHint": "让 DJ 能开口。在下方选一个音色；自动朗读在你对 DJ 说话的地方开关。",
+      "enableHint": "让 DJ 能开口。在下方选一个音色并打开自动朗读。",
+      "autoSpeak": "自动朗读回话",
+      "autoSpeakHint": "当你对 DJ 说话时，把它的回话念出来（需先选中一个音色）。",
+      "duckRamp": "渐变时长：{{ms}}ms",
       "apiKey": "Fish Audio API 密钥",
       "getKey": "获取 Fish Audio 密钥",
       "reveal": "显示密钥",
@@ -1872,6 +1892,8 @@
       "modeHoldHint": "按住录音，松开发送。仅在 MUZERO 处于前台时为真正的按住；后台时按下开始、再次按下或超时停止。",
       "modeToggle": "切换",
       "modeToggleHint": "按一下开始，再按一下停止。前后台行为一致。",
+      "autoApprove": "语音生成音乐免确认",
+      "autoApproveHint": "当语音请求要生成新音乐时跳过「批准/拒绝」提示。默认关闭——生成会消耗付费额度。",
       "test": "测试麦克风",
       "testHint": "按住按钮说点什么，转写结果会显示在下方。",
       "holdToTalk": "按住说话",

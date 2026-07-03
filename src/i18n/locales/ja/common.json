@@ -1441,6 +1441,8 @@
       "playbackToggleShuffle": "シャッフル切替",
       "playbackLike": "再生中の曲にいいね",
       "playbackToggleFullscreen": "全画面切替",
+      "voiceTalkToDj": "DJ に話しかける",
+      "voiceTalkToDjDesc": "プッシュトゥトーク：AI DJ にリクエストを話します。既定では未割り当て——ここでキーを設定します。",
       "navTabNow": "再生中へ移動",
       "navTabLibrary": "ライブラリへ移動",
       "navTabSettings": "設定へ移動",
@@ -1774,6 +1776,10 @@
         "label": "メモリー追加",
         "description": "指定した曲、または現在再生中の曲にメモリーを追加します。"
       },
+      "dj_say": {
+        "label": "返答を話す",
+        "description": "リスナーへ短い自然な返答を——通知に表示し、必要なら読み上げます。"
+      },
       "online_search_tracks": {
         "label": "オンラインソース検索",
         "description": "有効な YouTube、Bilibili、NetEase などを検索します。生成クレジットは使いません。"
@@ -1814,11 +1820,25 @@
     "homeTitleInput": "チャットのタイトル"
   },
   "voice": {
+    "listening": "聞き取り中…",
+    "transcribing": "文字起こし中…",
+    "reply": {
+      "replay": "再生"
+    },
+    "approval": {
+      "prompt": "DJ が新しい曲を生成しようとしています（クレジットを消費）。承認しますか？",
+      "approve": "承認",
+      "deny": "拒否"
+    },
     "tts": {
+      "synthFailed": "この返答は読み上げられませんでした——テキストで表示します。",
       "title": "音声合成 (Fish Audio)",
       "subtitle": "Fish Audio（BYOK）で DJ に声を与え、返答を読み上げさせます。",
       "enable": "音声合成を有効化",
-      "enableHint": "DJ が話せるようになります。下で音声を選択。自動読み上げは DJ に話しかける場所で切り替えます。",
+      "enableHint": "DJ が話せるようになります。下で音声を選び、自動読み上げをオンにします。",
+      "autoSpeak": "返答を自動で読み上げる",
+      "autoSpeakHint": "DJ に話しかけたとき、その返答を読み上げます（音声の選択が必要）。",
+      "duckRamp": "フェード時間: {{ms}}ms",
       "apiKey": "Fish Audio API キー",
       "getKey": "Fish Audio キーを取得",
       "reveal": "キーを表示",
@@ -1872,6 +1892,8 @@
       "modeHoldHint": "押している間だけ録音し、離すと送信。MUZERO が前面のときのみ本当の長押し。バックグラウンドでは押下で開始し、次の押下またはタイムアウトで停止します。",
       "modeToggle": "トグル",
       "modeToggleHint": "一度押して開始、もう一度押して停止。前面でも背面でも同じ動作です。",
+      "autoApprove": "音声からの音楽生成を自動承認",
+      "autoApproveHint": "話した内容が新しい曲を生成するとき「承認/拒否」を省きます。既定はオフ——生成は有料クレジットを使います。",
       "test": "マイクをテスト",
       "testHint": "ボタンを押しながら話すと、下に文字起こしが表示されます。",
       "holdToTalk": "押して話す",

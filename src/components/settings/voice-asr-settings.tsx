@@ -287,6 +287,22 @@ export function VoiceAsrSettings() {
           <span className="text-muted-foreground text-[11px]">{t("voice.asr.bindHint")}</span>
         </div>
 
+        {/* Auto-approve paid generation from voice */}
+        <label className="flex items-start gap-3 rounded-md border border-border p-3">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.voiceAutoApproveGenerate)}
+            onChange={(e) =>
+              void saveSettings({ voiceAutoApproveGenerate: e.currentTarget.checked })
+            }
+            className="mt-1 size-4 accent-primary"
+          />
+          <span className="flex flex-col gap-1">
+            <span className="font-medium text-sm">{t("voice.asr.autoApprove")}</span>
+            <span className="text-muted-foreground text-xs">{t("voice.asr.autoApproveHint")}</span>
+          </span>
+        </label>
+
         {/* Mic test */}
         <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
           <span className="font-medium text-sm">{t("voice.asr.test")}</span>

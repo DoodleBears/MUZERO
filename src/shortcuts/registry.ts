@@ -213,6 +213,17 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     defaultBindings: [key("global", "KeyF", "F")],
     keywords: ["fullscreen", "全屏"],
   },
+  {
+    // Push-to-talk to the AI DJ. Intentionally UNBOUND by default (voice-DJ PRD
+    // Q7 — the user binds it explicitly, safest given it opens the microphone).
+    id: "voice.talkToDj",
+    scope: "global",
+    category: "playback",
+    labelKey: "shortcuts.action.voiceTalkToDj",
+    descriptionKey: "shortcuts.action.voiceTalkToDjDesc",
+    defaultBindings: [],
+    keywords: ["voice", "dj", "talk", "mic", "语音", "说话", "点歌"],
+  },
   // ── Navigation (global) ────────────────────────────────────────────────────
   {
     id: "nav.tabNow",

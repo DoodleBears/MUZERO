@@ -9,6 +9,7 @@ export const SYSTEM_GLOBAL_SHORTCUT_ACTIONS = [
   "playback.toggleShuffle",
   "playback.like",
   "playback.cycleRepeat",
+  "voice.talkToDj",
 ] as const;
 
 export type SystemGlobalShortcutActionId = (typeof SYSTEM_GLOBAL_SHORTCUT_ACTIONS)[number];

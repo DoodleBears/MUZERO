@@ -27,6 +27,7 @@ import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
 import { useTransparentWindowRepaint } from "@/hooks/use-transparent-window-repaint";
+import { useVoiceDj } from "@/hooks/use-voice-dj";
 import {
   nowPlayingCoverBacklightVars,
   resolveNowPlayingCoverBacklightAppearance,
@@ -110,6 +111,9 @@ export default function App() {
     enabled: settings.systemShortcutsEnabled === true,
     registrations: systemShortcutRegistrations,
   });
+  // Voice DJ: route push-to-talk transcripts to the active chat runtime and
+  // surface dj_say replies (notification + optional speech). See use-voice-dj.
+  useVoiceDj();
   // Apply the chosen desktop app icon (Electron only; no-op on web/tauri).
   useAppIcon();
   // NOTE: the playback-subscribing side-effect hooks (document title / tray sync /

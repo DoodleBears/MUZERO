@@ -1180,6 +1180,17 @@ export interface AppSettings {
   djVoiceDuckMusic?: boolean;
   /** Duck target music volume 0–1. Default 0.25. */
   djVoiceDuckVolume?: number;
+  // --- Voice DJ: conversation loop (voice-DJ PRD Phase 3) -------------------
+  /** Speak DJ replies aloud (needs TTS ready). Default false. */
+  djReplyAutoSpeak?: boolean;
+  /** Gradient fade duration (ms) when ducking/un-ducking music. Default 200. */
+  djVoiceDuckRampMs?: number;
+  /** Skip the Approve/Deny prompt for paid generation in voice. Default false. */
+  voiceAutoApproveGenerate?: boolean;
+  /** Silence auto-stop threshold (ms) for toggle mode (Phase 4 VAD). Default 0 = off. */
+  voiceSilenceAutoStopMs?: number;
+  /** Sliding-window token budget for chat context. Default = half the context ceiling. */
+  chatContextWindowTokens?: number;
 }
 
 /**

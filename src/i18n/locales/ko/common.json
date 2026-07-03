@@ -1440,6 +1440,8 @@
       "playbackToggleShuffle": "셔플 전환",
       "playbackLike": "현재 곡 좋아요",
       "playbackToggleFullscreen": "전체화면 전환",
+      "voiceTalkToDj": "DJ에게 말하기",
+      "voiceTalkToDjDesc": "푸시투토크: AI DJ에게 요청을 말합니다. 기본값은 미지정 — 여기서 키를 설정하세요.",
       "navTabNow": "재생 중으로 이동",
       "navTabLibrary": "라이브러리로 이동",
       "navTabSettings": "설정으로 이동",
@@ -1773,6 +1775,10 @@
         "label": "기억 추가",
         "description": "선택한 곡이나 현재 재생 중인 곡에 기억 메모를 붙입니다."
       },
+      "dj_say": {
+        "label": "답변 말하기",
+        "description": "청취자에게 짧고 자연스러운 답변을 — 알림으로 표시하고 원하면 소리 내어 읽어 줍니다."
+      },
       "online_search_tracks": {
         "label": "온라인 소스 검색",
         "description": "활성화된 YouTube, Bilibili, NetEase 같은 소스를 검색합니다. 생성 크레딧은 쓰지 않습니다."
@@ -1813,11 +1819,25 @@
     "homeTitleInput": "채팅 제목"
   },
   "voice": {
+    "listening": "듣는 중…",
+    "transcribing": "받아쓰는 중…",
+    "reply": {
+      "replay": "다시 재생"
+    },
+    "approval": {
+      "prompt": "DJ가 새 음악을 생성하려 합니다(크레딧 사용). 승인할까요?",
+      "approve": "승인",
+      "deny": "거부"
+    },
     "tts": {
+      "synthFailed": "이 답변을 읽어 줄 수 없어 텍스트로 표시합니다.",
       "title": "음성 합성 (Fish Audio)",
       "subtitle": "Fish Audio(BYOK)로 DJ에게 목소리를 주어 답변을 읽어 주게 합니다.",
       "enable": "음성 합성 사용",
-      "enableHint": "DJ가 말할 수 있게 됩니다. 아래에서 음성을 선택하세요. 자동 읽기는 DJ에게 말하는 곳에서 켭니다.",
+      "enableHint": "DJ가 말할 수 있게 됩니다. 아래에서 음성을 선택하고 자동 읽기를 켜세요.",
+      "autoSpeak": "답변 자동으로 읽어주기",
+      "autoSpeakHint": "DJ에게 말할 때 그 답변을 소리 내어 읽어 줍니다(음성 선택 필요).",
+      "duckRamp": "페이드 시간: {{ms}}ms",
       "apiKey": "Fish Audio API 키",
       "getKey": "Fish Audio 키 받기",
       "reveal": "키 표시",
@@ -1871,6 +1891,8 @@
       "modeHoldHint": "누르는 동안 녹음하고 놓으면 전송합니다. MUZERO가 활성 상태일 때만 진짜 길게 누르기가 동작하며, 백그라운드에서는 누르면 시작되고 다음 누름 또는 시간 초과로 멈춥니다.",
       "modeToggle": "토글",
       "modeToggleHint": "한 번 누르면 시작, 다시 누르면 정지. 포그라운드와 백그라운드에서 동일하게 동작합니다.",
+      "autoApprove": "음성 음악 생성 자동 승인",
+      "autoApproveHint": "말한 요청이 새 음악을 생성할 때 승인/거부 확인을 건너뜁니다. 기본값은 꺼짐 — 생성은 유료 크레딧을 사용합니다.",
       "test": "마이크 테스트",
       "testHint": "버튼을 누른 채 말하면 아래에 받아쓰기가 표시됩니다.",
       "holdToTalk": "눌러서 말하기",

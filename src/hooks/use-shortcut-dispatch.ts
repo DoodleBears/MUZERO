@@ -20,6 +20,7 @@ import {
 import type { ShortcutScope } from "@/shortcuts/registry";
 import { useNavStore } from "@/stores/nav-store";
 import { useUiStore } from "@/stores/ui-store";
+import { getVoiceInputController } from "@/voice/voice-input-runtime";
 
 /** Key-hold threshold — matches the icon buttons' `useLongPress` default. */
 const HOLD_DELAY_MS = 500;
@@ -64,7 +65,9 @@ function shouldRunShortcutWhileTyping(actionId: string, event: KeyboardEvent): b
  * focused button/link own Space/Enter.
  */
 export function useShortcutDispatch(): void {
-  const overrides = useSettings().shortcutOverrides;
+  const settings = useSettings();
+  const overrides = settings.shortcutOverrides;
+  const voiceInputMode = settings.voiceInputMode ?? "hold";
   const tab = useNavStore((s) => s.tab);
   const setTab = useNavStore((s) => s.setTab);
   const queueOpen = useUiStore((s) => s.queueOpen);
@@ -79,6 +82,10 @@ export function useShortcutDispatch(): void {
     // Physical keys (by `code`) currently held that have a hold-twin: the tap
     // fires on release, the hold-twin once the key is held past HOLD_DELAY_MS.
     const holding = new Map<string, { actionId: string; timer: number; fired: boolean }>();
+    // Physical keys currently held for push-to-talk (hold mode): keydown starts
+    // recording, keyup stops + transcribes. True hold only works in-app (the OS
+    // global accelerator has no key-up — see the voice-DJ PRD §6 constraint).
+    const voiceHeld = new Set<string>();
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -86,6 +93,19 @@ export function useShortcutDispatch(): void {
       const actionId = matchAction(gestureFromEvent(e), activeScopes, bindings, currentPlatform());
       if (!actionId) return;
       if (isTypingTarget(e.target) && !shouldRunShortcutWhileTyping(actionId, e)) return;
+
+      // Push-to-talk: hold = press-and-hold, toggle = press flips recording.
+      if (actionId === "voice.talkToDj") {
+        e.preventDefault();
+        if (e.repeat) return; // ignore OS auto-repeat
+        if (voiceInputMode === "toggle") {
+          void getVoiceInputController().toggle();
+        } else if (!voiceHeld.has(e.code)) {
+          voiceHeld.add(e.code);
+          void getVoiceInputController().start();
+        }
+        return;
+      }
 
       // Hold-capable action (C / V): defer the tap and arm the hold-twin, so a
       // quick press toggles/cycles while a press-and-hold opens the settings panel.
@@ -115,6 +135,10 @@ export function useShortcutDispatch(): void {
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
+      if (voiceHeld.delete(e.code)) {
+        void getVoiceInputController().stop(); // released hold → stop + transcribe
+        return;
+      }
       const entry = holding.get(e.code);
       if (!entry) return;
       holding.delete(e.code);
@@ -128,6 +152,10 @@ export function useShortcutDispatch(): void {
     const cancelAll = () => {
       for (const entry of holding.values()) window.clearTimeout(entry.timer);
       holding.clear();
+      if (voiceHeld.size > 0) {
+        voiceHeld.clear();
+        getVoiceInputController().cancel(); // focus lost mid-hold → discard
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -139,5 +167,5 @@ export function useShortcutDispatch(): void {
       window.removeEventListener("blur", cancelAll);
       cancelAll();
     };
-  }, [activeScopes, bindings, setTab]);
+  }, [activeScopes, bindings, setTab, voiceInputMode]);
 }
