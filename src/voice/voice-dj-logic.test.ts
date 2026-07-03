@@ -4,6 +4,7 @@ import {
   decideApproval,
   deliverDjReply,
   routeVoiceTranscript,
+  sanitizeReplyText,
   type VoiceRuntime,
 } from "./voice-dj-logic";
 
@@ -85,6 +86,54 @@ describe("deliverDjReply", () => {
       { notifyReply, speak: vi.fn(), autoSpeak: true, ttsReady: true },
     );
     expect(notifyReply).not.toHaveBeenCalled();
+  });
+
+  it("unwraps a dj_say AgentWriteResult JSON the model emitted as text (notify + speak)", () => {
+    const notifyReply = vi.fn();
+    const speak = vi.fn();
+    const json =
+      '{"status":"ok","commandId":"muzero.dj.say","summary":"Replied to the listener.","diff":{"text":"好的，爵士乐已经开始播放，祝你工作顺利！"},"warnings":[]}';
+    deliverDjReply({ text: json }, { notifyReply, speak, autoSpeak: true, ttsReady: true });
+    expect(notifyReply).toHaveBeenCalledWith("好的，爵士乐已经开始播放，祝你工作顺利！");
+    expect(speak).toHaveBeenCalledWith("好的，爵士乐已经开始播放，祝你工作顺利！");
+  });
+
+  it("drops an unrecognized JSON blob rather than showing/speaking raw JSON", () => {
+    const notifyReply = vi.fn();
+    const speak = vi.fn();
+    deliverDjReply(
+      { text: '{"foo":123,"bar":"baz"}' },
+      { notifyReply, speak, autoSpeak: true, ttsReady: true },
+    );
+    expect(notifyReply).not.toHaveBeenCalled();
+    expect(speak).not.toHaveBeenCalled();
+  });
+});
+
+describe("sanitizeReplyText", () => {
+  it("passes plain prose through untouched", () => {
+    expect(sanitizeReplyText("  好的，切到 lofi。 ")).toBe("好的，切到 lofi。");
+  });
+
+  it("unwraps a dj_say result JSON to diff.text", () => {
+    expect(
+      sanitizeReplyText('{"commandId":"muzero.dj.say","diff":{"text":"Switching to jazz."}}'),
+    ).toBe("Switching to jazz.");
+  });
+
+  it("unwraps a top-level text field", () => {
+    expect(sanitizeReplyText('{"text":"Playing something chill."}')).toBe(
+      "Playing something chill.",
+    );
+  });
+
+  it("drops unrecognized JSON objects/arrays", () => {
+    expect(sanitizeReplyText('{"status":"ok","warnings":[]}')).toBe("");
+    expect(sanitizeReplyText("[1,2,3]")).toBe("");
+  });
+
+  it("treats a brace-leading non-JSON string as prose", () => {
+    expect(sanitizeReplyText("{not json} but a vibe")).toBe("{not json} but a vibe");
   });
 });
 

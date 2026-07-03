@@ -37,9 +37,35 @@ export interface ReplyDelivery {
   ttsReady: boolean;
 }
 
+/**
+ * Guard the reply against a model that occasionally emits the `dj_say`
+ * `AgentWriteResult` JSON (or another JSON blob) as text instead of a clean line
+ * — otherwise the raw JSON would show in the notification AND be read aloud. Plain
+ * text passes through; a recognized dj_say result is unwrapped to `diff.text` / a
+ * top-level `text`; any other JSON object is dropped (better silent than garbage).
+ */
+export function sanitizeReplyText(raw: string): string {
+  const text = raw.trim();
+  if (!text) return "";
+  if (text[0] !== "{" && text[0] !== "[") return text; // plain prose
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return text; // starts with a brace but isn't JSON — treat as prose
+  }
+  if (parsed && typeof parsed === "object") {
+    const obj = parsed as { text?: unknown; diff?: { text?: unknown } };
+    const diffText = obj.diff?.text;
+    if (typeof diffText === "string" && diffText.trim()) return diffText.trim();
+    if (typeof obj.text === "string" && obj.text.trim()) return obj.text.trim();
+  }
+  return ""; // unrecognized JSON — don't surface raw JSON to the listener
+}
+
 /** Post a DJ reply to the notification stack and speak it when configured + ready. */
 export function deliverDjReply(event: DjReplyEvent, deps: ReplyDelivery): void {
-  const text = event.text.trim();
+  const text = sanitizeReplyText(event.text);
   if (!text) return;
   deps.notifyReply(text);
   if (deps.autoSpeak && deps.ttsReady) deps.speak(text);

@@ -24,6 +24,7 @@
 | 7 | Round-2 优化：Composer 录音按钮（快捷键之外手动点录音）+ tool-call 执行性能核查 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 8 | Round-3 优化：LLM-facing system prompt + 23 工具 description 按界面语言 i18n（英文 canonical + fallback） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 9 | Round-3 优化：DJ 策展纪律——用世界知识判断候选歌曲、避免一股脑塞歌单 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 10 | Round-3 修复（手测/E2E 反馈）：dj_say 有时把 `AgentWriteResult` JSON 当回话显示/朗读 + Fish 选中音色持久化（记入「用过的音色」列表，不用每次搜） | 🔄 In Progress | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -669,6 +670,17 @@ dj_say: tool({
 - [x] 单测：`dj-chat-i18n.test.ts` 新增策展纪律断言（各语言特征短语 + `set_add_tracks` 出现）。共 10 测。
 - [x] `make check`（typecheck + biome + chat 123 测）通过。
 - 备注：行为质量（是否真的少塞、判断更准）需**活 LLM** 手测/端点 E2E 验证；单测只保证指引已注入 prompt。
+
+### Phase 10：Round-3 修复（手测/E2E 反馈）
+
+**Fix A — dj_say 有时把 `AgentWriteResult` JSON 当回话显示/朗读**：用户手测发现左上角通知**偶尔**显示整段 `{"status":"ok","commandId":"muzero.dj.say","summary":...,"diff":{"text":"…"},"warnings":[]}`，且 dj_say **朗读的声音也不对**（把 JSON 念出来）。排查：`lastAssistantText` 只取 `type:"text"` part，不含 tool 结果——故根因是**模型偶尔把 dj_say 的结果 JSON 当作 assistant 文本吐出**（多轮里 history 有过该形状后更易复现），`use-voice-dj` 的回话路径（fallback 或 dj_say 文本参数）原样透传 → 通知 + TTS 同一 `text` 双双出错。**修复**：在唯一 choke point `deliverDjReply` 前加纯函数 `sanitizeReplyText`——纯文本透传；识别到 dj_say 结果 JSON 则解包 `diff.text`/顶层 `text`；其它 JSON 对象/数组直接丢弃（宁静默勿吐 JSON）。同时修好通知与朗读。
+
+**Fix B — Fish 选中音色持久化到「用过的音色」列表**：用户希望选中一个 Fish voice model 后**记住、下次继续用**，并进入「用过的音色」列表，不必每次搜索。现状 `ttsVoiceId` 已持久（选择本身记住），但选中音色的**元数据未缓存**——不重新拉 `self_only` 列表就看不到它。**修复**：纯函数 `selectVoicePatch(settings, voice)` → 选中即写 `ttsVoiceId` + 把该音色并入 `ttsAddedVoiceIds` + 缓存元数据到 `ttsAddedVoiceCache`（去重/刷新），使其下次无需搜索即显示在「已添加/用过」区并高亮；`voice-tts-settings` 选中按钮改调它。
+
+**Phase 10 Checklist**
+- [x] Fix A：`sanitizeReplyText`——纯文本透传 / dj_say 结果 JSON 解包 `diff.text` / 顶层 `text` / 其它 JSON 丢弃；`deliverDjReply` 接入（通知 + TTS 同源修复）。单测 `voice-dj-logic.test.ts` +8（含中文 dj_say JSON 解包、未知 JSON 丢弃、brace-开头非 JSON 当文本）。
+- [ ] Fix B：`selectVoicePatch` 持久化选中音色（id + 元数据缓存去重）；`voice-tts-settings` 接线；纯函数单测。
+- [ ] `make check` 通过 + 端点 E2E 复验 dj_say 通知/朗读为纯文本。
 
 ---
 
