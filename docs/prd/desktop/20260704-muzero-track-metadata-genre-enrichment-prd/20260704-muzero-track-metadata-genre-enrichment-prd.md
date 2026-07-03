@@ -15,7 +15,7 @@
 | 2 | Provider registry + MusicBrainz（keyless / web 可用）+ 后台 auto-enrich 队列 + DJ 接线 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Last.fm（BYOK，标签质量最高）+ Discogs（style 分类法）+ auto 组合 + Settings 面板 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 华语复用：QQ 原生 genre provider（排首、自我 gate）；NetEase 回退外部库 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | 消费方接线：DJ 续歌 + chat agent 过滤 + 搜索 + 手动补齐 + 可选 LLM 归一化 + i18n | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | 消费方接线：DJ 续歌 + chat agent 按风格过滤 + 搜索语料 + annotation 手动补齐 + i18n | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | （可选 / 可拆独立 PRD）Essentia.js 内容分析兜底：零元数据也能出风格 | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -389,18 +389,19 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 **Goal:** 让 DJ 续歌 / chat 过滤 / 搜索 / 手动补齐四路吃到 enrichment，PM 诉求闭环。
 
 **Tasks:**
-- [ ] `dj-engine.ts`：RecentTrack.genres = ∪(mediaMetadata.genres, enrichment.genres/styles)。
-- [ ] `dj-chat-tools.ts` + `dj-chat-tool-descriptions.ts`：`library_search` 支持按 genre/style 过滤（**PM「过滤导入歌曲」核心落点**）。
-- [ ] `track-search.ts`：`matchesQuery` 纳入 enrichment.genres/styles。
-- [ ] `annotation-editor.tsx`：手动「补齐风格」按钮 + 只读风格 chips（区分用户 tag）。
-- [ ] 可选 LLM 归一化：脏/歧义 rawTags 过一遍 Vercel AI SDK（BYOK），收敛进 canonical 词表；无 key 回退纯映射。
-- [ ] i18n 4 语言（en/zh/ja/ko）全量。
+- [x] `dj-engine.ts`：RecentTrack.genres = ∪(mediaMetadata.genres, enrichment.genres/styles)（Phase 2 已接，`getEnrichmentsByTrackIds` 批量）。
+- [x] `dj-chat-tools.ts` + `dj-chat-tool-descriptions.ts`：`library_search` 把 enrichment.genres/styles 折进搜索语料（`enrichmentGenresByTrackIdMap` + `searchTracks` 加 `enrichmentGenresByTrackId` 参数）；三语工具描述注明「导入曲可按补齐风格搜」。**PM「过滤导入歌曲」核心落点。TDD：搜 "city pop" 命中仅被补该风格的曲。**
+- [x] `track-search.ts`：`searchTracks`/`matchesQuery`/`trackSearchScore` 加 `enrichmentGenresByTrackId`/`extraFreeFields`（镜像 `memoryNotesByTrackId`），enrichment 进 free 字段可搜；TDD。
+- [x] `annotation-editor.tsx`：`TrackGenreChips` 只读风格 chips（dashed + Sparkles，区分用户 tag）+ 每曲「重新获取风格」按钮（`clearTrackEnrichment` + `runAutoEnrich`）；i18n。
+- [ ]（deferred/可选）LLM 归一化：脏 rawTags 过 Vercel AI SDK 收敛——纯 `normalize` 映射已覆盖主要噪声（含真实 MB 标签迭代），LLM 为后续增强。
+- [ ]（followup）⌘F 全局搜索 worker（`global-search-local-core`）+ search-page/entity-detail 主列表纳入 enrichment 语料（需把 enrichment 传进 worker）。
+- [x] i18n 4 语言（en/zh/ja/ko）全量（enrichSettings.* + annotation.autoGenre/reEnrich/... + 三语工具描述）。
 
 ### Phase 5 Checklist
-- [ ] chat agent 能按风格从导入库过滤出歌（端到端 E2E，参照 voice/chat trace 手段）。
-- [ ] 搜索「city pop」能命中补齐了该风格的导入曲。
-- [ ] 无 LLM key 时纯映射归一化仍工作。
-- [ ] i18n 4 locale 全覆盖，无缺翻译。
+- [x] chat `library_search` 能按风格从导入库过滤出歌（TDD：`executeSearchTracks` 搜 enrichment genre 命中）。
+- [x] 搜索「city pop」能命中补齐了该风格的导入曲（track-search + chat 单测）。
+- [x] i18n 4 locale 全覆盖，无缺翻译（全量测通过含 i18n parity）。
+- [ ]（deferred）LLM 归一化 / ⌘F worker 语料 = followup。
 
 ### Phase 6: （可选 / 可拆独立 PRD）Essentia.js 内容分析兜底
 
@@ -484,3 +485,4 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 | 2026-07-04 | MUZERO Team | **Phase 3 provider 层（TDD）**：Last.fm（`track.getTopTags`，BYOK key，count 阈值过滤）+ Discogs（search 直取 genre+style，BYOK token）+ registry 改「auto 组合」（`enrichmentProviderOrder` lastfm→musicbrainz→discogs 按 key 装配 + `createAutoEnrichmentProvider` 首个命中即停 / 全 error 才 throw）+ `AppSettings.lastfmApiKey`/`discogsToken`。**67 enrich 单测全绿（+29）、tsc/biome 干净**。Settings UI + web 降级标注留下一 commit |
 | 2026-07-04 | MUZERO Team | **Phase 3 Settings UI 完成**：`genre-enrichment-settings.tsx`（AI section「风格标签」，图标 tags）= autoEnrich 开关 + Last.fm/Discogs key（password/失焦保存）+ sweep 进度轮询 + 立即补齐/停止/重试未找到按钮 + web 降级说明；`clearFailedEnrichments`（TDD，只清 notFound）；i18n en/zh/ja/ko 全量。**全量 3637 测全绿（+30）**。Phase 3 完成 |
 | 2026-07-04 | MUZERO Team | **Phase 4 QQ 原生 genre（TDD）**：`streamsrc/qq/qq-genre.ts`（`parseQqNativeGenre` 纯 + `fetchQqNativeGenre` guest 详情，复用导出签名）+ `enrich/qq-provider.ts`（`streamSourceId==="qq"` 自我 gate、via `native`、conf 0.85）；`EnrichmentQuery.streamSourceId`；registry auto 组合 QQ 排首。解析器用**真实 E2E 响应形状**测。**74 enrich 单测全绿（+7）、tsc/biome 干净**。Phase 4 完成（待用户库含 QQ 曲时补 in-app pipeline E2E） |
+| 2026-07-04 | MUZERO Team | **Phase 5 消费方接线（TDD）**：`track-search` `searchTracks`/`matchesQuery` 加 `enrichmentGenresByTrackId`（镜像 memoryNotes，enrichment 进 free 语料）；`dj-chat-tools` `library_search` 折进 enrichment genre（**PM「过滤导入歌曲」落点**）+ 三语工具描述；`annotation-editor` `TrackGenreChips` 只读风格 chips + 每曲重新获取按钮；i18n 4 语言。DJ RecentTrack.genres Phase 2 已接。**全量 3648 测全绿（+4）**。LLM 归一化 / ⌘F worker 语料 = deferred followup。Phase 5 完成 |

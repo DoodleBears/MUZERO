@@ -186,35 +186,52 @@ export function trackToRow(
   };
 }
 
-/** Relevance score for a track against a query (lower = better; see `scoreRow`). */
+/**
+ * Relevance score for a track against a query (lower = better; see `scoreRow`).
+ * `extraFreeFields` are extra searchable strings joined into the free fields — used to make
+ * external genre enrichment (kept in its own table, not on the Track) searchable.
+ */
 export function trackSearchScore(
   track: Track,
   query: string,
   memoryNotes: readonly string[] = [],
+  extraFreeFields: readonly string[] = [],
 ): number {
-  return scoreRow(trackToRow(track, memoryNotes), parseSearchTokens(query));
+  return scoreRow(trackToRow(track, memoryNotes, extraFreeFields), parseSearchTokens(query));
 }
 
 export function matchesQuery(
   track: Track,
   query: string,
   memoryNotes: readonly string[] = [],
+  extraFreeFields: readonly string[] = [],
 ): boolean {
-  return trackSearchScore(track, query, memoryNotes) < NO_MATCH_SCORE;
+  return trackSearchScore(track, query, memoryNotes, extraFreeFields) < NO_MATCH_SCORE;
 }
 
-/** Filter + rank tracks by query relevance (best match first; stable for ties). */
+/**
+ * Filter + rank tracks by query relevance (best match first; stable for ties).
+ * `enrichmentGenresByTrackId` folds each track's external genre/style enrichment into the
+ * searchable corpus so "city pop" / "house" filter imported tracks by their fetched genre —
+ * same join pattern as `memoryNotesByTrackId`.
+ */
 export function searchTracks(
   tracks: Track[],
   query: string,
   memoryNotesByTrackId?: ReadonlyMap<string, readonly string[]>,
+  enrichmentGenresByTrackId?: ReadonlyMap<string, readonly string[]>,
 ): Track[] {
   if (!query.trim()) return tracks;
   return tracks
     .map((track, index) => ({
       track,
       index,
-      score: trackSearchScore(track, query, memoryNotesByTrackId?.get(track.id) ?? []),
+      score: trackSearchScore(
+        track,
+        query,
+        memoryNotesByTrackId?.get(track.id) ?? [],
+        enrichmentGenresByTrackId?.get(track.id) ?? [],
+      ),
     }))
     .filter((entry) => entry.score < NO_MATCH_SCORE)
     .sort((a, b) => a.score - b.score || a.index - b.index)

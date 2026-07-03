@@ -122,6 +122,29 @@ describe("matchesQuery with memories", () => {
   });
 });
 
+describe("matchesQuery with enrichment genres", () => {
+  const song = track({ id: "e", title: "Untitled", tags: [] });
+
+  it("matches an enrichment genre not present in any track field", () => {
+    expect(matchesQuery(song, "house")).toBe(false);
+    expect(matchesQuery(song, "house", [], ["deep house"])).toBe(true);
+  });
+
+  it("combines enrichment-genre tokens with the rest (AND across tokens)", () => {
+    expect(matchesQuery(song, "deep house", [], ["deep house"])).toBe(true);
+    expect(matchesQuery(song, "deep techno", [], ["deep house"])).toBe(false);
+  });
+});
+
+describe("searchTracks with enrichment genres", () => {
+  it("filters by enrichment genre via the trackId→genres map", () => {
+    const a = track({ id: "a", title: "Song A" });
+    const b = track({ id: "b", title: "Song B" });
+    const genres = new Map<string, readonly string[]>([["a", ["city pop"]]]);
+    expect(searchTracks([a, b], "city pop", undefined, genres).map((t) => t.id)).toEqual(["a"]);
+  });
+});
+
 describe("lyricsSearchFields", () => {
   it("indexes generated brief lyrics", () => {
     const song = track({

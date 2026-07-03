@@ -6,6 +6,7 @@ import {
   createPendingTrack,
   createSession,
   getAllTags,
+  getEnrichmentsByTrackIds,
   getPlayQueue,
   getSession,
   getSettings,
@@ -22,7 +23,7 @@ import {
   prependTrackIds,
   updateSession,
 } from "@/db/repositories";
-import type { DjSession, PlayQueue, Track } from "@/db/types";
+import type { DjSession, PlayQueue, Track, TrackEnrichment } from "@/db/types";
 import { describeBrief, type TrackBrief, trackBriefSchema } from "@/dj/dj-brief-schema";
 import { newId } from "@/lib/id";
 import { freeTextMatches } from "@/lib/search-core";
@@ -138,17 +139,34 @@ async function likedSetForTracks(ids: string[], db: MuzeroDB): Promise<Set<strin
   return new Set(rows.map((r) => r.trackId));
 }
 
+/** `trackId → external genre/style` for search — folds enrichment into the library-search
+ *  corpus so the agent can filter imported tracks by fetched genre (PM's "过滤导入歌曲"). */
+function enrichmentGenresByTrackIdMap(
+  rows: ReadonlyMap<string, TrackEnrichment>,
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const [id, e] of rows) {
+    if (e.status !== "found") continue;
+    const genres = [...e.genres, ...(e.styles ?? [])];
+    if (genres.length > 0) out.set(id, genres);
+  }
+  return out;
+}
+
 /** Multi-keyword search: per-term match, combined by union ("any") or intersection ("all"). */
 function searchMultiTerm(
   tracks: Track[],
   terms: string[],
   match: "any" | "all",
   notes?: ReadonlyMap<string, readonly string[]>,
+  genres?: ReadonlyMap<string, readonly string[]>,
 ): Track[] {
   const cleaned = terms.map((t) => t.trim()).filter(Boolean);
   if (cleaned.length === 0) return tracks;
-  if (cleaned.length === 1) return searchTracks(tracks, cleaned[0], notes);
-  const perTerm = cleaned.map((t) => new Set(searchTracks(tracks, t, notes).map((x) => x.id)));
+  if (cleaned.length === 1) return searchTracks(tracks, cleaned[0], notes, genres);
+  const perTerm = cleaned.map(
+    (t) => new Set(searchTracks(tracks, t, notes, genres).map((x) => x.id)),
+  );
   return tracks.filter((t) =>
     match === "all" ? perTerm.every((s) => s.has(t.id)) : perTerm.some((s) => s.has(t.id)),
   );
@@ -514,12 +532,11 @@ export async function executeSearchTracks(
   const input = searchTracksInputSchema.parse(rawInput);
   const db = deps.db ?? defaultDb;
   const tracks = await listAllTracks(db);
-  const notes = await memoryNotesByTrack(
-    tracks.map((track) => track.id),
-    db,
-  );
+  const ids = tracks.map((track) => track.id);
+  const notes = await memoryNotesByTrack(ids, db);
+  const genres = enrichmentGenresByTrackIdMap(await getEnrichmentsByTrackIds(ids, db));
   const terms = [...(input.queries ?? []), ...(input.query ? [input.query] : [])];
-  const matched = searchMultiTerm(tracks, terms, input.match, notes);
+  const matched = searchMultiTerm(tracks, terms, input.match, notes, genres);
   const fields = input.fields?.length ? input.fields : (["id", "title"] as const);
   const page = matched.slice(input.cursor, input.cursor + input.limit);
   const nextOffset = input.cursor + page.length;

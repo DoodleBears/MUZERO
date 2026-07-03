@@ -9,6 +9,7 @@ import {
   memoryNotesByTrack,
   playQueueSet,
   saveSettings,
+  setTrackEnrichment,
   setTrackLyrics,
 } from "@/db/repositories";
 import { trackBriefSchema } from "@/dj/dj-brief-schema";
@@ -330,6 +331,17 @@ describe("search projection + multi-keyword + curate-by-search", () => {
     );
     return { src, ids: gen.diff.createdTrackIds };
   }
+
+  it("finds tracks by their external enrichment genre (imported-track style filter)", async () => {
+    const { ids } = await seed();
+    // "city pop" is in NEITHER the title nor caption of any seeded track — only its enrichment.
+    await setTrackEnrichment(
+      { trackId: ids[0], record: { source: "musicbrainz", genres: ["city pop"], status: "found" } },
+      db,
+    );
+    const hit = await executeSearchTracks({ query: "city pop" }, { db });
+    expect(hit.tracks.map((t) => t.id)).toEqual([ids[0]]);
+  });
 
   it("merges queries[] with match 'any' (union) and 'all' (intersection)", async () => {
     await seed();

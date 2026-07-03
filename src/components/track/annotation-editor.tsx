@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { ImagePlus, Images, Tag, X } from "lucide-react";
+import { ImagePlus, Images, RefreshCw, Sparkles, Tag, X } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CurrentTrackAddToSetButton } from "@/components/library/track-add-to-set";
@@ -16,13 +16,18 @@ import {
 } from "@/components/ui/dialog";
 import {
   addTrackBackground,
+  clearTrackEnrichment,
   deleteImageBlob,
+  getSettings,
+  getTrackEnrichment,
   listTrackBackgrounds,
   saveSettings,
   setTrackCover,
   setTrackTags,
 } from "@/db/repositories";
 import type { CropRect, Track } from "@/db/types";
+import { runAutoEnrich } from "@/enrich/auto-enrich";
+import { resolveEnrichmentProvider } from "@/enrich/registry";
 import { useObjectUrls } from "@/hooks/use-media";
 import { IMAGE_ACCEPT } from "@/lib/file-drop";
 import { formatDuration } from "@/lib/utils";
@@ -233,6 +238,8 @@ export const AnnotationEditor = memo(function AnnotationEditor({ track }: { trac
           </div>
         </div>
 
+        <TrackGenreChips track={track} />
+
         <TrackMemoryNotesPanel
           formatCreatedAt={formatMemoryCreatedAt}
           getCurrentPositionSec={
@@ -260,6 +267,65 @@ export const AnnotationEditor = memo(function AnnotationEditor({ track }: { trac
     </>
   );
 });
+
+/**
+ * Read-only external genre enrichment (MusicBrainz/QQ/Last.fm) — shown distinctly from the
+ * user's own tags (dashed, no `#`, a Sparkles marker) so auto-fetched style never gets confused
+ * with "music carries memories" tags. A manual re-fetch clears the row (incl. the negative
+ * cache) and looks it up again. Hidden for generated tracks (they carry brief genre).
+ */
+function TrackGenreChips({ track }: { track: Track }) {
+  const { t } = useTranslation();
+  const enrichment = useLiveQuery(() => getTrackEnrichment(track.id), [track.id]);
+  const [busy, setBusy] = useState(false);
+
+  const genres =
+    enrichment?.status === "found" ? [...enrichment.genres, ...(enrichment.styles ?? [])] : [];
+
+  async function reEnrich() {
+    setBusy(true);
+    try {
+      await clearTrackEnrichment(track.id);
+      const settings = await getSettings();
+      await runAutoEnrich({ track, settings, provider: resolveEnrichmentProvider(settings) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (track.origin === "generated") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Sparkles className="size-3.5 text-muted-foreground" aria-label={t("annotation.autoGenre")} />
+      {genres.map((g) => (
+        <span
+          key={g}
+          className="flex h-8 items-center rounded-full border border-dashed border-border bg-card/40 px-2.5 text-xs text-muted-foreground"
+        >
+          {g}
+        </span>
+      ))}
+      {genres.length === 0 && (
+        <span className="text-xs text-muted-foreground">
+          {enrichment?.status === "notFound"
+            ? t("annotation.genreNotFound")
+            : t("annotation.genrePending")}
+        </span>
+      )}
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="ml-auto"
+        disabled={busy}
+        onClick={() => void reEnrich()}
+      >
+        <RefreshCw className={busy ? "size-3.5 animate-spin" : "size-3.5"} />
+        {t("annotation.reEnrich")}
+      </Button>
+    </div>
+  );
+}
 
 function TrackBackgroundManager({ trackId }: { trackId: string }) {
   const { t } = useTranslation();
