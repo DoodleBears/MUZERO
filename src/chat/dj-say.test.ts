@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDjChatTools, executeDjSay } from "./dj-chat-tools";
-import { type DjReplyEvent, emitDjReply, onDjReply } from "./dj-reply-bus";
+import { type DjReplyEvent, emitDjReply, onDjReply, resetDjReplyDedup } from "./dj-reply-bus";
 
 describe("dj-reply-bus", () => {
+  beforeEach(() => resetDjReplyDedup());
+
   it("delivers events to all subscribers and unsubscribes cleanly", () => {
     const seen: DjReplyEvent[] = [];
     const off = onDjReply((e) => seen.push(e));
@@ -10,6 +12,17 @@ describe("dj-reply-bus", () => {
     off();
     emitDjReply({ text: "after" });
     expect(seen).toEqual([{ text: "hi" }]);
+  });
+
+  it("drops a back-to-back duplicate reply but not a later repeat", () => {
+    const seen: string[] = [];
+    const off = onDjReply((e) => seen.push(e.text));
+    emitDjReply({ text: "switching to jazz" });
+    emitDjReply({ text: "switching to jazz" }); // consecutive dup → dropped
+    emitDjReply({ text: "now playing" });
+    emitDjReply({ text: "switching to jazz" }); // not consecutive → delivered
+    off();
+    expect(seen).toEqual(["switching to jazz", "now playing", "switching to jazz"]);
   });
 
   it("isolates a throwing subscriber from the others", () => {

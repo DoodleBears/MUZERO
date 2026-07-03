@@ -20,9 +20,17 @@ export interface DjReplyEvent {
 type Listener = (event: DjReplyEvent) => void;
 
 const listeners = new Set<Listener>();
+// The text of the immediately-previous reply, to drop back-to-back duplicates —
+// models sometimes call dj_say repeatedly with the SAME line in one turn, which
+// would spam the notification stack + read the same thing aloud several times.
+// Only consecutive identicals are dropped: "a","b","a" still delivers all three.
+let lastReplyText = "";
 
-/** Broadcast a DJ reply to all subscribers. */
+/** Broadcast a DJ reply to all subscribers (dropping a back-to-back duplicate). */
 export function emitDjReply(event: DjReplyEvent): void {
+  const text = event.text.trim();
+  if (text && text === lastReplyText) return;
+  lastReplyText = text;
   for (const listener of [...listeners]) {
     try {
       listener(event);
@@ -30,6 +38,11 @@ export function emitDjReply(event: DjReplyEvent): void {
       // A bad subscriber must not break the tool call or other subscribers.
     }
   }
+}
+
+/** Test seam: reset the dedup guard between cases. */
+export function resetDjReplyDedup(): void {
+  lastReplyText = "";
 }
 
 /** Subscribe to DJ replies; returns an unsubscribe fn. */

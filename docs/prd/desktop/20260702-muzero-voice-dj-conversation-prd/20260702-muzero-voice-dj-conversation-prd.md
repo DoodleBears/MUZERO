@@ -28,7 +28,7 @@
 | 11 | Round-3 优化：DJ 复用已有歌单——每回合注入已有歌单名列表 + prompt 引导，避免重复建（空）集 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 12 | Round-3 优化：歌单来源 UI 过滤（AI 创建 / human 创建 / 导入） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 13 | Round-3 E2E harness：控制端点读活跃会话 tool-call trace（观测 DJ 实际工具序列，找不合理设计） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
-| 14 | Round-3 优化：基于 trace 观测优化不合理的 tool-call 设计 | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 14 | Round-3 优化：基于 trace 观测优化不合理的 tool-call 设计（dj_say 刷屏去重 + 策展不脚踏两条船） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -740,12 +740,29 @@ dj_say: tool({
 - [x] `GET /chat/trace` 端点接线（route + bridge dep + 截断）。`node --check electron/perf-control.cjs` + typecheck 通过。
 - [x] `make check` 通过。（下一步用它跑 E2E 观测、找不合理工具设计 → Phase 14。）
 
+### Phase 14：基于 trace 观测优化不合理 tool-call（Round-3）
+
+**用 Phase 13 的 `/chat/trace` 实测**（活跃会话 128 次 tool-call）暴露两个明确问题：
+
+1. **`dj_say` 刷屏**：trace 尾部出现**连续 4 次完全相同**的回话「好的，已经为你切换到更安静的音乐，希望它能帮助你更好专注。」——模型一回合多次调 dj_say 同一句，刷爆通知栈 + TTS 重复念。
+2. **策展脚踏两条船**：同一个集 `#S6` 先 `set_add_tracks[5 判断曲]` **又** `set_add_by_search{limit:1000}`——判断+整批 dump 都做，正是「专注工作」膨胀到 100 首的原因，架空了 Phase 9 的策展纪律。
+
+**修复**：
+- `dj-reply-bus.emitDjReply` 加**连续去重**（back-to-back 相同文本丢弃；"a,b,a" 仍全投）+ `resetDjReplyDedup` 测试 seam——通知/TTS 双修，与 Fix A 的 `sanitizeReplyText` 叠加成回话净化层。
+- prompt 引导（四语言）：① **dj_say 每回合最多一次**（en「ONCE per turn」）；② **别脚踏两条船**——同一集只用 set_add_tracks **或** set_add_by_search 之一（en「Don't hedge」）。
+
+**Phase 14 Checklist**
+- [x] `emitDjReply` 连续去重（`dj-say.test.ts` +1：a,a→1 投；a,b,a→3 投）；`resetDjReplyDedup`。
+- [x] 四语言 prompt 加 dj_say-once + no-hedge 引导；`dj-chat-i18n.test.ts` +1（8 断言）。
+- [x] `make check`（chat+voice 172 测）通过。行为改善需活 LLM 复验（去重是确定性兜底，prompt 是软引导）。
+
 ---
 
 ## 11. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-3) | **Phase 14 完成**：用 Phase 13 `/chat/trace` 实测（128 tool-call）找到并修两个不合理设计——① **dj_say 刷屏**（连续 4 次同句）→ `emitDjReply` 连续去重（+`resetDjReplyDedup`）；② **策展脚踏两条船**（同集 set_add_tracks + set_add_by_search 都做→膨胀 100 首）→ 四语言 prompt 加「dj_say 每回合一次」+「别脚踏两条船（二选一）」。2 新测，`make check`（chat+voice 172 测）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 13 完成**：E2E harness——`GET /chat/trace` 控制端点读活跃会话 tool-call trace（纯函数 `extractToolCalls`/`summarizeToolCalls` + bridge `readChatTrace` 截断非密载荷）。让 E2E 能程序化观测 DJ 实际调了哪些工具、传了什么，用于发现不合理设计。4 新测，`make check` + `node --check` 通过。 |
 | 2026-07-03 | Claude (round-3) | **Phase 11.1**：按用户反馈把 Phase 11 的"每回合注入 40 个歌单名"改为**可搜索/分页的 `set_list` 工具**（`query` 名字过滤+留空=updated 倒序、`cursor`/`limit`+`nextCursor`+`total`），`buildSetsContext` 瘦身为一行 count 提示（`db.sessions.count()`、不 dump），四语言 prompt/工具描述改指向 set_list。适配大量歌单、token 恒定。`executeSetList` +3 测，`make check`（3547 测试）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 12 完成**：歌单来源 UI 过滤（AI/human/导入）。加 `DjSession.origin?`（additive）+ `createSession` 接线 + DJ `set_create` 打 `origin:"ai"`；纯分类器 `src/lib/set-origin.ts` `resolveSetOrigin`（显式优先，否则 imported/ai/human 推断，忽略默认为 true 的 autoExtend）+ `filterSetsByOrigin`，6 测；search-page「歌单」墙加 3 个来源 `FilterChip` + `shown` 过滤，i18n×4 `gallery.origin.*`。`make check`（3548 测试）全绿。 |

@@ -49,6 +49,19 @@ describe("djChatSystemPrompt", () => {
     expect(djChatSystemPrompt("ja")).toContain("作る前に再利用");
     expect(djChatSystemPrompt("ko")).toContain("만들기 전에 재사용");
   });
+
+  it("nudges dj_say-once + no-hedge curation in every locale (Phase 14, trace fixes)", () => {
+    // dj_say at most once per turn.
+    expect(djChatSystemPrompt("en")).toContain("ONCE per turn");
+    expect(djChatSystemPrompt("zh")).toContain("每回合最多调用一次");
+    expect(djChatSystemPrompt("ja")).toContain("1ターンにつき最多1回");
+    expect(djChatSystemPrompt("ko")).toContain("한 턴에 최대 한 번");
+    // Don't hedge: EITHER set_add_tracks OR set_add_by_search, not both.
+    expect(djChatSystemPrompt("en")).toContain("Don't hedge");
+    expect(djChatSystemPrompt("zh")).toContain("别脚踏两条船");
+    expect(djChatSystemPrompt("ja")).toContain("二股をかけない");
+    expect(djChatSystemPrompt("ko")).toContain("양다리 걸치지 마라");
+  });
 });
 
 describe("toolDescription", () => {
