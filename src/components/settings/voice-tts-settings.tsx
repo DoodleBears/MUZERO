@@ -20,6 +20,7 @@ import { openExternalUrl } from "@/lib/platform";
 import { DEFAULT_FISH_BACKEND, FISH_TTS_BACKENDS, type FishTtsBackend } from "@/tts/fish-mapping";
 import { TtsError, type VoiceModel } from "@/tts/provider";
 import { resolveTtsProvider } from "@/tts/registry";
+import { selectVoicePatch } from "@/tts/voice-selection";
 import { synthesizeReply } from "@/voice/tts-playback-runtime";
 
 const FISH_KEY_URL = "https://fish.audio/go-api/";
@@ -235,7 +236,7 @@ export function VoiceTtsSettings() {
           {previewingId === voice.id ? t("voice.tts.previewing") : t("voice.tts.previewReply")}
         </Button>
         <Button
-          onClick={() => void saveSettings({ ttsVoiceId: voice.id })}
+          onClick={() => void saveSettings(selectVoicePatch(settings, voice))}
           size="sm"
           type="button"
           variant={selected ? "default" : "outline"}

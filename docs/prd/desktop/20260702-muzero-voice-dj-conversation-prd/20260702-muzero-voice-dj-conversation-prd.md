@@ -24,7 +24,7 @@
 | 7 | Round-2 优化：Composer 录音按钮（快捷键之外手动点录音）+ tool-call 执行性能核查 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 8 | Round-3 优化：LLM-facing system prompt + 23 工具 description 按界面语言 i18n（英文 canonical + fallback） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 9 | Round-3 优化：DJ 策展纪律——用世界知识判断候选歌曲、避免一股脑塞歌单 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
-| 10 | Round-3 修复（手测/E2E 反馈）：dj_say 有时把 `AgentWriteResult` JSON 当回话显示/朗读 + Fish 选中音色持久化（记入「用过的音色」列表，不用每次搜） | 🔄 In Progress | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 10 | Round-3 修复（手测/E2E 反馈）：dj_say 有时把 `AgentWriteResult` JSON 当回话显示/朗读 + Fish 选中音色持久化（记入「用过的音色」列表，不用每次搜） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -679,8 +679,8 @@ dj_say: tool({
 
 **Phase 10 Checklist**
 - [x] Fix A：`sanitizeReplyText`——纯文本透传 / dj_say 结果 JSON 解包 `diff.text` / 顶层 `text` / 其它 JSON 丢弃；`deliverDjReply` 接入（通知 + TTS 同源修复）。单测 `voice-dj-logic.test.ts` +8（含中文 dj_say JSON 解包、未知 JSON 丢弃、brace-开头非 JSON 当文本）。
-- [ ] Fix B：`selectVoicePatch` 持久化选中音色（id + 元数据缓存去重）；`voice-tts-settings` 接线；纯函数单测。
-- [ ] `make check` 通过 + 端点 E2E 复验 dj_say 通知/朗读为纯文本。
+- [x] Fix B：`src/tts/voice-selection.ts` `selectVoicePatch(settings, voice)`——选中即 `ttsVoiceId` + 并入 `ttsAddedVoiceIds`（去重）+ 缓存/刷新 `ttsAddedVoiceCache`（幂等）；`voice-tts-settings` 选中按钮改调它，使音色进「用过/已添加」列表、下次无需搜索即高亮。纯函数单测 3 测。
+- [x] `make check`（typecheck + biome + voice/tts 测）通过。端点 E2E 复验 dj_say 通知/朗读为纯文本 = 下一步在 Electron 上跑。
 
 ---
 
@@ -688,6 +688,7 @@ dj_say: tool({
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-3) | **Phase 10 完成（手测/E2E 反馈两修复）**：**Fix A** — dj_say 偶尔把 `AgentWriteResult` JSON 当回话显示/朗读（根因：模型偶把结果 JSON 当 assistant 文本，回话路径原样透传，通知+TTS 同 `text` 双错）→ `sanitizeReplyText`（`deliverDjReply` choke point：纯文本透传/解包 dj_say `diff.text`/丢弃其它 JSON），8 新测。**Fix B** — Fish 选中音色持久化 → `selectVoicePatch` 选中即缓存元数据+并入用过列表（`ttsAddedVoiceIds`/`ttsAddedVoiceCache` 去重幂等），下次无需搜索即显示高亮，3 新测；`voice-tts-settings` 接线。`make check` 全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 8/9 活 LLM 端点 E2E 验证**（Electron + 真 DJ LLM + 中文 UI，控制端点 `POST /voice/transcript` 注入 + `GET /notifications`/`GET /sessions` 读回）：注入①「放点更 chill 的，从我的库里挑」→ dj_say **中文**回话「…正在为你找一些轻松的 chill 曲目，并准备创建歌单…」+ 建「Chill Vibes」10 首；注入②「挑适合专注工作、安静不吵的歌建歌单」（无对应标签→**必须世界知识判断**）→ 中文回话「…挑选适合专注工作的安静音乐…」+ 建**「专注工作」100 首**（有界、命名贴切、非 5731 全量 dump）。**证实 Phase 8**：中文 system prompt + 中文工具描述下模型工具选择正常、dj_say 正常、回话随 UI 语言。**Phase 9**：无标签的氛围请求走了搜索+判断路径、产出有界策展集（非整批塞入）。**已知**：`/sessions` 只暴露计数不暴露 tool-call 序列，判断"质量"（100 首是否都安静）需人工听感；留下一个空「专注」(0) 集（模型一次弃用的重复创建，minor）；5731 大库判断式策展多步、~60s、贴近 12-step 预算。 |
 | 2026-07-03 | Claude (round-3) | **Phase 9 完成**：DJ 策展纪律。用户反馈「一股脑塞歌单」——在四语言 system prompt 加「策展纪律—宁精勿滥」段：流派/心情/氛围请求不整批 `set_add_by_search`，先 `library_search` 取候选按 title/artist 用**世界知识**筛选、`set_add_tracks` 只加符合的；`set_add_by_search` 留给用户自维护标签等无歧义场景。`dj-chat-i18n.test.ts` 加各语言特征短语 + `set_add_tracks` 断言（10 测）。`make check` 全绿。行为质量需活 LLM 手测。 |
 | 2026-07-03 | Claude (round-3) | **Phase 8 完成**：LLM-facing system prompt + 23 工具 description 按界面语言 i18n（PM 覆写默认建议、拍板翻译）。低风险实现：英文 canonical + fallback——`djChatSystemPrompt(locale)`（zh/ja/ko + 未知→英文）+ `dj-chat-tool-descriptions.ts` 只加 override map（缺译→`""`→保英文），`createDjChatTools({locale})` 在 return 前后处理覆盖 `description`（不改 23 个 `tool()` 主体）；字面 token（`#T/#S/#R`、工具名、`cursor/nextCursor`、`TrackBriefs`）不译。`dj-chat-agent` 用 `uiLocale()` 接线。9 新单测（含 23 工具 parity），`make check`（typecheck+biome+3524 测试）全绿。回话语言（Phase 3 补丁）+ Settings 工具说明（`chat.tools.*`）此前已本地化，本 phase 补齐喂给模型的那层。 |
