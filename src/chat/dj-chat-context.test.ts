@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import { createSession, playQueueSet } from "@/db/repositories";
 import type { Track } from "@/db/types";
-import { buildNowPlayingContext } from "./dj-chat-context";
+import { buildNowPlayingContext, buildSetsContext } from "./dj-chat-context";
 import { createDjChatLocalIdRegistry } from "./dj-chat-local-ids";
 
 let db: MuzeroDB;
@@ -55,6 +55,43 @@ describe("buildNowPlayingContext", () => {
 
     expect(context).toContain(set.id);
     expect(context).toContain(track.id);
+  });
+});
+
+describe("buildSetsContext", () => {
+  it("returns '' when there are no sets", async () => {
+    db = new MuzeroDB("dj-chat-sets-empty-test");
+    expect(await buildSetsContext(db)).toBe("");
+  });
+
+  it("lists existing sets with #S refs, names, and track counts (newest first)", async () => {
+    db = new MuzeroDB("dj-chat-sets-list-test");
+    const a = await createSession({ name: "Focus Work", seedPrompt: "" }, db);
+    await db.sessions.update(a.id, { trackIds: ["t1", "t2"] });
+    const b = await createSession({ name: "Chill Vibes", seedPrompt: "" }, db);
+    await db.sessions.update(b.id, { trackIds: ["t3"] });
+    const localIds = createDjChatLocalIdRegistry();
+
+    const context = await buildSetsContext(db, localIds);
+
+    expect(context).toContain("existing sets");
+    expect(context).toContain("Focus Work");
+    expect(context).toContain("Chill Vibes");
+    expect(context).toContain("2 tracks");
+    expect(context).toContain("1 tracks");
+    // Uses local #S refs, not raw ids.
+    expect(context).toContain("#S");
+    expect(context).not.toContain(a.id);
+    // Newest-updated set (Chill Vibes) is listed before the older one.
+    expect(context.indexOf("Chill Vibes")).toBeLessThan(context.indexOf("Focus Work"));
+  });
+
+  it("caps the inline list and points at set_list for the rest", async () => {
+    db = new MuzeroDB("dj-chat-sets-cap-test");
+    for (let i = 0; i < 5; i++) await createSession({ name: `Set ${i}`, seedPrompt: "" }, db);
+    const context = await buildSetsContext(db, undefined, 3);
+    expect(context).toContain("…and 2 more");
+    expect(context).toContain("use set_list");
   });
 });
 

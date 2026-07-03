@@ -12,7 +12,7 @@ import type { MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
 import i18n from "@/i18n/i18n";
 import { canGenerateMusic, hasEnabledStreamSources } from "./dj-chat-availability";
-import { buildNowPlayingContext } from "./dj-chat-context";
+import { buildNowPlayingContext, buildSetsContext } from "./dj-chat-context";
 import { DEFAULT_CHAT_CONTEXT_BUDGET, selectContextWindow } from "./dj-chat-context-budget";
 import { djChatSystemPrompt } from "./dj-chat-prompt";
 import {
@@ -58,14 +58,18 @@ export function createDjChatTransport({
         persistLocalIds,
         locale,
       });
-      // Refresh the now-playing snapshot every turn so the DJ always knows the
-      // active set + track (with ids) without spending a now_playing_get call.
+      // Refresh the now-playing snapshot + existing-sets list every turn so the DJ
+      // always knows the active set/track AND what sets already exist (to reuse
+      // instead of creating duplicates) without spending tool calls. Sequential so
+      // the two don't race on the shared local-id registry.
       const nowPlaying = await buildNowPlayingContext(db, localIds);
+      const setsContext = await buildSetsContext(db, localIds);
       await persistLocalIds();
+      const contextBlocks = [nowPlaying, setsContext].filter(Boolean).join("\n\n");
       const agent = new ToolLoopAgent({
         model,
         tools,
-        instructions: `${djChatSystemPrompt(locale)}\n\n${listenerLanguageDirective(locale)}\n\n${nowPlaying}`,
+        instructions: `${djChatSystemPrompt(locale)}\n\n${listenerLanguageDirective(locale)}\n\n${contextBlocks}`,
         stopWhen: stepCountIs(12),
         temperature: 0.7,
         // User-tunable (Settings); default generous so multi-step tool runs and

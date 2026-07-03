@@ -42,6 +42,13 @@ describe("djChatSystemPrompt", () => {
       expect(djChatSystemPrompt(loc)).toContain("set_add_tracks");
     }
   });
+
+  it("carries the reuse-existing-set guidance in every locale (Phase 11)", () => {
+    expect(djChatSystemPrompt("en")).toContain("Reuse before creating");
+    expect(djChatSystemPrompt("zh")).toContain("先复用再新建");
+    expect(djChatSystemPrompt("ja")).toContain("作る前に再利用");
+    expect(djChatSystemPrompt("ko")).toContain("만들기 전에 재사용");
+  });
 });
 
 describe("toolDescription", () => {

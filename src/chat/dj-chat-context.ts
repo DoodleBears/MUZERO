@@ -1,5 +1,5 @@
 import type { MuzeroDB } from "@/db/muzero-db";
-import { getPlayQueue, getSession, getTrack } from "@/db/repositories";
+import { getPlayQueue, getSession, getTrack, listSessions } from "@/db/repositories";
 import { type DjChatLocalIdRegistry, encodeSetRef, encodeTrackRef } from "./dj-chat-local-ids";
 
 /**
@@ -40,6 +40,37 @@ export async function buildNowPlayingContext(
     );
   } else {
     lines.push(`- Queue has ${total} tracks; currently at position ${index + 1}.`);
+  }
+  return lines.join("\n");
+}
+
+/** How many sets to list inline before pointing the DJ at `set_list` for the rest. */
+export const SETS_CONTEXT_LIMIT = 40;
+
+/**
+ * A compact list of the listener's existing 歌单 (name + id + track count), injected
+ * each turn so the DJ can REUSE a matching set instead of creating a near-duplicate
+ * (and can reference set ids without a `set_list` call). Newest-updated first,
+ * capped to {@link SETS_CONTEXT_LIMIT}. Empty string when there are no sets.
+ */
+export async function buildSetsContext(
+  db: MuzeroDB,
+  localIds?: DjChatLocalIdRegistry,
+  limit: number = SETS_CONTEXT_LIMIT,
+): Promise<string> {
+  const sessions = await listSessions(db);
+  if (sessions.length === 0) return "";
+  const lines = [
+    "Your existing sets (歌单) — reuse a matching one (set_add_tracks) before creating a duplicate:",
+  ];
+  for (const session of sessions.slice(0, limit)) {
+    const ref = localIds ? encodeSetRef(session.id, localIds) : session.id;
+    lines.push(
+      `- "${session.name.trim() || "Untitled set"}" (id: ${ref}, ${session.trackIds.length} tracks)`,
+    );
+  }
+  if (sessions.length > limit) {
+    lines.push(`- …and ${sessions.length - limit} more — use set_list to see the rest.`);
   }
   return lines.join("\n");
 }
