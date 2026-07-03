@@ -62,6 +62,23 @@ describe("deliverDjReply", () => {
     expect(speak).toHaveBeenCalledWith("Switching to lofi.");
   });
 
+  it("speaks the emotion-marked speakText but shows the plain text", () => {
+    const notifyReply = vi.fn();
+    const speak = vi.fn();
+    deliverDjReply(
+      { text: "Great pick! Cueing it up." },
+      {
+        notifyReply,
+        speak,
+        autoSpeak: true,
+        ttsReady: true,
+        speakText: "[happy] Great pick! [gentle] Cueing it up.",
+      },
+    );
+    expect(notifyReply).toHaveBeenCalledWith("Great pick! Cueing it up.");
+    expect(speak).toHaveBeenCalledWith("[happy] Great pick! [gentle] Cueing it up.");
+  });
+
   it("notifies but does not speak when auto-speak is off", () => {
     const notifyReply = vi.fn();
     const speak = vi.fn();

@@ -35,6 +35,9 @@ export interface ReplyDelivery {
   speak: (text: string) => void;
   autoSpeak: boolean;
   ttsReady: boolean;
+  /** The text to actually SPEAK — with Fish emotion markers built from the reply's
+   *  parts. Defaults to the plain displayed text when omitted (no emotions). */
+  speakText?: string;
 }
 
 /**
@@ -63,12 +66,14 @@ export function sanitizeReplyText(raw: string): string {
   return ""; // unrecognized JSON — don't surface raw JSON to the listener
 }
 
-/** Post a DJ reply to the notification stack and speak it when configured + ready. */
+/** Post a DJ reply to the notification stack and speak it when configured + ready.
+ *  The notification shows the plain text; the spoken text may carry emotion
+ *  markers (`deps.speakText`), falling back to the plain text when absent. */
 export function deliverDjReply(event: DjReplyEvent, deps: ReplyDelivery): void {
   const text = sanitizeReplyText(event.text);
   if (!text) return;
   deps.notifyReply(text);
-  if (deps.autoSpeak && deps.ttsReady) deps.speak(text);
+  if (deps.autoSpeak && deps.ttsReady) deps.speak(deps.speakText ?? text);
 }
 
 export type ApprovalDecision =

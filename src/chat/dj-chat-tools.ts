@@ -37,6 +37,7 @@ import type { StreamSearchHit } from "@/streamsrc/provider";
 import { resolveEnabledStreamSources, type StreamSourceDeps } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { addHitsToSet } from "@/streamsrc/streamed-track-repo";
+import { normalizeReplyParts, plainReplyText, type ReplyPart } from "@/tts/emotion-markup";
 import { executeLibraryTree, libraryTreeInputSchema } from "./dj-chat-library-tree";
 import {
   type DjChatLocalIdRegistry,
@@ -364,21 +365,24 @@ export interface DjChatToolDeps {
   locale?: string;
 }
 
-/** Max length of a spoken `dj_say` reply (kept short — it's read aloud). */
+/** Max length of a spoken `dj_say` reply, summed over parts (kept short — read aloud). */
 export const DJ_SAY_MAX_CHARS = 400;
 
 /**
  * `dj_say` execution — the DJ's one channel for talking back. Pure + injectable:
- * it just broadcasts the reply (default the {@link emitDjReply} bus) and returns
- * the standard {@link AgentWriteResult}. Notification + optional speech are the
- * consumer's job (`use-voice-dj`), keeping this UI-free and testable.
+ * it normalizes the reply into parts (each an optional emotion + text), broadcasts
+ * it (default the {@link emitDjReply} bus) and returns the standard
+ * {@link AgentWriteResult}. Notification uses the plain joined text; the speak path
+ * turns per-part emotions into Fish markers. Consumer wiring lives in
+ * `use-voice-dj`, keeping this UI-free and testable.
  */
 export function executeDjSay(
-  input: { text: string; tone?: DjReplyEvent["tone"] },
+  input: { say?: ReplyPart[]; text?: string; tone?: DjReplyEvent["tone"] },
   deps: { emit?: (event: DjReplyEvent) => void } = {},
 ): AgentWriteResult {
-  const text = input.text.trim();
-  (deps.emit ?? emitDjReply)({ text, tone: input.tone });
+  const parts = normalizeReplyParts(input);
+  const text = plainReplyText(parts);
+  (deps.emit ?? emitDjReply)({ text, parts, tone: input.tone });
   return {
     status: "ok",
     commandId: "muzero.dj.say",
@@ -1341,12 +1345,22 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
     }),
     dj_say: tool({
       description:
-        "Speak a SHORT, natural reply to the listener (one or two sentences) — what you did or are about to do, in the DJ's voice. Call this whenever you act on a spoken/voice request so the user gets a visible + optionally spoken response. Do NOT narrate tool mechanics or ids; keep it conversational.",
-      inputSchema: z.object({
-        text: z.string().min(1).max(DJ_SAY_MAX_CHARS),
-        /** Optional mood tag for future voice/tone selection; ignored for now. */
-        tone: z.enum(["neutral", "hype", "chill", "apologetic"]).optional(),
-      }),
+        'Speak a SHORT, natural reply to the listener (one or two sentences total) in the DJ\'s voice — what you did or are about to do. Call this AT MOST ONCE per turn whenever you act on a spoken/voice request. Pass `say` as an array of parts so the voice can shift emotion mid-reply: give each part a `text` and an optional `emotion` (e.g. "happy", "excited", "gentle", "apologetic") — the spoken voice applies it, the on-screen text stays plain. Most replies are one part; split only when the tone genuinely changes. Do NOT narrate tool mechanics or ids; keep it conversational.',
+      inputSchema: z
+        .object({
+          say: z
+            .array(
+              z.object({
+                text: z.string().min(1),
+                emotion: z.string().max(40).optional(),
+              }),
+            )
+            .min(1)
+            .max(5),
+        })
+        .refine((v) => v.say.reduce((n, p) => n + p.text.length, 0) <= DJ_SAY_MAX_CHARS, {
+          message: `Total reply text must be ${DJ_SAY_MAX_CHARS} characters or fewer.`,
+        }),
       execute: (input) => executeDjSay(input, { emit: deps.emitReply }),
     }),
   };

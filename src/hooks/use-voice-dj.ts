@@ -23,6 +23,8 @@ import { onDjReply } from "@/chat/dj-reply-bus";
 import type { AppSettings } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { notify } from "@/stores/notification-store";
+import { buildEmotionText, type ReplyPart } from "@/tts/emotion-markup";
+import { DEFAULT_FISH_BACKEND, type FishTtsBackend } from "@/tts/fish-mapping";
 import { isTtsReady } from "@/tts/registry";
 import { createTtsPlayback, type TtsPlayback } from "@/voice/tts-playback";
 import {
@@ -86,10 +88,14 @@ export function useVoiceDj(): void {
     const controller = getVoiceInputController();
     const playback = playbackRef.current;
 
-    /** Show a DJ reply (notification + optional speech). Shared by dj_say + fallback. */
-    function postReply(text: string): void {
+    /** Show a DJ reply (notification + optional speech). Shared by dj_say + fallback.
+     *  When the reply has emotion-tagged parts, the spoken text carries Fish emotion
+     *  markers for the current backend while the notification stays plain text. */
+    function postReply(reply: { text: string; parts?: ReplyPart[] }): void {
+      const backend = (settingsRef.current.ttsModel as FishTtsBackend) ?? DEFAULT_FISH_BACKEND;
+      const speakText = reply.parts?.length ? buildEmotionText(reply.parts, backend) : undefined;
       deliverDjReply(
-        { text },
+        { text: reply.text, parts: reply.parts },
         {
           notifyReply: (t) =>
             notify.info(t, {
@@ -98,7 +104,7 @@ export function useVoiceDj(): void {
                 ? [
                     {
                       label: tRef.current("voice.reply.replay"),
-                      onClick: () => playback?.speak(t),
+                      onClick: () => playback?.speak(speakText ?? t),
                       keepOpen: true,
                     },
                   ]
@@ -107,6 +113,7 @@ export function useVoiceDj(): void {
           speak: (t) => playback?.speak(t),
           autoSpeak: settingsRef.current.djReplyAutoSpeak ?? false,
           ttsReady: isTtsReady(settingsRef.current),
+          speakText,
         },
       );
     }
@@ -158,7 +165,7 @@ export function useVoiceDj(): void {
         if (settled && wasBusy && expectFallbackRef.current) {
           expectFallbackRef.current = false;
           const preview = snap.meta.lastAssistantPreview?.trim();
-          if (preview) postReply(preview);
+          if (preview) postReply({ text: preview });
         }
         prevStatus = snap.meta.status;
       });
@@ -201,7 +208,7 @@ export function useVoiceDj(): void {
     const offReply = onDjReply((event) => {
       // A real dj_say reply arrived → no fallback needed for this turn.
       expectFallbackRef.current = false;
-      postReply(event.text);
+      postReply({ text: event.text, parts: event.parts });
     });
 
     return () => {

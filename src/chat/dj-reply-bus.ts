@@ -8,9 +8,15 @@
  * A module singleton, not Zustand state (CLAUDE.md rule 6).
  */
 
+import type { ReplyPart } from "@/tts/emotion-markup";
+
 export interface DjReplyEvent {
-  /** The short, listener-facing line to show (and optionally speak). */
+  /** The short, listener-facing line to show (and optionally speak) — plain, no
+   *  emotion markers. Derived from {@link parts} when present. */
   text: string;
+  /** The reply split into parts, each with an optional emotion. The speak path
+   *  turns these into Fish emotion markers; the notification uses {@link text}. */
+  parts?: ReplyPart[];
   /** Optional mood hint for future voice/tone selection; unused for now. */
   tone?: "neutral" | "hype" | "chill" | "apologetic";
   /** The chat session that produced the reply, when known. */
