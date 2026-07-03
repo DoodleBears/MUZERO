@@ -1,9 +1,9 @@
 # PRD: 曲目元数据补齐（风格 / 流派 / 情绪标签）— 让导入歌曲能被 DJ 过滤
 
-**Status:** Draft
+**Status:** Phases 1–5 Completed（Phase 6 optional / 待独立 review）
 **Created:** 2026-07-04
 **Author:** MUZERO Team
-**Module:** enrich/*（新，镜像 `src/lyrics/`）· db/types（`Track.enrichment` 追加字段）· dj/dj-engine（RecentTrack.genres）· chat/dj-chat-tools（library_search 按风格过滤）· settings
+**Module:** enrich/*（新，镜像 `src/lyrics/`）· db（独立 `enrichments` 表 v32）· dj/dj-engine（RecentTrack.genres）· chat/dj-chat-tools（library_search 按风格过滤）· lib/track-search · components/settings + track · streamsrc/qq
 
 ---
 
@@ -403,7 +403,9 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 - [x] i18n 4 locale 全覆盖，无缺翻译（全量测通过含 i18n parity）。
 - [ ]（deferred）LLM 归一化 / ⌘F worker 语料 = followup。
 
-### Phase 6: （可选 / 可拆独立 PRD）Essentia.js 内容分析兜底
+### Phase 6: （可选 / 需独立 dependency review — 未实现）Essentia.js 内容分析兜底
+
+> **状态（2026-07-04）：Phase 1–5 已交付，导入曲目补齐 + 过滤闭环已完成。Phase 6 刻意不随 1–5 实现**——它要引入 Essentia.js（WASM）+ 数十 MB TF/ONNX 模型，在本 app 的性能/内存纪律下属「新 runtime 依赖」，按 prd-create 规范须先过独立 dependency-manifest review + bundle 预算评估，需产品显式 opt-in（不由实现方单方拉入）。keyless MusicBrainz 基线 + QQ + Last.fm 已覆盖绝大多数，Phase 6 仅为「外部库也全 miss 的孤儿曲目」兜底，投入产出待评估。
 
 **Goal:** 对「元数据全空、外部库也查不到」的孤儿曲目，从**音频内容**推理 genre/mood。
 
