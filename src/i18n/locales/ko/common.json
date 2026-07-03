@@ -1336,6 +1336,11 @@
     "filterAll": "전체",
     "filterLiked": "좋아요",
     "sortRecent": "최근",
+    "origin": {
+      "ai": "AI",
+      "human": "직접 만듦",
+      "imported": "가져옴"
+    },
     "sortName": "이름",
     "sortSize": "곡 수",
     "sortCreated": "생성일",

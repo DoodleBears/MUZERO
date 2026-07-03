@@ -1337,6 +1337,11 @@
     "filterAll": "すべて",
     "filterLiked": "お気に入り",
     "sortRecent": "最近",
+    "origin": {
+      "ai": "AI",
+      "human": "自作",
+      "imported": "インポート"
+    },
     "sortName": "名前",
     "sortSize": "曲数",
     "sortCreated": "作成日",

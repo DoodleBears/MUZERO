@@ -451,6 +451,12 @@ export interface CropRect {
 /** How a set renders the "stage" while playing. */
 export type SetDisplayMode = "video" | "cover";
 
+/** Where a set came from — for the library's origin filter. `ai` = the DJ/AI made
+ *  it, `human` = the user built it by hand, `imported` = synced from an external
+ *  playlist / cloud drive. Additive + non-indexed; legacy rows infer it from
+ *  provenance signals (see `resolveSetOrigin`). */
+export type SetOrigin = "ai" | "human" | "imported";
+
 /**
  * A set: an ordered, mixed list of tracks. The DJ can keep it growing
  * (`config.autoExtend` + a `seedPrompt`), or it can be a hand-curated/upload set.
@@ -502,6 +508,9 @@ export interface DjSession {
   config: DjConfig;
   /** Default stage rendering: video-first → cover → title. */
   displayMode: SetDisplayMode;
+  /** Where the set came from (library origin filter). Additive + non-indexed;
+   *  absent on legacy rows → inferred by `resolveSetOrigin`. */
+  origin?: SetOrigin;
   /**
    * When this set was created by syncing an external playlist, the source + its
    * playlist id — so a later sync can recognize "this is that playlist" and offer

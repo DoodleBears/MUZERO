@@ -75,7 +75,7 @@ import {
   setTrackCover,
   updateSession,
 } from "@/db/repositories";
-import type { CropRect, DjSession, PlaybackEvent, Track } from "@/db/types";
+import type { CropRect, DjSession, PlaybackEvent, SetOrigin, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import { useCoverMetadataBackfill, useGridCoverUrl, useTrackCoverUrl } from "@/hooks/use-media";
@@ -112,6 +112,7 @@ import {
   type SortDir,
   sortSets,
 } from "@/lib/set-gallery";
+import { resolveSetOrigin, SET_ORIGINS } from "@/lib/set-origin";
 import { isMac, modifierSymbol } from "@/lib/shortcuts";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { SOURCE_COVER_MORPH_NAME, sourceCoverMorphNamespace } from "@/lib/source-cover-transition";
@@ -373,6 +374,8 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
     artists: savedGalleryView("artists"),
   }));
   const [deletingSet, setDeletingSet] = useState<DjSession | null>(null);
+  // Sets-wall origin filter (AI / human / imported). "all" shows everything.
+  const [originFilter, setOriginFilter] = useState<SetOrigin | "all">("all");
   const [deletingEntity, setDeletingEntity] = useState<{
     kind: "album" | "artist";
     name: string;
@@ -933,10 +936,14 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   }, [hasSetQuery, likedIds, likedIdsActive, memoryNotes, sessions, trackById, needsSetWall]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
-  const shown = useMemo(
-    () => (needsSetWall ? sortSets(filterSets(items, setQuery), sort, sortDir) : items),
-    [items, setQuery, sort, sortDir, transliterationReady, needsSetWall],
-  );
+  const shown = useMemo(() => {
+    if (!needsSetWall) return items;
+    const byOrigin =
+      originFilter === "all"
+        ? items
+        : items.filter((it) => resolveSetOrigin(it.session) === originFilter);
+    return sortSets(filterSets(byOrigin, setQuery), sort, sortDir);
+  }, [items, setQuery, sort, sortDir, transliterationReady, needsSetWall, originFilter]);
   // Only the sets home shows the system-playlist cards, yet these derive a
   // recency/most-played sort over the WHOLE library (twice). Gate to the sets tab so
   // sitting on tracks/artists/albums while music plays doesn't re-sort 6k tracks per
@@ -1764,6 +1771,16 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
                 >
                   {t("gallery.sortSize")}
                 </SortChip>
+                <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+                {SET_ORIGINS.map((o) => (
+                  <FilterChip
+                    key={o}
+                    active={originFilter === o}
+                    onClick={() => setOriginFilter((cur) => (cur === o ? "all" : o))}
+                  >
+                    {t(`gallery.origin.${o}` as const)}
+                  </FilterChip>
+                ))}
               </div>
 
               <div className="px-3">

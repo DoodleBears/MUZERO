@@ -1358,6 +1358,11 @@
     "sortRecent": "Recent",
     "sortName": "Name",
     "sortSize": "Size",
+    "origin": {
+      "ai": "AI",
+      "human": "Made by you",
+      "imported": "Imported"
+    },
     "sortCreated": "Created",
     "sortUpdated": "Updated",
     "sortPlayed": "Played",

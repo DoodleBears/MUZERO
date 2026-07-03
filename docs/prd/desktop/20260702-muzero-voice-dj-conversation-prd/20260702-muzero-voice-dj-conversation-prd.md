@@ -26,7 +26,7 @@
 | 9 | Round-3 优化：DJ 策展纪律——用世界知识判断候选歌曲、避免一股脑塞歌单 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 10 | Round-3 修复（手测/E2E 反馈）：dj_say 有时把 `AgentWriteResult` JSON 当回话显示/朗读 + Fish 选中音色持久化（记入「用过的音色」列表，不用每次搜） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 11 | Round-3 优化：DJ 复用已有歌单——每回合注入已有歌单名列表 + prompt 引导，避免重复建（空）集 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
-| 12 | Round-3 优化：歌单来源 UI 过滤（AI 创建 / human 创建 / 导入） | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 12 | Round-3 优化：歌单来源 UI 过滤（AI 创建 / human 创建 / 导入） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -697,12 +697,27 @@ dj_say: tool({
 - [x] 四语言 prompt 加「先复用再新建」引导（en「Reuse before creating」/ zh「先复用再新建」/ ja「作る前に再利用」/ ko「만들기 전에 재사용」），`dj-chat-i18n.test.ts` +1。
 - [x] `make check`（typecheck + biome + chat 127 测）通过。
 
+### Phase 12：歌单来源 UI 过滤（AI / human / 导入）（Round-3，用户建议）
+
+**背景**：用户希望在库里能按来源过滤歌单——AI 创建 / 自己建 / 导入。
+
+- **数据**：`DjSession.origin?: SetOrigin("ai"|"human"|"imported")`（additive、非索引、不 bump DB）；`createSession` 接 `origin`；DJ 工具 `executeCreateSet` 打 `origin:"ai"`（消歧最模糊的"AI 建"情形）。
+- **分类器**（纯函数）：`src/lib/set-origin.ts` `resolveSetOrigin(session)` = 显式 `origin` 优先，否则推断——`streamPlaylistRef`/`cloudSource`→imported、`seedPrompt` 非空→ai、否则 human。**`config.autoExtend` 不作信号**（默认 true 会误判手建集）。`filterSetsByOrigin` 辅助。
+- **UI**：库「歌单」墙工具栏在排序 chip 后加 3 个 `FilterChip`（AI / 自建 / 导入，单选可切回全部）；`shown` 管线在 `filterSets`/`sortSets` 前按 `resolveSetOrigin(item.session)` 过滤。i18n×4 `gallery.origin.{ai,human,imported}`。
+
+**Phase 12 Checklist**
+- [x] `resolveSetOrigin`：显式优先 + 推断（imported/ai/human，忽略 autoExtend）；`filterSetsByOrigin`（all/undefined 全通过、按来源过滤）。6 测。
+- [x] `DjSession.origin` + `createSession` 接线 + DJ `set_create` 打 `origin:"ai"`。
+- [x] search-page「歌单」墙 3 个来源 `FilterChip` + `shown` 过滤；i18n×4。
+- [x] `make check`（typecheck + biome + 3548 测试）全绿。（UI 随 HMR 在运行的 Electron 实例上即见。）
+
 ---
 
 ## 11. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-3) | **Phase 12 完成**：歌单来源 UI 过滤（AI/human/导入）。加 `DjSession.origin?`（additive）+ `createSession` 接线 + DJ `set_create` 打 `origin:"ai"`；纯分类器 `src/lib/set-origin.ts` `resolveSetOrigin`（显式优先，否则 imported/ai/human 推断，忽略默认为 true 的 autoExtend）+ `filterSetsByOrigin`，6 测；search-page「歌单」墙加 3 个来源 `FilterChip` + `shown` 过滤，i18n×4 `gallery.origin.*`。`make check`（3548 测试）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 11 完成**：DJ 复用已有歌单、避免重复建空集（接 Phase 10 里模型重复建「专注」空集的反馈）。`buildSetsContext` 每回合注入已有歌单名/#S id/曲数（newest-first、上限 40、超出指向 `set_list`），`dj-chat-agent` 与 now-playing 顺序注入；四语言 prompt 加「先复用再新建、别留空集」引导。`buildSetsContext` 5 测 + i18n 断言，`make check`（chat 127 测）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 10 完成（手测/E2E 反馈两修复）**：**Fix A** — dj_say 偶尔把 `AgentWriteResult` JSON 当回话显示/朗读（根因：模型偶把结果 JSON 当 assistant 文本，回话路径原样透传，通知+TTS 同 `text` 双错）→ `sanitizeReplyText`（`deliverDjReply` choke point：纯文本透传/解包 dj_say `diff.text`/丢弃其它 JSON），8 新测。**Fix B** — Fish 选中音色持久化 → `selectVoicePatch` 选中即缓存元数据+并入用过列表（`ttsAddedVoiceIds`/`ttsAddedVoiceCache` 去重幂等），下次无需搜索即显示高亮，3 新测；`voice-tts-settings` 接线。`make check` 全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 8/9 活 LLM 端点 E2E 验证**（Electron + 真 DJ LLM + 中文 UI，控制端点 `POST /voice/transcript` 注入 + `GET /notifications`/`GET /sessions` 读回）：注入①「放点更 chill 的，从我的库里挑」→ dj_say **中文**回话「…正在为你找一些轻松的 chill 曲目，并准备创建歌单…」+ 建「Chill Vibes」10 首；注入②「挑适合专注工作、安静不吵的歌建歌单」（无对应标签→**必须世界知识判断**）→ 中文回话「…挑选适合专注工作的安静音乐…」+ 建**「专注工作」100 首**（有界、命名贴切、非 5731 全量 dump）。**证实 Phase 8**：中文 system prompt + 中文工具描述下模型工具选择正常、dj_say 正常、回话随 UI 语言。**Phase 9**：无标签的氛围请求走了搜索+判断路径、产出有界策展集（非整批塞入）。**已知**：`/sessions` 只暴露计数不暴露 tool-call 序列，判断"质量"（100 首是否都安静）需人工听感；留下一个空「专注」(0) 集（模型一次弃用的重复创建，minor）；5731 大库判断式策展多步、~60s、贴近 12-step 预算。 |

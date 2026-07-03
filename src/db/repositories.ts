@@ -60,6 +60,7 @@ import {
   type PlayQueue,
   type PlayQueueEntry,
   type SetDisplayMode,
+  type SetOrigin,
   type StreamSourceId,
   type Track,
   type TrackKind,
@@ -644,6 +645,8 @@ export async function createSession(
     displayMode?: SetDisplayMode;
     /** Tag a sync-created set with its source playlist, for later incremental re-sync. */
     streamPlaylistRef?: { source: StreamSourceId; id: string };
+    /** Where this set came from (library origin filter). Omit to let readers infer. */
+    origin?: SetOrigin;
   },
   db: MuzeroDB = defaultDb,
 ): Promise<DjSession> {
@@ -657,6 +660,7 @@ export async function createSession(
     config: { ...DEFAULT_DJ_CONFIG, ...input.config },
     displayMode: input.displayMode ?? "video",
     streamPlaylistRef: input.streamPlaylistRef,
+    origin: input.origin,
     createdAt: now,
     updatedAt: now,
   };

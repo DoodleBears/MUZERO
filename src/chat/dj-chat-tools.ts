@@ -741,7 +741,13 @@ export async function executeCreateSet(
   const input = createSetInputSchema.parse(rawInput);
   const db = deps.db ?? defaultDb;
   const session = await createSession(
-    { name: input.name, seedPrompt: input.seedPrompt, config: { autoExtend: input.autoExtend } },
+    {
+      name: input.name,
+      seedPrompt: input.seedPrompt,
+      config: { autoExtend: input.autoExtend },
+      // The DJ/AI created this set (library origin filter, PRD §12 Phase 12).
+      origin: "ai",
+    },
     db,
   );
   let added = 0;

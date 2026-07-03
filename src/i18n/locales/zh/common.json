@@ -1337,6 +1337,11 @@
     "filterAll": "全部",
     "filterLiked": "红心",
     "sortRecent": "最近",
+    "origin": {
+      "ai": "AI",
+      "human": "自建",
+      "imported": "导入"
+    },
     "sortName": "名称",
     "sortSize": "曲数",
     "sortCreated": "创建时间",
