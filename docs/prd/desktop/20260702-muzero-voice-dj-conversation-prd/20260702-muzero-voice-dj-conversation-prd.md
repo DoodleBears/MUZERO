@@ -1,6 +1,6 @@
 # PRD: Conversational Voice DJ — Fish Audio TTS + Groq ASR + Push-to-Talk 语音对话
 
-**Status:** Draft（核心决策已由 PM 拍板 2026-07-02，见 §10；待细化后转 Final）
+**Status:** Implemented（Phase 1–4 全部落地 2026-07-03，TDD；VAD 静音自动停 deferred。真机 mic/key/后台键为手测项）
 **Created:** 2026-07-02
 **Author:** DoodleBear
 **Module:** 新增 `src/asr/`（ASR provider registry + Groq）· 新增 `src/tts/`（TTS provider registry + Fish Audio）· 新增 `src/voice/`（麦克风录制编排 + TTS 播放）· `src/chat/dj-chat-tools.ts`（新增 `dj_say` reply 工具）· `src/shortcuts/`（新增 `voice.talkToDj` 动作）· `src/components/settings/`（Text-to-Speech / Speech-to-Text 两个面板）· `src/stores/notification-store.ts`（DJ reply 消费者，复用不改）· `electron/global-shortcuts.cjs`（push-to-talk 全局键，复用）
@@ -18,7 +18,7 @@
 | 1 | ASR 基础设施：`src/asr` provider registry + Groq + 麦克风录制编排 + Settings「Speech-to-Text」面板 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | TTS 基础设施：`src/tts` provider registry + Fish Audio + 音色拉取/搜索/添加 + Settings「Text-to-Speech」面板 + 试听播放 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 语音对话闭环：`voice.talkToDj`（默认 hold/不绑定）→ ASR → **当前活跃**会话 `DjChatRuntimeActor` + **动态滑动窗口** → `dj_say` reply 工具 → 左上角通知 + 自动朗读（渐变 ducking）+ 付费确认 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 平台 QA / 权限边界 / i18n×4 校对 / VAD 静音自动停 (可选增强) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 平台 QA / 权限边界 / i18n×4 校对 / VAD 静音自动停 (可选增强) | ✅ Completed（VAD deferred） | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -504,19 +504,20 @@ dj_say: tool({
 **Goal:** 上线前把跨壳、权限、边界、翻译收口；可选加静音自动停。
 
 **Tasks:**
-- [ ] Electron Windows/macOS/Linux 打包态：后台录音、全局键、麦克风权限提示（macOS 需 `NSMicrophoneUsageDescription`——确认 Electron Info.plist / entitlements）。
-- [ ] 权限被拒/撤销后的恢复引导；无 key 时 `voice.talkToDj` 明确提示去配置。
-- [ ] i18n×4 全量校对；raw-key / 文本 / key 不入 log 的扫描（对齐 system-global PRD 的扫描）。
-- [ ] **可选**：VAD 静音自动停（`voiceSilenceAutoStopMs`）——toggle 模式下说完停顿自动结束录音（可注入 VAD，先做简单能量阈值，不引入重依赖）。
-- [ ] 移动端：明确本期不做全局快捷键（OS 限制），语音输入按钮可作为后续 in-app 触发（Out of Scope 记录）。
+- [x] Electron 麦克风权限：`electron/main.cjs` `app.whenReady` 加 `session.defaultSession.setPermissionRequestHandler`（grant，保持默认许可、不回归其它权限）；macOS 打包 `build.mac.extendInfo.NSMicrophoneUsageDescription`（用途文案，明说不存储）。
+- [x] 权限被拒/撤销恢复引导：`NotAllowedError` → `voice.asr.micDenied`（引导系统设置）；无 key / provider 未就绪 → `voice.asr.notConfigured` / `synthesizeReply` 抛 `TtsError("auth")` 降级文字；mic 测试块 disabled + 提示。
+- [x] i18n×4 全量校对：脚本核对 `voice.*` 四语言各 81 键完全一致 + `chat.tools.dj_say` + `settings.navVoice*` + `shortcuts.action.voiceTalkToDj(+Desc)` 齐全，无死 key。
+- [x] log 扫描：`rg` 确认 `src/asr`·`src/tts`·`src/voice`·`use-voice-dj` 无 `console.*`，日志仅 provider/bytes/error-name/quota——**无**转写文本/reply/key/raw audio（规则 2/8）。
+- [ ] **可选（deferred）**：VAD 静音自动停（`voiceSilenceAutoStopMs` 字段已预留）——本期不做，避免尾部引入未穷测的新路径；后续可注入简单能量阈值。
+- [x] 移动端：明确本期不做全局快捷键（OS 限制），语音输入按钮留后续 in-app 触发（§7 Out of Scope 已记）。
 
 ### Phase 4 Checklist
 
-- [ ] 三平台 Electron 打包态：录音/全局键/权限提示可用或明确降级。
-- [ ] 无 key / 无权限 / provider 未就绪 → 全部有可读引导，无崩溃。
-- [ ] `rg` 扫描确认无转写文本/reply/ key / raw audio 入 log。
-- [ ] i18n 四语言齐全，无死 key。
-- [ ] `make check` + `vite build` + electron main 构建通过。
+- [x] Electron 打包态：麦克风权限已接线（request handler + macOS Info.plist 用途）；全局键沿用 system-global 地基（默认 disabled + 逐键授权）；`node --check electron/main.cjs` 通过。（三平台真机录音/后台键为手测项。）
+- [x] 无 key / 无权限 / provider 未就绪 → 全部有可读 i18n 引导（micDenied/notConfigured/errAuth/errRateLimit/errNetwork/synthFailed），不崩、不吞。
+- [x] `rg` 扫描确认无转写文本/reply/key/raw audio 入 log。
+- [x] i18n 四语言齐全，无死 key（脚本核对 81×4 voice 键一致）。
+- [x] `make check`（typecheck+biome+3498 测试）+ `vite build`（✓ 5.48s）+ `node --check electron/main.cjs` 通过。
 
 ---
 
@@ -594,6 +595,7 @@ dj_say: tool({
 |------|--------|---------|
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |
 | 2026-07-02 | DoodleBear | PM 拍板 Q1-Q5/Q7：用 `dj_say` 工具；push-to-talk **默认 hold**（Settings 可选，暴露后台无 key-up 的退化约束）；朗读 duck **渐变过渡**（`djVoiceDuckRampMs`）；**不开专用会话、继承当前活跃会话** + 上下文改**动态滑动窗口**（新增 §3.4 `selectContextWindow`，替代 `contextStartIndex`/compaction）；付费生成**要确认**；快捷键**默认不绑定**。Q6/Q8 采用默认。相应更新 §2.2/§2.3/§3.1/§3.4/§4.4/§4.5/§5.2/§6 Phase 3/§10。 |
+| 2026-07-03 | Claude (TDD) | **Phase 4 完成**：QA / 权限 / i18n 收口。Electron 麦克风权限接线（`main.cjs` `setPermissionRequestHandler` grant + `package.json` `build.mac.extendInfo.NSMicrophoneUsageDescription`）；log 扫描确认新模块无 `console.*`、日志无文本/key/audio（仅 provider/bytes/quota）；i18n×4 脚本核对 `voice.*` 81 键 + `chat.tools.dj_say` + nav/shortcut 键完全一致；`vite build`（✓ 5.48s）+ `node --check electron/main.cjs` 通过。VAD 静音自动停 deferred（字段预留）。PRD 状态转 Implemented。 |
 | 2026-07-03 | Claude (TDD) | **Phase 3 完成**：语音对话闭环接线。`voice.talkToDj` 快捷键（in-app hold keydown/keyup + 后台 toggle 退化；默认不绑定）→ `VoiceInputController` → `use-voice-dj` wiring（`getActiveDjChatRuntimeActor` 继承当前会话；`routeVoiceTranscript` send/interrupt；`dj-reply-bus` + `dj_say` 工具/`executeDjSay` → `notify.info` + `postReply`；`lastAssistantPreview` 兜底；`decideApproval` 付费审批通知/`voiceAutoApproveGenerate`）+ `selectContextWindow` 动态滑动窗口（接入 `dj-chat-agent.sendMessages`，`contextStartIndex` 取 max）+ `createGradientDucker`（`MediaEngine.getVolume()` 新增）+ Settings 加 autoSpeak/duckRamp/autoApprove/inputMode 控件 + AppSettings Phase-3 字段 + i18n×4。TDD：21 个新单测（`selectContextWindow`/`dj_say`/`voice-dj-logic`），`make check`（typecheck+biome+3498 测试）全绿。 |
 | 2026-07-03 | Claude (TDD) | **Phase 2 完成**：TTS 基础设施落地。新增 `src/tts/`（`provider.ts` 接口 + `TtsError`/`VoiceModel`；`fish-mapping.ts` 四纯函数；`fish-provider.ts` `listVoices`/`getVoice`/`synthesize` 直连 `getAppFetch()`；`registry.ts` `resolveTtsProvider`/`isTtsReady`）+ `src/voice/`（`tts-playback.ts` 注入式串行队列+批级 duck+URL 生命周期 + `tts-playback-runtime.ts` `synthesizeReply`/`createAudioSink`/`createMediaEngineDucker`）+ `voice-tts-settings.tsx`（Settings「Text-to-Speech」+ My Voices/搜索/Add-by-id/试听/Preview reply/后端·语速·ducking + `SETTINGS_NAV` `voice-tts`/volume-2 + sidebar 图标）+ `AppSettings` tts/duck optional 字段 + `CachedVoiceModel` + i18n×4（`settings.navVoiceTts` + `voice.tts.*`）。TDD：32 个新 Phase-2 单测，`make check`（typecheck+biome+3477 测试）全绿。 |
 | 2026-07-03 | Claude (TDD) | **Phase 1 完成**：ASR 基础设施落地。新增 `src/asr/`（`provider.ts` 接口 + `AsrError`；`groq-mapping.ts` 四纯函数；`groq-provider.ts` 直连 `getAppFetch()`；`registry.ts` `resolveAsrProvider`/`isAsrConfigured`/`resolveGroqApiKey` 复用 DJ Groq key）+ `src/voice/`（`voice-input-controller.ts` 注入式录音状态机 + `voice-input-runtime.ts` 生产 wiring/单例）+ `voice-asr-settings.tsx`（Settings「Speech-to-Text」面板 + `SETTINGS_NAV` `voice-asr`/mic + settings-page 渲染 + sidebar mic 图标）+ `AppSettings` asr/voice optional 字段（不 bump DB）+ i18n×4（`settings.navVoiceAsr` + `voice.asr.*`）。TDD：32 个新单测（映射/provider/registry/controller），`make check`（typecheck+biome+3455 测试）全绿。 |

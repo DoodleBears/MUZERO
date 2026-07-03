@@ -1,7 +1,18 @@
 const { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, Menu, nativeImage, net, protocol, screen, shell, Tray } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  nativeImage,
+  net,
+  protocol,
+  screen,
+  session,
+  shell,
+  Tray,
+} = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { registerElectronGlobalShortcuts } = require("./global-shortcuts.cjs");
@@ -287,6 +298,13 @@ function createWindow() {
 
 app.whenReady().then(() => {
   if (isWindows) Menu.setApplicationMenu(null);
+  // The voice DJ uses the microphone via getUserMedia. Grant the web permission
+  // explicitly (the app is local-first + single-user, so this matches Electron's
+  // permissive default and won't regress other permissions). On macOS the OS mic
+  // prompt is additionally gated by NSMicrophoneUsageDescription (build.mac.extendInfo).
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
+    callback(true);
+  });
   registerDistProtocol();
   protocol.handle("muzfetch", handleMuzfetch);
   registerIpc({ trayController });

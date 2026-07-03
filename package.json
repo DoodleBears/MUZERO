@@ -156,7 +156,10 @@
         }
       ],
       "category": "public.app-category.music",
-      "icon": "src-tauri/icons/icon.icns"
+      "icon": "src-tauri/icons/icon.icns",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "MUZERO uses the microphone only while you hold to talk to the AI DJ. Audio is sent to your configured speech-to-text provider and never stored."
+      }
     },
     "win": {
       "target": [
