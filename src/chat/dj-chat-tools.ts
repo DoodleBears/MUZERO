@@ -204,16 +204,6 @@ export const setAddTracksInputSchema = z.object({
 
 export type SetAddTracksInput = z.input<typeof setAddTracksInputSchema>;
 
-export const setAddBySearchInputSchema = z.object({
-  sessionId: z.string().min(1),
-  queries: z.array(z.string().min(1)).min(1).max(8),
-  match: z.enum(["any", "all"]).default("any"),
-  /** Safety cap on how many matches to add (no 50-item display limit applies here). */
-  limit: z.number().int().min(1).max(2000).default(1000),
-});
-
-export type SetAddBySearchInput = z.input<typeof setAddBySearchInputSchema>;
-
 export const createSetInputSchema = z.object({
   name: z.string().max(80).optional(),
   seedPrompt: z.string().default(""),
@@ -680,54 +670,6 @@ export async function executeSetAddTracks(
  * the agent says "make a lofi set" and gets back a count — so this scales to a big
  * library without blowing the token budget. Free / undoable.
  */
-export async function executeSetAddBySearch(
-  rawInput: SetAddBySearchInput,
-  deps: { db?: MuzeroDB } & LocalIdDeps = {},
-): Promise<
-  AgentWriteResult & {
-    diff: { sessionId: string; matched: number; added: number; skipped: number };
-  }
-> {
-  const input = setAddBySearchInputSchema.parse(rawInput);
-  const db = deps.db ?? defaultDb;
-  const sessionId = resolveMaybeSet(input.sessionId, deps);
-  const session = await getSession(sessionId, db);
-  if (!session) {
-    return {
-      status: "error",
-      commandId: "muzero.set.add_by_search",
-      summary: "Target set was not found.",
-      diff: { sessionId: input.sessionId, matched: 0, added: 0, skipped: 0 },
-      warnings: ["missing-session"],
-    };
-  }
-  const tracks = await listAllTracks(db);
-  const notes = await memoryNotesByTrack(
-    tracks.map((t) => t.id),
-    db,
-  );
-  const matched = searchMultiTerm(tracks, input.queries, input.match, notes).slice(0, input.limit);
-  const existing = new Set(session.trackIds);
-  const toAdd = matched.map((t) => t.id).filter((id) => !existing.has(id));
-  await prependTrackIds(session.id, toAdd, db);
-  const result = {
-    status: "ok",
-    commandId: "muzero.set.add_by_search",
-    summary: `Matched ${matched.length}; added ${toAdd.length} to the set (${matched.length - toAdd.length} already present).`,
-    diff: {
-      sessionId: encodeMaybeSet(session.id, deps),
-      matched: matched.length,
-      added: toAdd.length,
-      skipped: matched.length - toAdd.length,
-    },
-    warnings: [],
-  } satisfies AgentWriteResult & {
-    diff: { added: number; matched: number; sessionId: string; skipped: number };
-  };
-  await persistLocalIds(deps);
-  return result;
-}
-
 /**
  * Create a set and (optionally) populate it with existing local track ids in one
  * call — so "make a playlist with these songs" is a single step instead of
@@ -1167,7 +1109,7 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
   const tools: ToolSet = {
     library_search: tool({
       description:
-        'One search over the library, filtered by `types` (default ["track"]). Results use local ids (#T tracks, #S sets) plus resultRef #R for this result window. Keywords go in `queries` (match "any" gathers a genre, "all" narrows). `types` can include: "track" (title/caption/tags/notes/memories), "set" (match playlist NAMES), and "lyrics" (find songs by lyric words; each hit returns a snippet + timestamp). The track group projects to `fields` (default id+title) and pages via `cursor`/`nextCursor`. To curate a whole genre into a set without listing every id, prefer set_add_by_search.',
+        'One search over the library, filtered by `types` (default ["track"]). Results use local ids (#T tracks, #S sets) plus resultRef #R for this result window. Keywords go in `queries` (match "any" gathers a genre, "all" narrows). `types` can include: "track" (title/caption/tags/notes/memories), "set" (match playlist NAMES), and "lyrics" (find songs by lyric words; each hit returns a snippet + timestamp). The track group projects to `fields` (default id+title, add "artist" to judge fit) and pages via `cursor`/`nextCursor`. To curate a genre into a set, judge the results by title/artist and add the ones that fit with set_add_tracks (#T ids).',
       inputSchema: librarySearchInputSchema,
       execute: withLocalIdErrorHandling((input, options) =>
         executeLibrarySearch(input, {
@@ -1274,18 +1216,6 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
       inputSchema: setAddTracksInputSchema,
       execute: withLocalIdErrorHandling((input) =>
         executeSetAddTracks(input, {
-          db,
-          localIds: deps.localIds,
-          persistLocalIds: deps.persistLocalIds,
-        }),
-      ),
-    }),
-    set_add_by_search: tool({
-      description:
-        "Curate in one shot: search the whole library with `queries` (match any/all) and add every match to a #S set. No need to list track ids. Returns matched/added/skipped counts without exposing raw ids.",
-      inputSchema: setAddBySearchInputSchema,
-      execute: withLocalIdErrorHandling((input) =>
-        executeSetAddBySearch(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,

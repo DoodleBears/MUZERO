@@ -26,7 +26,6 @@ import {
   executeOnlineSearchTracks,
   executeProposeBriefs,
   executeSearchTracks,
-  executeSetAddBySearch,
   executeSetAddTracks,
   executeSetList,
   generateTracksInputSchema,
@@ -370,47 +369,6 @@ describe("search projection + multi-keyword + curate-by-search", () => {
     // the two pages are disjoint and together cover every match
     const ids = [...page1.tracks, ...page2.tracks].map((track) => track.id);
     expect(new Set(ids).size).toBe(3);
-  });
-
-  it("set_add_by_search grows an EXISTING set that already has members", async () => {
-    const { ids } = await seed();
-    const target = await createSession({ seedPrompt: "existing" }, db);
-    await executeSetAddTracks({ sessionId: target.id, trackIds: [ids[0]] }, { db }); // pre-existing member
-
-    const grown = await executeSetAddBySearch(
-      { sessionId: target.id, queries: ["lofi"], match: "any" },
-      { db },
-    );
-    expect(grown.diff.matched).toBe(2); // Rain Loop + Sunset Tape
-    expect(grown.diff.added).toBe(2); // both new; the pre-existing techno track stays
-    expect((await getSession(target.id, db))?.trackIds.length).toBe(3);
-  });
-
-  it("set_add_by_search curates every match into a set (deduped) without listing ids", async () => {
-    await seed();
-    const target = await createSession({ seedPrompt: "playlist" }, db);
-
-    const first = await executeSetAddBySearch(
-      { sessionId: target.id, queries: ["lofi"], match: "any" },
-      { db },
-    );
-    expect(first.status).toBe("ok");
-    expect(first.diff.matched).toBe(2);
-    expect(first.diff.added).toBe(2);
-    expect((await getSession(target.id, db))?.trackIds.length).toBe(2);
-
-    // Re-running is idempotent: same matches, nothing new added.
-    const again = await executeSetAddBySearch({ sessionId: target.id, queries: ["lofi"] }, { db });
-    expect(again.diff.matched).toBe(2);
-    expect(again.diff.added).toBe(0);
-    expect(again.diff.skipped).toBe(2);
-
-    const missing = await executeSetAddBySearch(
-      { sessionId: "ses_missing", queries: ["lofi"] },
-      { db },
-    );
-    expect(missing.status).toBe("error");
-    expect(missing.warnings).toContain("missing-session");
   });
 });
 

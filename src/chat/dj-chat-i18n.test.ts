@@ -26,7 +26,7 @@ describe("djChatSystemPrompt", () => {
     for (const loc of ["en", "zh", "ja", "ko"]) {
       const p = djChatSystemPrompt(loc);
       expect(p).toContain("#T");
-      expect(p).toContain("set_add_by_search");
+      expect(p).toContain("set_add_tracks");
       expect(p).toContain("dj_say");
     }
   });
@@ -37,7 +37,7 @@ describe("djChatSystemPrompt", () => {
     expect(djChatSystemPrompt("zh")).toContain("宁精勿滥");
     expect(djChatSystemPrompt("ja")).toContain("量より質");
     expect(djChatSystemPrompt("ko")).toContain("양보다 질");
-    // Every locale steers toward judged set_add_tracks over bulk set_add_by_search.
+    // Every locale steers toward judged set_add_tracks (the only add path now).
     for (const loc of ["en", "zh", "ja", "ko"]) {
       expect(djChatSystemPrompt(loc)).toContain("set_add_tracks");
     }
@@ -50,17 +50,12 @@ describe("djChatSystemPrompt", () => {
     expect(djChatSystemPrompt("ko")).toContain("만들기 전에 재사용");
   });
 
-  it("nudges dj_say-once + no-hedge curation in every locale (Phase 14, trace fixes)", () => {
+  it("nudges dj_say-once in every locale (Phase 14, trace fixes)", () => {
     // dj_say at most once per turn.
     expect(djChatSystemPrompt("en")).toContain("ONCE per turn");
     expect(djChatSystemPrompt("zh")).toContain("每回合最多调用一次");
     expect(djChatSystemPrompt("ja")).toContain("1ターンにつき最多1回");
     expect(djChatSystemPrompt("ko")).toContain("한 턴에 최대 한 번");
-    // Don't hedge: EITHER set_add_tracks OR set_add_by_search, not both.
-    expect(djChatSystemPrompt("en")).toContain("Don't hedge");
-    expect(djChatSystemPrompt("zh")).toContain("别脚踏两条船");
-    expect(djChatSystemPrompt("ja")).toContain("二股をかけない");
-    expect(djChatSystemPrompt("ko")).toContain("양다리 걸치지 마라");
   });
 });
 
@@ -91,7 +86,7 @@ describe("toolDescription", () => {
 
   it("keeps literal tokens (#T/#S, tool names, params) untranslated in overrides", () => {
     expect(toolDescription("library_search", "zh")).toContain("#T");
-    expect(toolDescription("library_search", "zh")).toContain("set_add_by_search");
+    expect(toolDescription("library_search", "zh")).toContain("set_add_tracks");
     expect(toolDescription("library_search", "ja")).toContain("cursor");
     expect(toolDescription("dj_generate_tracks", "ko")).toContain("TrackBriefs");
   });

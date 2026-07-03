@@ -1749,10 +1749,6 @@
         "label": "添加歌曲到歌单",
         "description": "把已知的本地歌曲加入任意歌单，并跳过重复或不存在的歌曲。"
       },
-      "set_add_by_search": {
-        "label": "按搜索策划歌单",
-        "description": "搜索曲库并一次性把所有匹配歌曲加入歌单。"
-      },
       "set_switch": {
         "label": "切换队列到歌单",
         "description": "把某个歌单载入播放队列，并可指定起始位置。"

@@ -6,7 +6,7 @@
  *
  * Literal tokens the model must reproduce verbatim are kept UNTRANSLATED inside
  * the translated prose: local-ref sigils (#T/#S/#R/#Q/#M), tool names
- * (set_add_by_search, library_search, …), API params (queries/types/fields,
+ * (library_search, set_add_tracks, …), API params (queries/types/fields,
  * cursor/nextCursor, "any"/"all", "track"/"set"/"lyrics"), and TrackBriefs.
  */
 
@@ -14,7 +14,7 @@ export type ChatPromptLocale = "en" | "zh" | "ja" | "ko";
 
 const ZH: Record<string, string> = {
   library_search:
-    '在音乐库里做一次搜索，按 `types` 过滤（默认 ["track"]）。结果用本地 id（#T 歌曲、#S 歌单）加本结果窗口的 resultRef #R。关键词放进 `queries`（match "any" 汇集一个流派，"all" 收窄）。`types` 可含："track"（标题/文案/标签/备注/回忆）、"set"（匹配歌单名称）、"lyrics"（用歌词词句找歌，每个命中返回片段+时间戳）。track 组按 `fields` 投影（默认 id+title），用 `cursor`/`nextCursor` 翻页。要把整个流派收进一个歌单而不逐一列 id，优先用 set_add_by_search。',
+    '在音乐库里做一次搜索，按 `types` 过滤（默认 ["track"]）。结果用本地 id（#T 歌曲、#S 歌单）加本结果窗口的 resultRef #R。关键词放进 `queries`（match "any" 汇集一个流派，"all" 收窄）。`types` 可含："track"（标题/文案/标签/备注/回忆）、"set"（匹配歌单名称）、"lyrics"（用歌词词句找歌，每个命中返回片段+时间戳）。track 组按 `fields` 投影（默认 id+title，加 "artist" 便于判断），用 `cursor`/`nextCursor` 翻页。要把一个流派收进歌单，按 title/artist 判断哪些合适，再用 set_add_tracks 加这些 #T id。',
   library_tree:
     '用简短本地 id 以树形浏览用户音乐库。scope "library" 看所有歌单加未分类歌曲，scope "set" 配 #S id 查看单个歌单，scope "unassigned" 整理不在任何歌单里的歌。结果用 cursor/nextCursor 翻页，含 resultRef 及每条结果的序号；操作要用 #T1/#S1 这样的实体 id。',
   library_list_tags: "列出各个本地标签及其使用次数。",
@@ -29,8 +29,6 @@ const ZH: Record<string, string> = {
   set_update: "更新歌单的自由元数据，如名称或种子 prompt。目标歌单用 #S 传入。",
   set_add_tracks:
     "把现有 #T 歌曲 id 加进 #S 歌单。对任意歌单都可用：来自 set_list/set_get 的已有歌单或刚创建的。幂等；只加入已知的本地歌曲。用于少量手挑的 id。",
-  set_add_by_search:
-    "一步策展：用 `queries`（match any/all）搜索整个音乐库，并把每个命中加进 #S 歌单。无需逐一列 id。返回 matched/added/skipped 计数，不暴露裸 id。",
   set_switch: "把某个 #S 歌单的歌曲载入播放队列，并返回编码后的队列摘要。",
   queue_add: "把 #T 歌曲 id 加进播放队列（next 下一首或 append 追加），并返回编码后的队列摘要。",
   queue_edit: "更新播放队列的循环模式。",
@@ -54,7 +52,7 @@ const ZH: Record<string, string> = {
 
 const JA: Record<string, string> = {
   library_search:
-    'ライブラリを `types` で絞って一度検索（既定 ["track"]）。結果はローカル id（#T 曲、#S セット）とこの結果ウィンドウの resultRef #R を使う。キーワードは `queries` に（match "any" はジャンルを集め、"all" は絞る）。`types` に含められるもの："track"（タイトル/キャプション/タグ/メモ/メモリー）、"set"（プレイリスト名で一致）、"lyrics"（歌詞の語で曲を探す。各ヒットはスニペット+タイムスタンプを返す）。track グループは `fields` に射影（既定 id+title）し、`cursor`/`nextCursor` でページング。ジャンル全体を id を列挙せずセットに集めるなら set_add_by_search を優先。',
+    'ライブラリを `types` で絞って一度検索（既定 ["track"]）。結果はローカル id（#T 曲、#S セット）とこの結果ウィンドウの resultRef #R を使う。キーワードは `queries` に（match "any" はジャンルを集め、"all" は絞る）。`types` に含められるもの："track"（タイトル/キャプション/タグ/メモ/メモリー）、"set"（プレイリスト名で一致）、"lyrics"（歌詞の語で曲を探す。各ヒットはスニペット+タイムスタンプを返す）。track グループは `fields` に射影（既定 id+title、"artist" を足すと判断しやすい）し、`cursor`/`nextCursor` でページング。ジャンルをセットに集めるには title/artist で合うものを判断し、その #T id を set_add_tracks で追加。',
   library_tree:
     '短いローカル id でユーザーライブラリをツリー表示。scope "library" は全セット＋未割り当ての曲、scope "set" は #S id で単一セットを、scope "unassigned" はどのセットにもない曲を整理。結果は cursor/nextCursor でページングし resultRef と各結果の序数を含む。操作は #T1/#S1 のような実体 id を使う。',
   library_list_tags: "ローカルの各タグと使用回数を一覧表示。",
@@ -69,8 +67,6 @@ const JA: Record<string, string> = {
   set_update: "名前や seed prompt などセットの自由メタデータを更新。対象セットは #S で渡す。",
   set_add_tracks:
     "既存の #T 曲 id を #S セットに追加。set_list/set_get の既存セットでも作りたてでも動く。冪等で、既知のローカル曲のみ追加。手選びの少数 id に使う。",
-  set_add_by_search:
-    "一括キュレーション：`queries`（match any/all）でライブラリ全体を検索し、各ヒットを #S セットに追加。id を列挙する必要はない。matched/added/skipped の件数を、生 id を出さずに返す。",
   set_switch: "ある #S セットの曲を再生キューに読み込み、エンコードされたキュー要約を返す。",
   queue_add:
     "#T 曲 id を再生キューに（next 次に or append 末尾に）追加し、エンコードされたキュー要約を返す。",
@@ -97,7 +93,7 @@ const JA: Record<string, string> = {
 
 const KO: Record<string, string> = {
   library_search:
-    '라이브러리를 `types`로 필터링해 한 번 검색(기본 ["track"]). 결과는 로컬 id(#T 곡, #S 세트)와 이 결과 창의 resultRef #R을 사용. 키워드는 `queries`에(match "any"는 장르를 모으고 "all"은 좁힘). `types`에는 "track"(제목/캡션/태그/메모/메모리), "set"(플레이리스트 이름 일치), "lyrics"(가사 단어로 곡 찾기; 각 히트는 스니펫+타임스탬프 반환)이 들어갈 수 있음. track 그룹은 `fields`로 투영(기본 id+title)하고 `cursor`/`nextCursor`로 페이징. 장르 전체를 id 나열 없이 세트로 모으려면 set_add_by_search를 우선.',
+    '라이브러리를 `types`로 필터링해 한 번 검색(기본 ["track"]). 결과는 로컬 id(#T 곡, #S 세트)와 이 결과 창의 resultRef #R을 사용. 키워드는 `queries`에(match "any"는 장르를 모으고 "all"은 좁힘). `types`에는 "track"(제목/캡션/태그/메모/메모리), "set"(플레이리스트 이름 일치), "lyrics"(가사 단어로 곡 찾기; 각 히트는 스니펫+타임스탬프 반환)이 들어갈 수 있음. track 그룹은 `fields`로 투영(기본 id+title, "artist"를 더하면 판단에 도움)하고 `cursor`/`nextCursor`로 페이징. 장르를 세트로 모으려면 title/artist로 맞는 것을 판단해 그 #T id를 set_add_tracks로 추가.',
   library_tree:
     '짧은 로컬 id로 사용자 라이브러리를 트리로 탐색. scope "library"는 모든 세트와 미분류 곡, scope "set"은 #S id로 단일 세트를, scope "unassigned"는 어떤 세트에도 없는 곡을 정리. 결과는 cursor/nextCursor로 페이징하며 resultRef와 결과별 순번을 포함; 작업은 #T1/#S1 같은 실체 id를 사용.',
   library_list_tags: "로컬 태그별 사용 횟수를 나열.",
@@ -112,8 +108,6 @@ const KO: Record<string, string> = {
   set_update: "이름이나 seed prompt 같은 세트의 자유 메타데이터를 업데이트. 대상 세트는 #S로 전달.",
   set_add_tracks:
     "기존 #T 곡 id를 #S 세트에 추가. set_list/set_get의 기존 세트든 방금 만든 세트든 동작. 멱등이며 알려진 로컬 곡만 추가. 직접 고른 소수 id에 사용.",
-  set_add_by_search:
-    "한 번에 큐레이션: `queries`(match any/all)로 라이브러리 전체를 검색해 각 히트를 #S 세트에 추가. id를 나열할 필요 없음. matched/added/skipped 개수를 원시 id 없이 반환.",
   set_switch: "어떤 #S 세트의 곡을 재생 큐에 로드하고 인코딩된 큐 요약을 반환.",
   queue_add: "#T 곡 id를 재생 큐에(next 다음 또는 append 뒤에) 추가하고 인코딩된 큐 요약을 반환.",
   queue_edit: "재생 큐의 반복 모드를 업데이트.",

@@ -1780,10 +1780,6 @@
         "label": "Add songs to set",
         "description": "Add known local song ids to any set, skipping duplicates and missing tracks."
       },
-      "set_add_by_search": {
-        "label": "Curate by search",
-        "description": "Search the library and add all matching local songs to a set in one step."
-      },
       "set_switch": {
         "label": "Switch queue to set",
         "description": "Load a set into the playback queue at a chosen starting point."

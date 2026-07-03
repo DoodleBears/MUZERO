@@ -756,12 +756,27 @@ dj_say: tool({
 - [x] 四语言 prompt 加 dj_say-once + no-hedge 引导；`dj-chat-i18n.test.ts` +1（8 断言）。
 - [x] `make check`（chat+voice 172 测）通过。行为改善需活 LLM 复验（去重是确定性兜底，prompt 是软引导）。
 
+### Phase 15：删除 `set_add_by_search`，强制判断式策展路径（Round-3）
+
+**问题**：即便 Phase 9/14 的 prompt 引导「宁精勿滥、别脚踏两条船」，活 LLM 端点 E2E 仍反复观测到模型**偏爱 `set_add_by_search{limit:1000}` 整批 dump**——因为「搜索即加入」这条工具本身就是一步到位的捷径，软引导压不住。用户拍板：**删掉这个工具**，让模型只能从 `library_search` 的结果里按 local `#T` id 判断式地加入歌单（`set_add_tracks`）。移除捷径 = 用工具形状（而非 prompt 措辞）强制「先判断后加入」。
+
+**改动**（唯一策展路径收敛为 `library_search`（拿 `#T` id）→ 世界知识判断 → `set_add_tracks`）：
+- `dj-chat-tools.ts`：删 `setAddBySearchInputSchema`/`SetAddBySearchInput`/`executeSetAddBySearch`/`set_add_by_search` 工具注册；`library_search` 描述改指向 set_add_tracks。（`searchMultiTerm`/`listAllTracks`/`memoryNotesByTrack`/`prependTrackIds` 仍被 `executeSearchTracks` 等复用，非孤儿。）
+- 同步清理：`dj-tool-display.ts`（图标+switch）、`dj-chat-tool-metadata.ts`（parity 数组 23→22）、`dj-chat-tool-descriptions.ts`（zh/ja/ko 三 override + header + 三处 library_search 描述改指向 set_add_tracks）、四语言 system prompt（EN/zh/ja/ko 策展段重写为「library_search 拿候选 → set_add_tracks 加」形状，删「脚踏两条船」句）、四语言 `chat.tools.set_add_by_search` i18n 键。
+- 测试：`dj-chat-tools.test.ts` 删 2 个 executeSetAddBySearch 测；`dj-chat-i18n.test.ts` 改 parity（22 工具）+ 3 处字面 token 断言（library_search → set_add_tracks）+ 去 no-hedge 断言。
+
+**Phase 15 Checklist**
+- [x] 删 `set_add_by_search` 工具 + schema + execute + 图标 + metadata + 三语 override + i18n 键。
+- [x] 四语言 prompt 策展段重写为判断式路径（`library_search` #T → `set_add_tracks`）。
+- [x] 测试更新（tools.test −2、i18n.test parity+token）；`make check`（typecheck + biome + chat 133 测）全绿。行为改善需活 LLM 复验（现在无捷径可走）。
+
 ---
 
 ## 11. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-3) | **Phase 15 完成**：删除 `set_add_by_search` 工具（用户拍板）。软引导（Phase 9/14）压不住模型偏爱「搜索即整批加入」的捷径——移除工具本身，把策展唯一路径收敛为 `library_search`（拿 `#T` id）→ 世界知识判断 → `set_add_tracks`。删 schema/execute/工具注册/图标/metadata（parity 23→22）/三语 override/四语言 i18n 键 + 四语言 prompt 策展段重写（删「脚踏两条船」句）；测试 tools.test −2、i18n.test 改 parity+字面 token。`make check`（typecheck + biome + chat 133 测）全绿。用工具形状而非 prompt 措辞强制判断式策展。 |
 | 2026-07-03 | Claude (round-3) | **Phase 14 完成**：用 Phase 13 `/chat/trace` 实测（128 tool-call）找到并修两个不合理设计——① **dj_say 刷屏**（连续 4 次同句）→ `emitDjReply` 连续去重（+`resetDjReplyDedup`）；② **策展脚踏两条船**（同集 set_add_tracks + set_add_by_search 都做→膨胀 100 首）→ 四语言 prompt 加「dj_say 每回合一次」+「别脚踏两条船（二选一）」。2 新测，`make check`（chat+voice 172 测）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 13 完成**：E2E harness——`GET /chat/trace` 控制端点读活跃会话 tool-call trace（纯函数 `extractToolCalls`/`summarizeToolCalls` + bridge `readChatTrace` 截断非密载荷）。让 E2E 能程序化观测 DJ 实际调了哪些工具、传了什么，用于发现不合理设计。4 新测，`make check` + `node --check` 通过。 |
 | 2026-07-03 | Claude (round-3) | **Phase 11.1**：按用户反馈把 Phase 11 的"每回合注入 40 个歌单名"改为**可搜索/分页的 `set_list` 工具**（`query` 名字过滤+留空=updated 倒序、`cursor`/`limit`+`nextCursor`+`total`），`buildSetsContext` 瘦身为一行 count 提示（`db.sessions.count()`、不 dump），四语言 prompt/工具描述改指向 set_list。适配大量歌单、token 恒定。`executeSetList` +3 测，`make check`（3547 测试）全绿。 |

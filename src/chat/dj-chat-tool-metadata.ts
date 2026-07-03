@@ -30,7 +30,6 @@ export const DJ_CHAT_TOOL_METADATA = [
   tool("set_create", "sets"),
   tool("set_update", "sets"),
   tool("set_add_tracks", "sets"),
-  tool("set_add_by_search", "sets"),
   tool("set_switch", "queue"),
   tool("queue_add", "queue"),
   tool("queue_edit", "queue"),

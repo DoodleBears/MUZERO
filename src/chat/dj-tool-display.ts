@@ -17,7 +17,6 @@ const TOOL_ICON: Record<string, string> = {
   set_create: "list-plus",
   set_update: "pencil",
   set_add_tracks: "list-plus",
-  set_add_by_search: "list-plus",
   set_switch: "list-music",
   queue_add: "list-ordered",
   queue_edit: "repeat",
@@ -59,7 +58,6 @@ export function summarizeToolInput(toolName: string, input: unknown): string | u
 
   switch (toolName) {
     case "library_search":
-    case "set_add_by_search":
     case "online_search_tracks":
       return queries();
     case "set_create":
