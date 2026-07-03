@@ -974,7 +974,20 @@ export async function executeLibrarySearch(
   return out;
 }
 
-export async function executeSetList(deps: { db?: MuzeroDB } & LocalIdDeps = {}): Promise<
+export const setListInputSchema = z.object({
+  /** Keywords over set NAMES; omit/blank = all sets, newest-updated first. */
+  query: z.string().optional(),
+  /** Page size. */
+  limit: z.number().int().min(1).max(100).default(30),
+  /** Page offset; pass the previous call's `nextCursor` to page. */
+  cursor: z.number().int().min(0).default(0),
+});
+export type SetListInput = z.input<typeof setListInputSchema>;
+
+export async function executeSetList(
+  rawInput: SetListInput = {},
+  deps: { db?: MuzeroDB } & LocalIdDeps = {},
+): Promise<
   | DjSession[]
   | {
       items: Array<ReturnType<typeof projectSetForAgent> & { ordinal: number }>;
@@ -982,13 +995,19 @@ export async function executeSetList(deps: { db?: MuzeroDB } & LocalIdDeps = {})
       returned: number;
       tool: "set_list";
       total: number;
+      nextCursor: number | null;
     }
 > {
+  const input = setListInputSchema.parse(rawInput);
   const db = deps.db ?? defaultDb;
-  const sessions = await listSessions(db);
-  if (!deps.localIds) return sessions;
-  const items = withOrdinal(sessions.map((session) => projectSetForAgent(session, deps)));
-  const ref = resultRef("set_list", deps, { returned: items.length, total: items.length });
+  const query = input.query?.trim() ?? "";
+  const all = await listSessions(db); // updatedAt desc
+  const matched = query ? all.filter((session) => freeTextMatches(query, [session.name])) : all;
+  const page = matched.slice(input.cursor, input.cursor + input.limit);
+  if (!deps.localIds) return page;
+  const items = withOrdinal(page.map((session) => projectSetForAgent(session, deps)));
+  const end = input.cursor + page.length;
+  const ref = resultRef("set_list", deps, { returned: items.length, total: matched.length });
   await persistLocalIds(deps);
   return {
     items,
@@ -999,7 +1018,8 @@ export async function executeSetList(deps: { db?: MuzeroDB } & LocalIdDeps = {})
       }),
     returned: items.length,
     tool: "set_list",
-    total: items.length,
+    total: matched.length,
+    nextCursor: end < matched.length ? end : null,
   };
 }
 
@@ -1191,10 +1211,10 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
     }),
     set_list: tool({
       description:
-        "List local sets, newest updated first. Returns compact #S set refs in a resultRef #R window.",
-      inputSchema: z.object({}),
-      execute: withLocalIdErrorHandling((_input, options) =>
-        executeSetList({
+        "Find/list local sets (歌单). Optional `query` matches set NAMES (omit/blank = all sets, newest-updated first). Paged via `cursor`/`limit` — if `nextCursor` is non-null, call again with cursor set to it. Returns compact #S set refs in a resultRef #R window. Use this to find an existing set to REUSE (set_add_tracks) before creating a near-duplicate.",
+      inputSchema: setListInputSchema,
+      execute: withLocalIdErrorHandling((input, options) =>
+        executeSetList(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,

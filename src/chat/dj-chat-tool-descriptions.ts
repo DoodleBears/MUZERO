@@ -20,7 +20,8 @@ const ZH: Record<string, string> = {
   library_list_tags: "列出各个本地标签及其使用次数。",
   now_playing_get:
     "读取当前播放队列与「正在播放自」的歌单上下文。返回一个 resultRef #R 以及本地 #Q 队列条目、#T 歌曲引用、#S 上下文歌单引用。",
-  set_list: "列出本地歌单，最近更新的在前。在 resultRef #R 窗口里返回紧凑的 #S 歌单引用。",
+  set_list:
+    "查找/列出本地歌单。可选 `query` 匹配歌单名称（省略/留空 = 全部歌单、最近更新在前）。用 `cursor`/`limit` 翻页——若 `nextCursor` 非空就带上它再调。在 resultRef #R 窗口里返回紧凑的 #S 歌单引用。用它先找到可复用的已有歌单（set_add_tracks），再决定是否新建近乎重复的。",
   set_get:
     "按 #S id 读取单个本地歌单及其有序歌曲。在 resultRef #R 窗口里把歌单作为 #S、歌曲作为 #T 返回。",
   set_create:
@@ -60,7 +61,7 @@ const JA: Record<string, string> = {
   now_playing_get:
     "現在の再生キューと「再生元」セットのコンテキストを読む。resultRef #R とローカルの #Q キュー項目、#T 曲参照、#S コンテキストセット参照を返す。",
   set_list:
-    "ローカルセットを更新の新しい順で一覧。resultRef #R ウィンドウ内でコンパクトな #S セット参照を返す。",
+    "ローカルセットを検索/一覧。任意の `query` はセット名に一致（省略/空 = 全セット・更新の新しい順）。`cursor`/`limit` でページング——`nextCursor` が非 null ならそれを cursor にして再度呼ぶ。resultRef #R ウィンドウ内でコンパクトな #S セット参照を返す。ほぼ重複を作る前に、再利用できる既存セットを見つける（set_add_tracks）のに使う。",
   set_get:
     "#S id で単一のローカルセットとその順序付き曲を読む。resultRef #R ウィンドウ内でセットを #S、曲を #T として返す。",
   set_create:
@@ -103,7 +104,7 @@ const KO: Record<string, string> = {
   now_playing_get:
     "현재 재생 큐와 '재생 출처' 세트 컨텍스트를 읽음. resultRef #R과 로컬 #Q 큐 항목, #T 곡 참조, #S 컨텍스트 세트 참조를 반환.",
   set_list:
-    "로컬 세트를 최근 업데이트 순으로 나열. resultRef #R 창 안에 간결한 #S 세트 참조를 반환.",
+    "로컬 세트 찾기/목록. 선택적 `query`는 세트 이름과 일치(생략/공백 = 모든 세트, 업데이트 최신순). `cursor`/`limit`로 페이징 — `nextCursor`가 non-null이면 그 값을 cursor로 다시 호출. resultRef #R 창 안에 간결한 #S 세트 참조를 반환. 거의 중복을 만들기 전에 재사용할 기존 세트를 찾는 데(set_add_tracks) 사용.",
   set_get:
     "#S id로 단일 로컬 세트와 정렬된 곡을 읽음. resultRef #R 창 안에 세트를 #S, 곡을 #T로 반환.",
   set_create:

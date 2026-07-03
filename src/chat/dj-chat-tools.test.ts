@@ -14,6 +14,7 @@ import {
 import { trackBriefSchema } from "@/dj/dj-brief-schema";
 import { createDjEngine } from "@/dj/dj-engine";
 import { createMockMusicGenProvider } from "@/musicgen/mock-provider";
+import { createDjChatLocalIdRegistry } from "./dj-chat-local-ids";
 import {
   createDjChatTools,
   executeAddMemory,
@@ -27,6 +28,7 @@ import {
   executeSearchTracks,
   executeSetAddBySearch,
   executeSetAddTracks,
+  executeSetList,
   generateTracksInputSchema,
   proposeBriefsInputSchema,
 } from "./dj-chat-tools";
@@ -44,6 +46,53 @@ afterEach(async () => {
   await new Promise<void>((resolve) => {
     const req = indexedDB.deleteDatabase(dbName);
     req.onsuccess = req.onerror = () => resolve();
+  });
+});
+
+describe("executeSetList (query + pagination)", () => {
+  async function seed(names: string[]) {
+    for (const name of names) await createSession({ name, seedPrompt: "" }, db);
+  }
+
+  it("returns all sets with a resultRef when no query, and nextCursor null", async () => {
+    await seed(["Jazz Nights", "Focus Work", "Rainy Lofi"]);
+    const result = await executeSetList({}, { db, localIds: createDjChatLocalIdRegistry() });
+    if (Array.isArray(result)) throw new Error("expected paged object");
+    expect(result.total).toBe(3);
+    expect(result.returned).toBe(3);
+    expect(result.nextCursor).toBeNull();
+    expect(result.items[0]).toMatchObject({ ordinal: 1 });
+  });
+
+  it("filters by a name query (blank/absent = all)", async () => {
+    await seed(["Jazz Nights", "Focus Work", "Late Jazz"]);
+    const result = await executeSetList(
+      { query: "jazz" },
+      { db, localIds: createDjChatLocalIdRegistry() },
+    );
+    if (Array.isArray(result)) throw new Error("expected paged object");
+    expect(result.total).toBe(2);
+    expect(result.items.map((i) => i.name).sort()).toEqual(["Jazz Nights", "Late Jazz"]);
+  });
+
+  it("paginates with cursor/limit and reports nextCursor", async () => {
+    await seed(["a", "b", "c", "d", "e"]);
+    const page1 = await executeSetList(
+      { limit: 2, cursor: 0 },
+      { db, localIds: createDjChatLocalIdRegistry() },
+    );
+    if (Array.isArray(page1)) throw new Error("expected paged object");
+    expect(page1.returned).toBe(2);
+    expect(page1.total).toBe(5);
+    expect(page1.nextCursor).toBe(2);
+
+    const lastPage = await executeSetList(
+      { limit: 2, cursor: 4 },
+      { db, localIds: createDjChatLocalIdRegistry() },
+    );
+    if (Array.isArray(lastPage)) throw new Error("expected paged object");
+    expect(lastPage.returned).toBe(1);
+    expect(lastPage.nextCursor).toBeNull();
   });
 });
 

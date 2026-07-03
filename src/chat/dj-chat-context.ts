@@ -1,5 +1,5 @@
 import type { MuzeroDB } from "@/db/muzero-db";
-import { getPlayQueue, getSession, getTrack, listSessions } from "@/db/repositories";
+import { getPlayQueue, getSession, getTrack } from "@/db/repositories";
 import { type DjChatLocalIdRegistry, encodeSetRef, encodeTrackRef } from "./dj-chat-local-ids";
 
 /**
@@ -44,33 +44,14 @@ export async function buildNowPlayingContext(
   return lines.join("\n");
 }
 
-/** How many sets to list inline before pointing the DJ at `set_list` for the rest. */
-export const SETS_CONTEXT_LIMIT = 40;
-
 /**
- * A compact list of the listener's existing 歌单 (name + id + track count), injected
- * each turn so the DJ can REUSE a matching set instead of creating a near-duplicate
- * (and can reference set ids without a `set_list` call). Newest-updated first,
- * capped to {@link SETS_CONTEXT_LIMIT}. Empty string when there are no sets.
+ * A one-line awareness hint that the listener HAS existing 歌单, so the DJ checks
+ * (via the searchable, paginated `set_list` tool) to REUSE one before creating a
+ * near-duplicate — instead of dumping every set name into the prompt each turn
+ * (which doesn't scale to large libraries). Empty string when there are no sets.
  */
-export async function buildSetsContext(
-  db: MuzeroDB,
-  localIds?: DjChatLocalIdRegistry,
-  limit: number = SETS_CONTEXT_LIMIT,
-): Promise<string> {
-  const sessions = await listSessions(db);
-  if (sessions.length === 0) return "";
-  const lines = [
-    "Your existing sets (歌单) — reuse a matching one (set_add_tracks) before creating a duplicate:",
-  ];
-  for (const session of sessions.slice(0, limit)) {
-    const ref = localIds ? encodeSetRef(session.id, localIds) : session.id;
-    lines.push(
-      `- "${session.name.trim() || "Untitled set"}" (id: ${ref}, ${session.trackIds.length} tracks)`,
-    );
-  }
-  if (sessions.length > limit) {
-    lines.push(`- …and ${sessions.length - limit} more — use set_list to see the rest.`);
-  }
-  return lines.join("\n");
+export async function buildSetsContext(db: MuzeroDB): Promise<string> {
+  const count = await db.sessions.count();
+  if (count === 0) return "";
+  return `You have ${count} saved set(s) (歌单). Before creating a new set, call set_list (optionally with a name query) to find an existing one to REUSE with set_add_tracks — don't make near-duplicates, and never leave a set empty.`;
 }

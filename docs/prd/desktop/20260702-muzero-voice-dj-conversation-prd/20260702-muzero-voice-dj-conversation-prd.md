@@ -711,12 +711,28 @@ dj_say: tool({
 - [x] search-page「歌单」墙 3 个来源 `FilterChip` + `shown` 过滤；i18n×4。
 - [x] `make check`（typecheck + biome + 3548 测试）全绿。（UI 随 HMR 在运行的 Electron 实例上即见。）
 
+### Phase 11.1：把「已有歌单」从每回合上下文注入改为可搜索/分页的 `set_list` 工具（Round-3，用户反馈）
+
+**背景**：用户指出——每回合把 40 个歌单名塞进上下文不 scale、也浪费 token，更适合做成一个**可搜索、可分页**的工具（keywords 可留空，留空=按 updated 倒序）。
+
+- **`set_list` 增强为搜索/分页工具**：`setListInputSchema { query?, limit=30, cursor=0 }` —— `query` 匹配歌单名（`freeTextMatches`，留空=全部 updated 倒序），`cursor`/`limit` 分页、返回 `nextCursor`（null=末页）+ `total`。工具描述（en + zh/ja/ko override）更新。
+- **`buildSetsContext` 瘦身为一行 count 提示**（不再 dump 名字）：`db.sessions.count()` → 「你有 N 个歌单；新建前先用 set_list（可带名字 query）找可复用的、别建重复、别留空集」。scale 到大库、token 恒定。
+- **prompt 引导**（四语言）改为「用 set_list（可带名字 query）找已有歌单来复用」（不再说"列在下方"）。
+
+**Phase 11.1 Checklist**
+- [x] `executeSetList(input, deps)`：query 名字过滤 / cursor+limit 分页 / nextCursor / total；空 query = 全部。`dj-chat-tools.test.ts` +3（全量/查询/分页），既有 `set_list` 测（空 input）仍过。
+- [x] `set_list` 工具 schema + 描述（含 query/分页）+ 四语言 override 更新。
+- [x] `buildSetsContext` → count 提示（`db.sessions.count()`，无 dump/localIds）；context 测改为断言 count 提示、不含名字。
+- [x] 四语言 prompt 引导改指向 `set_list`；`dj-chat-i18n.test.ts` 特征短语不变仍过。
+- [x] `make check`（typecheck + biome + 3547 测试）全绿。
+
 ---
 
 ## 11. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-3) | **Phase 11.1**：按用户反馈把 Phase 11 的"每回合注入 40 个歌单名"改为**可搜索/分页的 `set_list` 工具**（`query` 名字过滤+留空=updated 倒序、`cursor`/`limit`+`nextCursor`+`total`），`buildSetsContext` 瘦身为一行 count 提示（`db.sessions.count()`、不 dump），四语言 prompt/工具描述改指向 set_list。适配大量歌单、token 恒定。`executeSetList` +3 测，`make check`（3547 测试）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 12 完成**：歌单来源 UI 过滤（AI/human/导入）。加 `DjSession.origin?`（additive）+ `createSession` 接线 + DJ `set_create` 打 `origin:"ai"`；纯分类器 `src/lib/set-origin.ts` `resolveSetOrigin`（显式优先，否则 imported/ai/human 推断，忽略默认为 true 的 autoExtend）+ `filterSetsByOrigin`，6 测；search-page「歌单」墙加 3 个来源 `FilterChip` + `shown` 过滤，i18n×4 `gallery.origin.*`。`make check`（3548 测试）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 11 完成**：DJ 复用已有歌单、避免重复建空集（接 Phase 10 里模型重复建「专注」空集的反馈）。`buildSetsContext` 每回合注入已有歌单名/#S id/曲数（newest-first、上限 40、超出指向 `set_list`），`dj-chat-agent` 与 now-playing 顺序注入；四语言 prompt 加「先复用再新建、别留空集」引导。`buildSetsContext` 5 测 + i18n 断言，`make check`（chat 127 测）全绿。 |
 | 2026-07-03 | Claude (round-3) | **Phase 10 完成（手测/E2E 反馈两修复）**：**Fix A** — dj_say 偶尔把 `AgentWriteResult` JSON 当回话显示/朗读（根因：模型偶把结果 JSON 当 assistant 文本，回话路径原样透传，通知+TTS 同 `text` 双错）→ `sanitizeReplyText`（`deliverDjReply` choke point：纯文本透传/解包 dj_say `diff.text`/丢弃其它 JSON），8 新测。**Fix B** — Fish 选中音色持久化 → `selectVoicePatch` 选中即缓存元数据+并入用过列表（`ttsAddedVoiceIds`/`ttsAddedVoiceCache` 去重幂等），下次无需搜索即显示高亮，3 新测；`voice-tts-settings` 接线。`make check` 全绿。 |

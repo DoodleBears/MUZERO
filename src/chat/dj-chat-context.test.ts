@@ -64,34 +64,19 @@ describe("buildSetsContext", () => {
     expect(await buildSetsContext(db)).toBe("");
   });
 
-  it("lists existing sets with #S refs, names, and track counts (newest first)", async () => {
-    db = new MuzeroDB("dj-chat-sets-list-test");
-    const a = await createSession({ name: "Focus Work", seedPrompt: "" }, db);
-    await db.sessions.update(a.id, { trackIds: ["t1", "t2"] });
-    const b = await createSession({ name: "Chill Vibes", seedPrompt: "" }, db);
-    await db.sessions.update(b.id, { trackIds: ["t3"] });
-    const localIds = createDjChatLocalIdRegistry();
+  it("is a compact count hint pointing at set_list (not a full dump of names)", async () => {
+    db = new MuzeroDB("dj-chat-sets-hint-test");
+    await createSession({ name: "Focus Work", seedPrompt: "" }, db);
+    await createSession({ name: "Chill Vibes", seedPrompt: "" }, db);
 
-    const context = await buildSetsContext(db, localIds);
+    const context = await buildSetsContext(db);
 
-    expect(context).toContain("existing sets");
-    expect(context).toContain("Focus Work");
-    expect(context).toContain("Chill Vibes");
-    expect(context).toContain("2 tracks");
-    expect(context).toContain("1 tracks");
-    // Uses local #S refs, not raw ids.
-    expect(context).toContain("#S");
-    expect(context).not.toContain(a.id);
-    // Newest-updated set (Chill Vibes) is listed before the older one.
-    expect(context.indexOf("Chill Vibes")).toBeLessThan(context.indexOf("Focus Work"));
-  });
-
-  it("caps the inline list and points at set_list for the rest", async () => {
-    db = new MuzeroDB("dj-chat-sets-cap-test");
-    for (let i = 0; i < 5; i++) await createSession({ name: `Set ${i}`, seedPrompt: "" }, db);
-    const context = await buildSetsContext(db, undefined, 3);
-    expect(context).toContain("…and 2 more");
-    expect(context).toContain("use set_list");
+    expect(context).toContain("2 saved set");
+    expect(context).toContain("set_list");
+    expect(context).toContain("REUSE");
+    // No per-set dump — the searchable/paginated tool handles that at scale.
+    expect(context).not.toContain("Focus Work");
+    expect(context).not.toContain("Chill Vibes");
   });
 });
 

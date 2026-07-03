@@ -63,7 +63,7 @@ export function createDjChatTransport({
       // instead of creating duplicates) without spending tool calls. Sequential so
       // the two don't race on the shared local-id registry.
       const nowPlaying = await buildNowPlayingContext(db, localIds);
-      const setsContext = await buildSetsContext(db, localIds);
+      const setsContext = await buildSetsContext(db);
       await persistLocalIds();
       const contextBlocks = [nowPlaying, setsContext].filter(Boolean).join("\n\n");
       const agent = new ToolLoopAgent({
