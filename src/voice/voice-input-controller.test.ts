@@ -191,4 +191,17 @@ describe("VoiceInputController", () => {
     await h.controller.stop();
     expect(h.transcripts).toHaveLength(0);
   });
+
+  it("injectTranscript feeds text through onTranscript (dev/E2E seam, no mic)", () => {
+    h.controller.injectTranscript("  放点更 chill 的  ");
+    expect(h.transcripts).toEqual(["放点更 chill 的"]);
+    expect(h.transcribe).not.toHaveBeenCalled(); // bypasses the recorder entirely
+  });
+
+  it("injectTranscript is ignored while not idle / for blank text", async () => {
+    h.controller.injectTranscript("   ");
+    await h.controller.start();
+    h.controller.injectTranscript("mid-recording");
+    expect(h.transcripts).toHaveLength(0);
+  });
 });

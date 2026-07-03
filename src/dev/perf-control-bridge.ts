@@ -32,6 +32,7 @@ import {
   runShortcutAction,
 } from "@/shortcuts/actions";
 import { normalizeTab, useNavStore } from "@/stores/nav-store";
+import { useNotificationStore } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { buildDownloadPlan } from "@/streamsrc/download-plan";
 import {
@@ -41,6 +42,7 @@ import {
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { parseBareStreamId, parseStreamLink } from "@/streamsrc/stream-link";
+import { getVoiceInputController } from "@/voice/voice-input-runtime";
 import { getSearchPerfSnapshot, resetSearchPerf } from "@/workers/search-client";
 import { muxCopyTracksViaWorker } from "@/workers/video-mux-client";
 import { getSearchDriver } from "./search-drive";
@@ -70,8 +72,12 @@ export interface PerfControlCommand {
     | "resolveLink"
     | "syncPlaylists"
     | "downloadQueue"
-    | "playbackContext";
+    | "playbackContext"
+    | "voiceTranscript"
+    | "notifications";
   actionId?: string;
+  /** voiceTranscript: the text to feed into the voice→DJ pipeline (no mic). */
+  text?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
   tab?: string;
@@ -102,6 +108,10 @@ interface PerfCommandHandlerDeps {
   renderTrace?: (action?: string) => unknown;
   /** Live-request harness: "sample" lists queued tracks to query; "inject" routes one. */
   liveRequest?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** Voice-DJ E2E: feed a transcript into the voice pipeline as if spoken (no mic). */
+  injectVoiceTranscript?: (text: string) => void;
+  /** Read the current notification queue (the dj_say reply lands here). */
+  readNotifications?: () => unknown;
   /** List sessions (id/name/trackCount) so a perf run can switch playlists by size. */
   listSessions?: () => Promise<unknown>;
   /** Seed a small playable set for harnesses that run against a fresh profile DB. */
@@ -298,6 +308,17 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         if (!deps.liveRequest) throw new Error("liveRequest not wired");
         return deps.liveRequest(command.payload ?? {});
       }
+      case "voiceTranscript": {
+        if (!deps.injectVoiceTranscript) throw new Error("injectVoiceTranscript not wired");
+        const text = String(command.text ?? command.payload?.text ?? "").trim();
+        if (!text) throw new Error("text required");
+        deps.injectVoiceTranscript(text);
+        return { injected: text };
+      }
+      case "notifications": {
+        if (!deps.readNotifications) throw new Error("readNotifications not wired");
+        return deps.readNotifications();
+      }
       case "sessions": {
         if (!deps.listSessions) throw new Error("listSessions not wired");
         return deps.listSessions();
@@ -365,6 +386,16 @@ export function startPerfControlBridge(): void {
     runAction: (actionId) =>
       runShortcutAction(actionId, createShortcutActionRunnerContext(useNavStore.getState().setTab)),
     listActionIds: listShortcutActionIds,
+    injectVoiceTranscript: (text) => getVoiceInputController().injectTranscript(text),
+    // dj_say replies land in the notification queue — surfaced for the voice E2E.
+    readNotifications: () => ({
+      queue: useNotificationStore.getState().queue.map((n) => ({
+        id: n.id,
+        type: n.type,
+        message: n.message,
+        actions: n.actions?.map((a) => a.label),
+      })),
+    }),
     saveSettings: (patch) => saveSettings(patch as never),
     // Whitelist of non-secret display/perf settings — NEVER return BYOK keys/endpoints
     // over the control endpoint (CLAUDE.md rule 2). Enough for switch-fps A/B snapshots.

@@ -75,6 +75,10 @@ export interface VoiceInputController {
   cancel(): void;
   /** hold: down=start / up=stop. toggle: press flips idle↔recording. */
   toggle(): Promise<void>;
+  /** Dev/test seam: feed a transcript straight into the pipeline as if the ASR
+   *  produced it (no microphone). Fires the same `onTranscript` wiring a real
+   *  recording would. Only acts when idle. */
+  injectTranscript(text: string): void;
   setCallbacks(callbacks: VoiceInputCallbacks): void;
   dispose(): void;
 }
@@ -212,6 +216,11 @@ export function createVoiceInputController(deps: VoiceInputDeps): VoiceInputCont
     stop,
     cancel,
     toggle,
+    injectTranscript: (text) => {
+      const clean = text.trim();
+      if (state !== "idle" || !clean) return;
+      callbacks.onTranscript?.(clean, { text: clean });
+    },
     setCallbacks: (next) => {
       callbacks = next;
     },
