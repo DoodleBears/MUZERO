@@ -30,6 +30,18 @@ describe("djChatSystemPrompt", () => {
       expect(p).toContain("dj_say");
     }
   });
+
+  it("carries the curation-discipline guidance in every locale (Phase 9)", () => {
+    // Distinctive per-locale phrase for "quality over quantity, judge by world knowledge".
+    expect(djChatSystemPrompt("en")).toContain("quality over quantity");
+    expect(djChatSystemPrompt("zh")).toContain("宁精勿滥");
+    expect(djChatSystemPrompt("ja")).toContain("量より質");
+    expect(djChatSystemPrompt("ko")).toContain("양보다 질");
+    // Every locale steers toward judged set_add_tracks over bulk set_add_by_search.
+    for (const loc of ["en", "zh", "ja", "ko"]) {
+      expect(djChatSystemPrompt(loc)).toContain("set_add_tracks");
+    }
+  });
 });
 
 describe("toolDescription", () => {

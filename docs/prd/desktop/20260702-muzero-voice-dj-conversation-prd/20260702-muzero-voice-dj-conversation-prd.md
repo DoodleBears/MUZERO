@@ -23,7 +23,7 @@
 | 6 | Round-2 优化：播放淡入淡出 / crossfade（`crossfadeEnabled` 默认开；切歌 + 暂停/恢复淡变） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 7 | Round-2 优化：Composer 录音按钮（快捷键之外手动点录音）+ tool-call 执行性能核查 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 8 | Round-3 优化：LLM-facing system prompt + 23 工具 description 按界面语言 i18n（英文 canonical + fallback） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
-| 9 | Round-3 优化：DJ 策展纪律——用世界知识判断候选歌曲、避免一股脑塞歌单 | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 9 | Round-3 优化：DJ 策展纪律——用世界知识判断候选歌曲、避免一股脑塞歌单 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -657,9 +657,18 @@ dj_say: tool({
 - [x] 单测：`dj-chat-i18n.test.ts` 9 测（prompt 四语言 + fallback + token；toolDescription 覆盖/fallback/parity/token；createDjChatTools 本地化 + 默认英文）。
 - [x] `make check`（typecheck + biome + 3524 测试）全绿。
 
-### Phase 9：DJ 策展纪律——世界知识判断、避免一股脑塞歌单（Round-3，用户反馈，待做）
+### Phase 9：DJ 策展纪律——世界知识判断、避免一股脑塞歌单（Round-3，用户反馈）
 
-**背景**：用户观察「现在有点过于一股脑塞进歌单了」——DJ 用 jazz/instrumental 等词过滤时，直接把 `set_add_by_search` 的整批命中塞进歌单，而没用**世界知识**按歌名/歌手判断哪些真的符合。目标：在（已本地化的）system prompt 加策展纪律指引——搜到候选后按 title/artist 用世界知识筛选，`set_add_tracks` 只加符合的；`set_add_by_search` 保留给用户自维护的标签等无歧义场景。TDD：prompt 各语言含该指引。
+**背景**：用户观察「现在有点过于一股脑塞进歌单了」——DJ 用 jazz/instrumental 等词过滤时，直接把 `set_add_by_search` 的整批命中塞进歌单，而没用**世界知识**按歌名/歌手判断哪些真的符合。
+
+- 在（Phase 8 已本地化的）system prompt「策展」段后、「回忆」段前，加一段**策展纪律**指引（四语言同步）：流派/心情/氛围类请求**不要**整批 `set_add_by_search`；标签/标题有噪声（搜 jazz 会带出贴错或不对味的歌）；应先 `library_search` 取候选（fields ["id","title","artist"]），用**世界知识**按歌/歌手**只留**真正符合的，`set_add_tracks` 只加这些；`set_add_by_search` 保留给用户自维护标签（如 "#gym"）等无歧义场景。**宁精勿滥**。
+- 字面 token（`set_add_tracks`/`set_add_by_search`/`library_search`/`fields`）保留不译。
+
+**Phase 9 Checklist**
+- [x] 四语言 system prompt 均含策展纪律段（en「quality over quantity」/ zh「宁精勿滥」/ ja「量より質」/ ko「양보다 질」），且都引导优先 `set_add_tracks`（判断后）而非整批 `set_add_by_search`。
+- [x] 单测：`dj-chat-i18n.test.ts` 新增策展纪律断言（各语言特征短语 + `set_add_tracks` 出现）。共 10 测。
+- [x] `make check`（typecheck + biome + chat 123 测）通过。
+- 备注：行为质量（是否真的少塞、判断更准）需**活 LLM** 手测/端点 E2E 验证；单测只保证指引已注入 prompt。
 
 ---
 
@@ -667,6 +676,7 @@ dj_say: tool({
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-3) | **Phase 9 完成**：DJ 策展纪律。用户反馈「一股脑塞歌单」——在四语言 system prompt 加「策展纪律—宁精勿滥」段：流派/心情/氛围请求不整批 `set_add_by_search`，先 `library_search` 取候选按 title/artist 用**世界知识**筛选、`set_add_tracks` 只加符合的；`set_add_by_search` 留给用户自维护标签等无歧义场景。`dj-chat-i18n.test.ts` 加各语言特征短语 + `set_add_tracks` 断言（10 测）。`make check` 全绿。行为质量需活 LLM 手测。 |
 | 2026-07-03 | Claude (round-3) | **Phase 8 完成**：LLM-facing system prompt + 23 工具 description 按界面语言 i18n（PM 覆写默认建议、拍板翻译）。低风险实现：英文 canonical + fallback——`djChatSystemPrompt(locale)`（zh/ja/ko + 未知→英文）+ `dj-chat-tool-descriptions.ts` 只加 override map（缺译→`""`→保英文），`createDjChatTools({locale})` 在 return 前后处理覆盖 `description`（不改 23 个 `tool()` 主体）；字面 token（`#T/#S/#R`、工具名、`cursor/nextCursor`、`TrackBriefs`）不译。`dj-chat-agent` 用 `uiLocale()` 接线。9 新单测（含 23 工具 parity），`make check`（typecheck+biome+3524 测试）全绿。回话语言（Phase 3 补丁）+ Settings 工具说明（`chat.tools.*`）此前已本地化，本 phase 补齐喂给模型的那层。 |
 | 2026-07-03 | Claude (round-2) | **Phase 7 完成 + round-2 收尾**：Composer 录音按钮（chip 输入框旁 mic，点击 toggle 录音，录音态经 controller 新增多监听 `subscribeState` + `useVoiceRecordingState`，不夺 use-voice-dj callbacks；`chat.voiceRecord/voiceStop` i18n×4）。**tool-call 性能核查（端点 E2E 实测）**：多-tool 一轮内存 +19MB（无泄漏）、`renderTrace` 仅 dock 10 commits/44ms（非全树，规则 6 隔离成立），印证撤 bus/instrument 的零副作用设计。另：DJ 回话语言随 UI（Phase 3 补丁，`i18n.language`）+ dock 气泡语言正常。`make check` 全绿。 |
 | 2026-07-03 | Claude (round-2) | **Phase 6 完成**：播放淡入淡出 / crossfade。新增 `src/player/audio-fade.ts`（`createAudioFader` 分步 ramp，注入 timer 可测，5 单测）；`MediaEngine` 集成——`targetVolume`/`crossfadeEnabled`/`crossfadeMs` + `setCrossfade()`，`play()` 淡入（先置 0 再 ramp 到 target）、`pause()` 淡出再暂停、`setVolume()` 设 target+取消 fade、`stop()` 取消 fade。`AppSettings.crossfadeEnabled`（默认 true）/`crossfadeMs`；`hydratePlaybackSettings` 启动应用 + App effect 实时应用；Settings→播放「淡入淡出」开关 + i18n×4。性能：30ms setTimeout 步进、无 rAF、只改 element 音量属性。`make check`（149 player 测）全绿。 |
