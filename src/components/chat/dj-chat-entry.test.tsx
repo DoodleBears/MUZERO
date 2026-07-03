@@ -210,7 +210,9 @@ describe("DjChatEntry — three states", () => {
 
     expect(screen.getByRole("button", { name: "chat.activityAria" })).toBeInTheDocument();
     expect(screen.getByText("chat.tools.library_search.label")).toBeInTheDocument();
-    expect(screen.getByText("Checking your rainy tracks.")).toBeInTheDocument();
+    // The detail line now shows the tool's key input (the query) — the "具体执行
+    // 的内容" — rather than the assistant text (round-2 Phase 5).
+    expect(screen.getByText("rain")).toBeInTheDocument();
   });
 
   it("dismisses compact activity for the current turn and shows the next turn", () => {
