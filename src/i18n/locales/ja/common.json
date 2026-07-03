@@ -1672,6 +1672,8 @@
     "stop": "停止",
     "expand": "チャットを展開",
     "minimize": "チャットを最小化",
+    "voiceRecord": "音声入力",
+    "voiceStop": "録音を停止",
     "approvalAsk": "有料生成の前に確認",
     "approvalAuto": "生成を自動承認",
     "toolApprove": "承認",

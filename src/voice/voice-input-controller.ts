@@ -80,6 +80,10 @@ export interface VoiceInputController {
    *  recording would. Only acts when idle. */
   injectTranscript(text: string): void;
   setCallbacks(callbacks: VoiceInputCallbacks): void;
+  /** Subscribe to state changes WITHOUT owning `callbacks` — lets a UI (e.g. the
+   *  composer mic button) reflect recording state while `use-voice-dj` keeps the
+   *  single callbacks. Returns an unsubscribe fn. */
+  subscribeState(listener: (state: VoiceInputState) => void): () => void;
   dispose(): void;
 }
 
@@ -93,6 +97,7 @@ export function createVoiceInputController(deps: VoiceInputDeps): VoiceInputCont
   let abort: AbortController | null = null;
   // Set true by cancel()/focus-loss so a stop-in-flight discards its audio.
   let cancelled = false;
+  const stateListeners = new Set<(state: VoiceInputState) => void>();
 
   const unsubscribeBlur =
     deps.onBlur?.(() => {
@@ -102,6 +107,7 @@ export function createVoiceInputController(deps: VoiceInputDeps): VoiceInputCont
   function setState(next: VoiceInputState): void {
     state = next;
     callbacks.onStateChange?.(next);
+    for (const listener of [...stateListeners]) listener(next);
   }
 
   function releaseStream(): void {
@@ -224,8 +230,13 @@ export function createVoiceInputController(deps: VoiceInputDeps): VoiceInputCont
     setCallbacks: (next) => {
       callbacks = next;
     },
+    subscribeState: (listener) => {
+      stateListeners.add(listener);
+      return () => stateListeners.delete(listener);
+    },
     dispose: () => {
       unsubscribeBlur();
+      stateListeners.clear();
       cancel();
     },
   };

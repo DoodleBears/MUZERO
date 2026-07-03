@@ -1671,6 +1671,8 @@
     "stop": "중지",
     "expand": "채팅 펼치기",
     "minimize": "채팅 접기",
+    "voiceRecord": "음성 입력",
+    "voiceStop": "녹음 중지",
     "approvalAsk": "유료 생성 전 확인",
     "approvalAuto": "생성 자동 승인",
     "toolApprove": "승인",

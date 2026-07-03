@@ -4,7 +4,9 @@ import {
   CircleStop,
   History,
   ListEnd,
+  Loader2,
   Maximize2,
+  Mic,
   Minimize2,
   ShieldCheck,
   ShieldQuestion,
@@ -15,6 +17,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { isAsrConfigured } from "@/asr/registry";
 import { canUseDjChat } from "@/chat/dj-chat-availability";
 import {
   getOrCreateDjChatRuntimeActor,
@@ -33,8 +36,10 @@ import { ChatReplyNotification } from "@/components/chat/chat-reply-notification
 import { ChatSessionHome } from "@/components/chat/chat-session-home";
 import { type SlashCommand, SlashMenu, useSlashCommands } from "@/components/chat/slash-commands";
 import { useSettings } from "@/hooks/use-app-data";
+import { useVoiceRecordingState } from "@/hooks/use-voice-recording";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
+import { getVoiceInputController } from "@/voice/voice-input-runtime";
 
 /**
  * The dock-integrated DJ chat entry (PRD §5): lives in the player-dock's upper
@@ -62,6 +67,8 @@ export function DjChatEntry({
   const { t } = useTranslation();
   const settings = useSettings();
   const available = canUseDjChat(settings);
+  const asrReady = isAsrConfigured(settings);
+  const voiceState = useVoiceRecordingState();
   const mode = useChatStore((s) => s.mode);
   const setMode = useChatStore((s) => s.setMode);
   const approvalMode = useChatStore((s) => s.approvalMode);
@@ -252,6 +259,33 @@ export function DjChatEntry({
                   placeholder={t("chat.placeholder")}
                   value={draft}
                 />
+                {asrReady && !draft.trim() && (
+                  // Manual push-to-talk: click to start/stop recording (besides
+                  // the global voice.talkToDj shortcut). Recording state comes
+                  // from the controller's multi-listener subscribeState.
+                  <button
+                    aria-label={voiceState === "idle" ? t("chat.voiceRecord") : t("chat.voiceStop")}
+                    className={cn(
+                      "grid size-9 shrink-0 place-items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                      voiceState === "idle"
+                        ? "text-muted-foreground hover:text-foreground"
+                        : "text-primary",
+                    )}
+                    onClick={() => void getVoiceInputController().toggle()}
+                    type="button"
+                  >
+                    {voiceState === "transcribing" ? (
+                      <Loader2 aria-hidden className="size-4.5 animate-spin" />
+                    ) : voiceState === "recording" ? (
+                      <span className="relative grid place-items-center">
+                        <span className="absolute size-6 animate-ping rounded-full bg-primary/30" />
+                        <Mic aria-hidden className="size-4.5" />
+                      </span>
+                    ) : (
+                      <Mic aria-hidden className="size-4.5" />
+                    )}
+                  </button>
+                )}
                 {isRunning && !draft.trim() ? (
                   <button
                     aria-label={t("chat.stop")}

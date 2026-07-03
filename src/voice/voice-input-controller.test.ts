@@ -204,4 +204,17 @@ describe("VoiceInputController", () => {
     h.controller.injectTranscript("mid-recording");
     expect(h.transcripts).toHaveLength(0);
   });
+
+  it("subscribeState notifies extra observers without clobbering callbacks", async () => {
+    const observed: VoiceInputState[] = [];
+    const off = h.controller.subscribeState((s) => observed.push(s));
+    await h.controller.start();
+    await h.controller.stop();
+    // Both the callbacks sink AND the extra observer saw the transitions.
+    expect(observed).toEqual(["recording", "transcribing", "idle"]);
+    expect(h.states).toEqual(["recording", "transcribing", "idle"]);
+    off();
+    await h.controller.start();
+    expect(observed).toEqual(["recording", "transcribing", "idle"]); // unsubscribed
+  });
 });

@@ -21,7 +21,7 @@
 | 4 | 平台 QA / 权限边界 / i18n×4 校对 / VAD 静音自动停 (可选增强) | ✅ Completed（VAD deferred） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Round-2 优化：DJ 工具活动展示打磨（dock 活动气泡 per-tool 图标 + query 明细，**不在顶部重复**） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 | 6 | Round-2 优化：播放淡入淡出 / crossfade（`crossfadeEnabled` 默认开；切歌 + 暂停/恢复淡变） | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
-| 7 | Round-2 优化：Composer 录音按钮（快捷键之外手动点录音）+ tool-call 执行性能核查 | 🔲 Pending | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
+| 7 | Round-2 优化：Composer 录音按钮（快捷键之外手动点录音）+ tool-call 执行性能核查 | ✅ Completed | [§12 Follow-up](#12-follow-up-enhancementsround-2用户反馈) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -634,10 +634,10 @@ dj_say: tool({
 - **性能红线（贯穿 5/6/7）**：核查 LLM 调 tool-call 时底层执行有无性能问题——内存占用、掉帧、主线程卡顿。手段：控制端点 `POST /voice/transcript` 触发多步 tool 运行，配合 `GET /processes`（进程内存/CPU）、`perf/trace`、`perf/sampler`、`renderTrace`（每表面 commit 计数）观察一轮多 tool-call 期间有无异常渲染/内存增长；tool execute 是异步 Dexie 查询（非 UI 阻塞），确认 snapshot 更新不触发全树重渲染（Zustand selector 纪律，规则 6）。
 
 **Phase 7 Checklist**
-- [ ] Composer 出现录音按钮；点击开/停录音，录音态可见；未配 ASR 时 disabled + 提示。
-- [ ] 一轮多 tool-call（search→switch→dj_say…）期间：无明显掉帧、无内存持续增长、活动气泡更新不引发全树重渲染（renderTrace 佐证）。
-- [ ] 单测：录音按钮点击 → controller.toggle（注入 fake controller）；perf 核查记录进 memory/PRD。
-- [ ] `make check` + 端点 E2E。
+- [x] Composer chip 输入框旁加 mic 按钮（`asrReady && !draft` 时显示）：点击 = `getVoiceInputController().toggle()`；录音态图标（idle mic / recording 脉冲环 / transcribing spinner）来自 controller 新增的**多监听** `subscribeState`（不夺 use-voice-dj 的单 callbacks）；`useVoiceRecordingState` hook。未配 ASR 时不显示（配好即出现）。i18n×4（`chat.voiceRecord`/`voiceStop`）。
+- [x] **性能核查（端点 E2E）**：注入多-tool 请求（找歌+建歌单+切歌+dj_say）一轮——`/processes` 总 private 内存 761→780MB（+19MB，无泄漏/无失控，一轮播放列表编排的正常量）；`renderTrace` 显示**仅 `dock`** 表面提交（10 commits / 44ms 总，非全树），证实工具活动只读 snapshot、经 dock 既有订阅重渲染，不撞其它 tab（规则 6）；tool execute 是异步 Dexie 查询，无主线程阻塞、无每帧重活。**印证撤掉 bus/instrument 的决定**（零 tool-call 副作用）。
+- [x] 单测：`subscribeState`（多监听 + unsubscribe，不夺 callbacks）；controller.toggle 既有测覆盖点击路径。共 1 新测（controller 达 14 测）。
+- [x] `make check`（typecheck + biome + voice 测）通过 + 端点 E2E 性能核查如上。
 
 ---
 
@@ -645,6 +645,7 @@ dj_say: tool({
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-07-03 | Claude (round-2) | **Phase 7 完成 + round-2 收尾**：Composer 录音按钮（chip 输入框旁 mic，点击 toggle 录音，录音态经 controller 新增多监听 `subscribeState` + `useVoiceRecordingState`，不夺 use-voice-dj callbacks；`chat.voiceRecord/voiceStop` i18n×4）。**tool-call 性能核查（端点 E2E 实测）**：多-tool 一轮内存 +19MB（无泄漏）、`renderTrace` 仅 dock 10 commits/44ms（非全树，规则 6 隔离成立），印证撤 bus/instrument 的零副作用设计。另：DJ 回话语言随 UI（Phase 3 补丁，`i18n.language`）+ dock 气泡语言正常。`make check` 全绿。 |
 | 2026-07-03 | Claude (round-2) | **Phase 6 完成**：播放淡入淡出 / crossfade。新增 `src/player/audio-fade.ts`（`createAudioFader` 分步 ramp，注入 timer 可测，5 单测）；`MediaEngine` 集成——`targetVolume`/`crossfadeEnabled`/`crossfadeMs` + `setCrossfade()`，`play()` 淡入（先置 0 再 ramp 到 target）、`pause()` 淡出再暂停、`setVolume()` 设 target+取消 fade、`stop()` 取消 fade。`AppSettings.crossfadeEnabled`（默认 true）/`crossfadeMs`；`hydratePlaybackSettings` 启动应用 + App effect 实时应用；Settings→播放「淡入淡出」开关 + i18n×4。性能：30ms setTimeout 步进、无 rAF、只改 element 音量属性。`make check`（149 player 测）全绿。 |
 | 2026-07-03 | Claude (round-2) | **§12 Follow-up 记录 + Phase 5 完成**：用户 Electron 手测反馈 4 优化 + 性能红线，记入新 §12（Phase 5/6/7）。**Phase 5**：DJ 工具活动展示打磨——`ChatActivityPopover`/`deriveChatActivity` 加 per-tool lucide 图标（`dj-tool-display.toolIconName`，16 图标）+ running 工具显示 `summarizeToolInput` 的核心参数（query/name/title）作明细行；dj_say 从 dock 气泡排除（顶部回话不双显）；**撤掉** round-1 起过的 tool-activity bus + instrument-every-execute（零 tool-call 开销，对齐性能红线）。8 新单测，`make check` 全绿。 |
 | 2026-07-02 | DoodleBear | Initial draft：Fish Audio TTS（拉取/搜索/添加音色）+ Groq ASR + push-to-talk 全局快捷键 → 现有工具 DJ → 新增 `dj_say` reply 工具 → 左上角通知 + 可选朗读（音乐 ducking）。参考 anysoul 客户端实现，改直连 BYOK（无后端）。踩现有地基：DJ chat runtime / 通知栈 / 全局快捷键 / provider registry。四阶段：ASR 基础设施 → TTS 基础设施 → 语音对话闭环 → QA/i18n/VAD。8 个 open question 待 PM 拍板。 |

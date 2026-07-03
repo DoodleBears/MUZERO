@@ -1703,6 +1703,8 @@
     "stop": "Stop",
     "expand": "Expand chat",
     "minimize": "Minimize chat",
+    "voiceRecord": "Record voice",
+    "voiceStop": "Stop recording",
     "approvalAsk": "Ask before paid generation",
     "approvalAuto": "Auto-approve generation",
     "toolApprove": "Approve",
