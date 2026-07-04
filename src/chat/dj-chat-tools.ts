@@ -863,7 +863,7 @@ export async function executeAddMemory(
  */
 export async function executeLibrarySearch(
   rawInput: LibrarySearchInput,
-  deps: { db?: MuzeroDB } & LocalIdDeps = {},
+  deps: { db?: MuzeroDB; onlineAvailable?: boolean } & LocalIdDeps = {},
 ): Promise<{
   page?: {
     cursor: number;
@@ -885,6 +885,10 @@ export async function executeLibrarySearch(
     items: Array<{ id: string; name: string; ordinal?: number; trackCount: number }>;
   };
   lyrics?: { total: number; items: Array<LyricHit & { ordinal?: number }> };
+  /** Set when a track search found NOTHING locally and the user has streaming
+   *  sources enabled — the DJ should follow up with online_search_tracks rather
+   *  than give up or generate (local-first, then online). */
+  onlineFallbackAvailable?: boolean;
 }> {
   const input = librarySearchInputSchema.parse(rawInput);
   const db = deps.db ?? defaultDb;
@@ -928,6 +932,12 @@ export async function executeLibrarySearch(
   }
 
   const trackPage = out.tracks;
+  // Local-first, then online: signal an online fallback when a track search came
+  // back empty AND the user has streaming sources on. The prompt tells the DJ to
+  // call online_search_tracks on this flag instead of stopping or generating.
+  if (wants.has("track") && (trackPage?.total ?? 0) === 0 && deps.onlineAvailable) {
+    out.onlineFallbackAvailable = true;
+  }
   const ref = resultRef("library_search", deps, {
     returned: trackPage?.returned ?? 0,
     total: trackPage?.total,
@@ -1154,13 +1164,14 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
   const tools: ToolSet = {
     library_search: tool({
       description:
-        'One search over the library, filtered by `types` (default ["track"]). Results use local ids (#T tracks, #S sets) plus resultRef #R for this result window. Keywords go in `queries` (match "any" gathers a genre, "all" narrows). `types` can include: "track" (title/caption/tags/notes/memories), "set" (match playlist NAMES), and "lyrics" (find songs by lyric words; each hit returns a snippet + timestamp). The track group projects to `fields` (default id+title, add "artist" to judge fit) and pages via `cursor`/`nextCursor`. To curate a genre into a set, judge the results by title/artist and add the ones that fit with set_add_tracks (#T ids).',
+        'Search the user\'s LOCAL library only (their own imported/generated songs), filtered by `types` (default ["track"]). Results use local ids (#T tracks, #S sets) plus resultRef #R for this result window. Keywords go in `queries` (match "any" gathers a genre, "all" narrows). `types` can include: "track" (title/caption/tags/notes/memories), "set" (match playlist NAMES), and "lyrics" (find songs by lyric words; each hit returns a snippet + timestamp). The track group projects to `fields` (default id+title, add "artist" to judge fit) and pages via `cursor`/`nextCursor`. Always search here FIRST. To curate a genre into a set, judge the results by title/artist and add the ones that fit with set_add_tracks (#T ids). This does NOT search the internet — if it returns nothing (onlineFallbackAvailable in the result) and the listener wants a specific song, follow up with online_search_tracks.',
       inputSchema: librarySearchInputSchema,
       execute: withLocalIdErrorHandling((input, options) =>
         executeLibrarySearch(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
+          onlineAvailable: deps.includeOnline,
           resultId: `result:${options.toolCallId}`,
         }),
       ),
