@@ -941,6 +941,8 @@
     "smoothScrollFloaty": "ふわり",
     "smoothScrollSnappy": "きびきび",
     "smoothScrollReset": "リセット",
+    "errorNotificationPersist": "エラー通知を保持",
+    "errorNotificationPersistHint": "デフォルトはオフ：エラー通知は12秒後に自動的に消えます。オンにすると、手動で閉じるまで左上に表示され続けます。",
     "lyricsSource": "歌詞ソース",
     "lyricsSourceHint": "自動は最適なソースを順に試します。NetEase Cloud Music は中日韓の曲が豊富で、NetEase 曲は song id で完全一致できます。",
     "lyricsSourceAuto": "自動選択",

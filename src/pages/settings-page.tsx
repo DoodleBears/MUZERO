@@ -748,6 +748,26 @@ export function SettingsPage({ pageActive }: { pageActive?: boolean } = {}) {
                       </div>
                     </div>
                   </div>
+                  <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.errorNotificationPersist ?? false}
+                      onChange={(event) =>
+                        void saveSettings({
+                          errorNotificationPersist: event.currentTarget.checked,
+                        })
+                      }
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">
+                        {t("settings.errorNotificationPersist")}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.errorNotificationPersistHint")}
+                      </span>
+                    </span>
+                  </label>
                 </CardContent>
               </Card>
             )}

@@ -941,6 +941,8 @@
     "smoothScrollFloaty": "更飘",
     "smoothScrollSnappy": "更跟手",
     "smoothScrollReset": "重置",
+    "errorNotificationPersist": "保留错误通知",
+    "errorNotificationPersistHint": "默认关闭：错误通知会在 12 秒后自动消失。开启后，错误通知会一直停驻在左上角，直到你手动关闭。",
     "lyricsSource": "歌词来源",
     "lyricsSourceHint": "自动会按顺序尝试最合适的来源。网易云音乐的中日韩曲库很大；网易云歌曲可用 song id 精确匹配。",
     "lyricsSourceAuto": "自动选择",

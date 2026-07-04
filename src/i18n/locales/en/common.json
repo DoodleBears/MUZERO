@@ -959,6 +959,8 @@
     "smoothScrollFloaty": "Floaty",
     "smoothScrollSnappy": "Snappy",
     "smoothScrollReset": "Reset",
+    "errorNotificationPersist": "Keep error notifications",
+    "errorNotificationPersistHint": "Off by default: error notifications disappear on their own after 12 seconds. Turn this on to keep them in the top-left until you close them.",
     "lyricsSource": "Lyrics source",
     "lyricsSourceHint": "Auto tries the best sources in order. NetEase Cloud Music has a large CJK catalogue; NetEase songs use exact song-id matching when available.",
     "lyricsSourceAuto": "Auto",

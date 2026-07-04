@@ -1,14 +1,17 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useSettings } from "@/hooks/use-app-data";
 import { formatErrorClipboardText } from "@/lib/error-details";
 import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import {
+  isStickyNotification,
   type NotificationItem,
   type NotificationType,
   notify,
+  setErrorNotificationPersist,
   useNotificationStore,
 } from "@/stores/notification-store";
 
@@ -36,20 +39,28 @@ export function NotificationStack() {
   const maxVisible = useNotificationStore((s) => s.maxVisible);
   const dismiss = useNotificationStore((s) => s.dismiss);
 
-  // Persistent items (duration 0) always show; maxVisible only caps transients.
-  const persistentIds = new Set(queue.filter((i) => i.duration === 0).map((i) => i.id));
+  // Feed the error-persist preference to the store so `notify.error` (module
+  // code) can pick the right auto-dismiss duration without touching a render.
+  const errorPersist = useSettings().errorNotificationPersist ?? false;
+  useEffect(() => setErrorNotificationPersist(errorPersist), [errorPersist]);
+
+  // Sticky items (errors, loading, explicit persistents) always show; maxVisible
+  // only caps transient toasts.
+  const stickyIds = new Set(queue.filter(isStickyNotification).map((i) => i.id));
   const visibleTransientIds = new Set(
     queue
-      .filter((i) => i.duration > 0)
+      .filter((i) => !isStickyNotification(i))
       .slice(-maxVisible)
       .map((i) => i.id),
   );
   const orderedItems = queue
-    .filter((i) => persistentIds.has(i.id) || visibleTransientIds.has(i.id))
+    .filter((i) => stickyIds.has(i.id) || visibleTransientIds.has(i.id))
     .sort((a, b) => a.createdAt - b.createdAt);
 
-  if (orderedItems.length === 0) return null;
-
+  // Note: the container + <AnimatePresence> stay mounted even when empty so the
+  // last item's exit animation can play (unmounting here would kill it — it'd
+  // vanish instead of sliding out). The layer is pointer-events-none, so an
+  // empty stack is invisible and non-interactive.
   return (
     <motion.div
       layout
@@ -74,7 +85,9 @@ function NotificationItemView({
 }) {
   const { t } = useTranslation();
   const isError = item.type === "error";
-  const isPersistent = item.duration === 0;
+  // Errors, loading, and explicit persistents carry the ✕ (they're always
+  // shown). Errors keep it even while auto-dismissing after 12s.
+  const isSticky = isStickyNotification(item);
 
   const handleCopy = async () => {
     const payload = formatErrorClipboardText({
@@ -153,7 +166,7 @@ function NotificationItemView({
           </button>
         )}
 
-        {isPersistent && item.dismissible !== false && (
+        {isSticky && item.dismissible !== false && (
           <button
             type="button"
             aria-label={t("notification.dismiss")}

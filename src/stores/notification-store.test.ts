@@ -1,23 +1,41 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { notify, useNotificationStore } from "@/stores/notification-store";
+import {
+  ERROR_AUTO_DISMISS_MS,
+  notify,
+  setErrorNotificationPersist,
+  useNotificationStore,
+} from "@/stores/notification-store";
 
 describe("notification store", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    setErrorNotificationPersist(false);
     useNotificationStore.getState().clear();
   });
   afterEach(() => {
+    setErrorNotificationPersist(false);
     useNotificationStore.getState().clear();
     vi.useRealTimers();
   });
 
   const queue = () => useNotificationStore.getState().queue;
 
-  it("keeps errors persistent (no auto-dismiss)", () => {
+  it("auto-dismisses errors after 12s by default", () => {
+    notify.error("boom");
+    expect(queue()).toHaveLength(1);
+    vi.advanceTimersByTime(ERROR_AUTO_DISMISS_MS - 1);
+    expect(queue()).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(queue()).toHaveLength(0);
+  });
+
+  it("keeps errors persistent when the persist preference is on", () => {
+    setErrorNotificationPersist(true);
     notify.error("boom");
     vi.advanceTimersByTime(60_000);
     expect(queue()).toHaveLength(1);
     expect(queue()[0].type).toBe("error");
+    expect(queue()[0].duration).toBe(0);
   });
 
   it("auto-dismisses a success after its default duration", () => {

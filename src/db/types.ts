@@ -1120,6 +1120,10 @@ export interface AppSettings {
    * notification stack, matching the dock activity card. Default on. Additive,
    * read with `?? true`. */
   djToolActivityNotify?: boolean;
+  /** Keep error notifications in the top-left stack until manually dismissed.
+   * Default off — errors auto-dismiss after {@link ERROR_AUTO_DISMISS_MS} (12s).
+   * Additive, read with `?? false`. */
+  errorNotificationPersist?: boolean;
   /** Default selected cloud drive. R2 credentials remain device-local settings, never synced. */
   defaultCloudDriveId?: string;
   /** R2 write credentials by local drive id. Device-local only; never exported to manifests. */

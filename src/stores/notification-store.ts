@@ -58,6 +58,37 @@ const DEFAULT_DURATIONS: Record<NotificationType, number> = {
   loading: 0,
 };
 
+/** Auto-dismiss delay for errors when the user hasn't opted to keep them. */
+export const ERROR_AUTO_DISMISS_MS = 12_000;
+
+// Whether errors linger until manually dismissed. Off by default: errors fade
+// after ERROR_AUTO_DISMISS_MS. Mirrors `AppSettings.errorNotificationPersist`;
+// kept module-side (like the timers) so reading it in `notify.error` never
+// couples to a render. Synced from settings by <NotificationStack>.
+let errorPersist = false;
+
+/** Sync the error-persist preference from settings (called by the stack). */
+export function setErrorNotificationPersist(persist: boolean) {
+  errorPersist = persist;
+}
+
+/** Default auto-dismiss duration for a type, honoring the error-persist pref. */
+function defaultDurationFor(type: NotificationType): number {
+  if (type === "error") return errorPersist ? 0 : ERROR_AUTO_DISMISS_MS;
+  return DEFAULT_DURATIONS[type];
+}
+
+/**
+ * "Sticky" notifications are always shown (never capped by `maxVisible`) and
+ * carry the ✕ dismiss button: errors, loading spinners, and anything explicitly
+ * persistent (`duration === 0`). Errors stay sticky even when they auto-dismiss
+ * after {@link ERROR_AUTO_DISMISS_MS}, so they never lose the ✕ or get pushed
+ * out by transient toasts. Everything else is a transient toast.
+ */
+export function isStickyNotification(item: Pick<NotificationItem, "type" | "duration">): boolean {
+  return item.type === "error" || item.type === "loading" || item.duration === 0;
+}
+
 interface NotificationState {
   queue: NotificationItem[];
   maxVisible: number;
@@ -103,15 +134,15 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   push: (item) => {
     const id = `notif-${++idCounter}`;
-    const duration = item.duration ?? DEFAULT_DURATIONS[item.type];
+    const duration = item.duration ?? defaultDurationFor(item.type);
     const newItem: NotificationItem = { ...item, id, duration, createdAt: Date.now() };
 
     set((state) => {
       const next = [...state.queue, newItem];
       // Cap both buckets so a runaway loop can't grow the queue unbounded.
-      const persistent = next.filter((i) => i.duration === 0).slice(-20);
-      const transient = next.filter((i) => i.duration > 0).slice(-5);
-      return { queue: [...persistent, ...transient].sort((a, b) => a.createdAt - b.createdAt) };
+      const sticky = next.filter(isStickyNotification).slice(-20);
+      const transient = next.filter((i) => !isStickyNotification(i)).slice(-5);
+      return { queue: [...sticky, ...transient].sort((a, b) => a.createdAt - b.createdAt) };
     });
 
     scheduleAutoDismiss(id, duration, get().dismiss);
@@ -126,7 +157,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     const updated = get().queue.find((n) => n.id === id);
     if (updated) {
       const duration =
-        patch.duration ?? (patch.type ? DEFAULT_DURATIONS[patch.type] : updated.duration);
+        patch.duration ?? (patch.type ? defaultDurationFor(patch.type) : updated.duration);
       scheduleAutoDismiss(id, duration, get().dismiss);
     }
   },
