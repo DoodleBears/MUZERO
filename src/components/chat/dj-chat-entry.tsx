@@ -530,6 +530,7 @@ export function DjChatEntry({
                       title: t("chat.queueTitle"),
                     }}
                     contextMaxTokens={settings.chatMaxContextTokens}
+                    scrollToBottomLabel={t("chat.scrollToBottom")}
                     sessionId={activeSessionId}
                     slashCommands={slashCommands}
                     toolLabels={{

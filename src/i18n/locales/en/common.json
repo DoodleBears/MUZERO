@@ -1730,6 +1730,7 @@
     "stop": "Stop",
     "expand": "Expand chat",
     "minimize": "Minimize chat",
+    "scrollToBottom": "Scroll to latest",
     "voiceRecord": "Record voice",
     "voiceStop": "Stop recording",
     "approvalAsk": "Ask before paid generation",

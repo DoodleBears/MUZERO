@@ -1698,6 +1698,7 @@
     "stop": "중지",
     "expand": "채팅 펼치기",
     "minimize": "채팅 접기",
+    "scrollToBottom": "최신으로 스크롤",
     "voiceRecord": "음성 입력",
     "voiceStop": "녹음 중지",
     "approvalAsk": "유료 생성 전 확인",

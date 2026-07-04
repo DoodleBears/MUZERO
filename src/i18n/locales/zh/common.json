@@ -1699,6 +1699,7 @@
     "stop": "停止",
     "expand": "展开对话",
     "minimize": "收起对话",
+    "scrollToBottom": "滚动到最新",
     "voiceRecord": "语音输入",
     "voiceStop": "停止录音",
     "approvalAsk": "付费生成前先确认",

@@ -39,6 +39,8 @@ interface ChatPanelProps {
   budgetLabels?: ChatContextBudgetNoticeLabels;
   queueLabels?: ChatQueueTrayLabels;
   toolLabels?: ChatToolLabels;
+  /** Aria-label for the transcript's floating "back to bottom" button. */
+  scrollToBottomLabel?: string;
   /** `/`-commands offered in the composer (e.g. start a new session). */
   slashCommands?: SlashCommand[];
   /** Context-window ceiling (tokens) for the warn/block budget. Defaults to 128k. */
@@ -56,6 +58,7 @@ export function ChatPanel({
   budgetLabels,
   queueLabels,
   toolLabels,
+  scrollToBottomLabel,
   slashCommands,
   contextMaxTokens,
 }: ChatPanelProps) {
@@ -125,6 +128,7 @@ export function ChatPanel({
           messages={messages}
           onApproveTool={(approvalId) => actor.respondToToolApproval(approvalId, true)}
           onRejectTool={(approvalId) => actor.respondToToolApproval(approvalId, false)}
+          scrollToBottomLabel={scrollToBottomLabel}
           toolLabels={toolLabels}
         />
       )}

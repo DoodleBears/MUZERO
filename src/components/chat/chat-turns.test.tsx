@@ -60,6 +60,49 @@ describe("ChatTurns", () => {
     expect(onRejectTool).toHaveBeenCalledWith("approval_1");
   });
 
+  it("shows a back-to-bottom button only when scrolled up, and jumps on click", () => {
+    const messages = [
+      {
+        id: "a",
+        role: "assistant",
+        parts: [{ type: "text", text: "hi" }],
+      } as unknown as DjChatUIMessage,
+    ];
+
+    const { container } = render(
+      <ChatTurns messages={messages} scrollToBottomLabel="To latest" toolLabels={labels} />,
+    );
+
+    // On open we're pinned to the bottom → no button.
+    expect(screen.queryByRole("button", { name: "To latest" })).toBeNull();
+
+    // Simulate a scrolled-up viewport, then fire a scroll event.
+    const scroller = container.querySelector(".overflow-y-auto") as HTMLElement;
+    const scrollToSpy = vi.fn();
+    scroller.scrollTo = scrollToSpy as unknown as typeof scroller.scrollTo;
+    Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
+    Object.defineProperty(scroller, "scrollHeight", { value: 1000, configurable: true });
+    Object.defineProperty(scroller, "clientHeight", { value: 300, configurable: true });
+    fireEvent.scroll(scroller);
+
+    const button = screen.getByRole("button", { name: "To latest" });
+    fireEvent.click(button);
+    expect(scrollToSpy).toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
+  });
+
+  it("hides the back-to-bottom button when no label is provided", () => {
+    const messages = [
+      {
+        id: "b",
+        role: "assistant",
+        parts: [{ type: "text", text: "hi" }],
+      } as unknown as DjChatUIMessage,
+    ];
+    render(<ChatTurns messages={messages} toolLabels={labels} />);
+    // No scrollToBottomLabel → the affordance never renders (keeps other tests clean).
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("interleaves text and tool parts in emission order (not all text above tools)", () => {
     const messages = [
       {
