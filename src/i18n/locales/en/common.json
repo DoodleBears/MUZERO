@@ -1592,7 +1592,9 @@
     "playedNext": "Up next: {{title}}",
     "playedQueued": "Added to queue: {{title}}",
     "ratingAdded": "Rated {{title}} {{score}}★",
-    "ratingDetail": "avg {{average}} · {{count}} votes"
+    "ratingDetail": "avg {{average}} · {{count}} votes",
+    "commentAdded": "New memory on {{title}}",
+    "commentAddedBy": "{{name}} commented on {{title}}"
   },
   "rating": {
     "aria": "Rate this song",

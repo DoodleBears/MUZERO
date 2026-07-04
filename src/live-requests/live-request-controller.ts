@@ -1,8 +1,10 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import { getPlayQueue, getSettings, getTrack, setTrackRating } from "@/db/repositories";
+import { addMemory, getPlayQueue, getSettings, getTrack, setTrackRating } from "@/db/repositories";
 import {
   type AudienceRequestIntakeSettings,
   DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+  type Memory,
+  type MemoryAuthorRef,
   type Track,
 } from "@/db/types";
 import { type DesktopLiveRequestIntakeControls, resolveDesktopBridge } from "@/lib/desktop/bridge";
@@ -23,8 +25,17 @@ import {
 } from "./audience-request-schema";
 import { findSource, resolveSourceMapping, resolveSources } from "./audience-request-sources";
 import { matchIntakeCommand, resolveCommands } from "./intake-command";
-import { applyRatingCommand } from "./live-request-annotation";
-import { notifyAudienceRequestPlayed, notifyRatingAdded } from "./live-request-notification";
+import {
+  applyAnnotationCommand,
+  applyRatingCommand,
+  createAnnotationLimiter,
+  resolveRaterKey,
+} from "./live-request-annotation";
+import {
+  notifyAnnotationAdded,
+  notifyAudienceRequestPlayed,
+  notifyRatingAdded,
+} from "./live-request-notification";
 import { applyMapping } from "./request-mapping-presets";
 import { DEFAULT_SSN_RELAY_URL } from "./social-stream-relay";
 
@@ -72,6 +83,17 @@ export interface LiveRequestControllerDeps {
   setTrackRating?: (trackId: string, raterKey: string, score: number) => Promise<void>;
   /** Notified after a 评分 vote lands (production: a toast). */
   onRated?: (input: { trackId: string; raterKey: string; score: number }) => void;
+  /** Override the memory writer (tests); defaults to the `addMemory` repo. */
+  addMemory?: (input: {
+    trackId: string;
+    note: string;
+    author?: MemoryAuthorRef;
+    atSec?: number;
+  }) => Promise<Memory>;
+  /** Resolve a track's duration to clamp an explicit comment `mm:ss`; defaults to the DB. */
+  getTrackDurationSec?: (trackId: string) => number | undefined | Promise<number | undefined>;
+  /** Notified after a 评论 memory lands (production: a toast). */
+  onAnnotated?: (input: { trackId: string; memory: Memory }) => void;
   now?: () => number;
   /** Inject the intake controls (tests); otherwise resolved from the desktop bridge. */
   controls?: DesktopLiveRequestIntakeControls;
@@ -150,6 +172,7 @@ export function createLiveRequestController(
       getCurrentTrackId: deps.getCurrentTrackId,
     });
   const captures = new Map<string, CapturedPayload[]>();
+  const annotationLimiter = createAnnotationLimiter();
   let unsubscribe: (() => void) | null = null;
 
   function capture(sourceId: string, body: Record<string, unknown>): void {
@@ -220,7 +243,19 @@ export function createLiveRequestController(
         return;
       }
       if (command.command.intent === "comment") {
-        // TODO(Phase 3): write a Memory onto the currently-playing track.
+        const allowed = annotationLimiter.allow(resolveRaterKey(request), {
+          cooldownMs: intake.requesterCooldownSec * 1000,
+          maxPerMinute: intake.maxRequestsPerMinute,
+          now: now(),
+        });
+        if (!allowed) return;
+        await applyAnnotationCommand(command, request, {
+          addMemory: deps.addMemory ?? ((input) => addMemory(input, db)),
+          getCurrentTrackId: resolveCurrentTrackId,
+          getTrackDurationSec:
+            deps.getTrackDurationSec ?? (async (id) => (await getTrack(id, db))?.durationSec),
+          onAnnotated: deps.onAnnotated,
+        });
         return;
       }
       try {
@@ -348,6 +383,11 @@ function ensureSingleton(): LiveRequestController {
     onRated: async ({ trackId, score }) => {
       const track = await getTrack(trackId, defaultDb);
       if (track) notifyRatingAdded(track, score, resolveTrackRating(track));
+    },
+    // Confirm a 评论 with a toast (who commented on which track).
+    onAnnotated: async ({ trackId, memory }) => {
+      const track = await getTrack(trackId, defaultDb);
+      if (track) notifyAnnotationAdded(track, memory);
     },
   });
   return singleton;

@@ -260,6 +260,32 @@ describe("live-request-controller intent router", () => {
     expect(row?.ratingsByRater).toEqual({ "twitch:bob": 5 });
   });
 
+  it("routes 评论 to a signed Memory on the current track (explicit mm:ss anchor, not the runtime)", async () => {
+    await enableIntake();
+    const home = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const current = await uploadedTrack(home.id, "Now Playing"); // durationSec 180
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({
+      db,
+      runtime,
+      controls: fakeControls(),
+      getCurrentTrackId: () => current.id,
+    });
+
+    await controller.handlePayload(
+      payload(
+        JSON.stringify({ message: "评论 1:00 这段绝了", chatname: "阿强", platform: "bilibili" }),
+      ),
+    );
+
+    expect(handle).not.toHaveBeenCalled();
+    const memories = await db.memories.where("trackId").equals(current.id).toArray();
+    expect(memories).toHaveLength(1);
+    expect(memories[0].note).toBe("这段绝了");
+    expect(memories[0].atSec).toBe(60);
+    expect(memories[0].author?.displayName).toBe("阿强");
+  });
+
   it("still applies the per-source route override on the no-command fallback path", async () => {
     // A source that routes everything to ai-dj: with requireCommandPrefix off and no
     // keyword match, the source override still reaches the runtime.

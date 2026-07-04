@@ -1570,7 +1570,9 @@
     "playedNext": "次に再生：{{title}}",
     "playedQueued": "キューに追加：{{title}}",
     "ratingAdded": "{{title}} を {{score}}★ で評価",
-    "ratingDetail": "平均 {{average}} · {{count}} 票"
+    "ratingDetail": "平均 {{average}} · {{count}} 票",
+    "commentAdded": "{{title}} に新しいメモリー",
+    "commentAddedBy": "{{name}} が {{title}} にコメント"
   },
   "rating": {
     "aria": "この曲を評価",

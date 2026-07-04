@@ -1570,7 +1570,9 @@
     "playedNext": "下一首：{{title}}",
     "playedQueued": "已加入队列：{{title}}",
     "ratingAdded": "给《{{title}}》打了 {{score}}★",
-    "ratingDetail": "均分 {{average}} · {{count}} 票"
+    "ratingDetail": "均分 {{average}} · {{count}} 票",
+    "commentAdded": "《{{title}}》多了一条记忆",
+    "commentAddedBy": "{{name}} 评论了《{{title}}》"
   },
   "rating": {
     "aria": "给这首歌打分",

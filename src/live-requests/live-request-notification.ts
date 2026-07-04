@@ -1,4 +1,4 @@
-import type { Track } from "@/db/types";
+import type { Memory, Track } from "@/db/types";
 import i18n from "@/i18n/i18n";
 import { trackAlbum, trackArtists } from "@/lib/track-display";
 import { notify } from "@/stores/notification-store";
@@ -51,4 +51,16 @@ export function notifyRatingAdded(
       })
     : undefined;
   notify.success(i18n.t("liveRequest.ratingAdded", { title: track.title, score }), { detail });
+}
+
+/**
+ * Top-left toast confirming a `评论` memory landed: who commented on which track,
+ * with the note as detail. Same UI-dependency isolation as the other notifiers.
+ */
+export function notifyAnnotationAdded(track: Track, memory: Memory): void {
+  const who = memory.author?.displayName;
+  const message = who
+    ? i18n.t("liveRequest.commentAddedBy", { name: who, title: track.title })
+    : i18n.t("liveRequest.commentAdded", { title: track.title });
+  notify.success(message, { detail: memory.note });
 }

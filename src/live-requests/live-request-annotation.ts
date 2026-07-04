@@ -1,3 +1,4 @@
+import type { Memory, MemoryAuthorRef } from "@/db/types";
 import type { NormalizedAudienceRequest } from "./audience-request-schema";
 import type { IntakeCommandMatch } from "./intake-command";
 
@@ -28,7 +29,7 @@ export interface RatingApplyDeps {
 
 export interface AnnotationApplyResult {
   status: "written" | "ignored";
-  reason?: "no-current-track" | "no-score";
+  reason?: "no-current-track" | "no-score" | "empty";
 }
 
 /**
@@ -48,4 +49,86 @@ export async function applyRatingCommand(
   await deps.setTrackRating(trackId, raterKey, match.score);
   deps.onRated?.({ trackId, raterKey, score: match.score });
   return { status: "written" };
+}
+
+/** Build a `MemoryAuthorRef` attributing an audience comment to its sender (single "audience:" prefix). */
+export function buildAudienceAuthor(request: NormalizedAudienceRequest): MemoryAuthorRef {
+  const key =
+    request.requesterKey ??
+    `${(request.platform ?? "anon").toLowerCase()}:${
+      request.requesterDisplayName ?? request.externalId ?? "anon"
+    }`;
+  return { devicePublicId: `audience:${key}`, displayName: request.requesterDisplayName };
+}
+
+export interface CommentApplyDeps {
+  addMemory: (input: {
+    trackId: string;
+    note: string;
+    author?: MemoryAuthorRef;
+    atSec?: number;
+  }) => Promise<Memory>;
+  getCurrentTrackId: () => string | undefined | Promise<string | undefined>;
+  /** Clamp an explicit `mm:ss` to [0, durationSec]; absent → no upper clamp. */
+  getTrackDurationSec?: (trackId: string) => number | undefined | Promise<number | undefined>;
+  onAnnotated?: (input: { trackId: string; memory: Memory }) => void;
+}
+
+/**
+ * Apply a `评论` command: write a Memory (author = sender) onto the currently-playing
+ * track. Default floating (carousel); anchors to `atSec` ONLY when the sender wrote an
+ * explicit `mm:ss` (clamped to the track length) — livestream latency makes arrival-time
+ * anchoring meaningless (PRD Q10). Ignored when the comment is empty or nothing is playing.
+ */
+export async function applyAnnotationCommand(
+  match: IntakeCommandMatch,
+  request: NormalizedAudienceRequest,
+  deps: CommentApplyDeps,
+): Promise<AnnotationApplyResult & { memoryId?: string }> {
+  const note = match.body.trim();
+  if (!note) return { status: "ignored", reason: "empty" };
+  const trackId = await deps.getCurrentTrackId();
+  if (!trackId) return { status: "ignored", reason: "no-current-track" };
+
+  let atSec = match.atSec;
+  if (atSec != null) {
+    atSec = Math.max(0, Math.floor(atSec));
+    const duration = await deps.getTrackDurationSec?.(trackId);
+    if (duration != null && Number.isFinite(duration)) {
+      atSec = Math.min(atSec, Math.floor(duration));
+    }
+  }
+
+  const memory = await deps.addMemory({
+    trackId,
+    note,
+    author: buildAudienceAuthor(request),
+    atSec,
+  });
+  deps.onAnnotated?.({ trackId, memory });
+  return { status: "written", memoryId: memory.id };
+}
+
+/**
+ * Lightweight per-rater cooldown + per-minute cap for annotation commands (a comment
+ * floods a track's Memory timeline; rating is naturally deduped). Stateful; `now` is
+ * passed per call for deterministic tests. Mirrors `audience-request-security`.
+ */
+export function createAnnotationLimiter() {
+  const lastByRater = new Map<string, number>();
+  let recent: number[] = [];
+  return {
+    allow(
+      raterKey: string,
+      opts: { cooldownMs: number; maxPerMinute: number; now: number },
+    ): boolean {
+      recent = recent.filter((at) => opts.now - at < 60_000);
+      if (recent.length >= opts.maxPerMinute) return false;
+      const last = lastByRater.get(raterKey);
+      if (last != null && opts.now - last < opts.cooldownMs) return false;
+      lastByRater.set(raterKey, opts.now);
+      recent.push(opts.now);
+      return true;
+    },
+  };
 }

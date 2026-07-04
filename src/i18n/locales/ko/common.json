@@ -1569,7 +1569,9 @@
     "playedNext": "다음 곡: {{title}}",
     "playedQueued": "대기열에 추가: {{title}}",
     "ratingAdded": "{{title}}에 {{score}}★ 평가",
-    "ratingDetail": "평균 {{average}} · {{count}} 표"
+    "ratingDetail": "평균 {{average}} · {{count}} 표",
+    "commentAdded": "{{title}}에 새 메모리",
+    "commentAddedBy": "{{name}}님이 {{title}}에 댓글"
   },
   "rating": {
     "aria": "이 곡 평가",

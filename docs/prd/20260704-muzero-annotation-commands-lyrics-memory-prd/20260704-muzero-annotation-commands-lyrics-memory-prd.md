@@ -22,7 +22,7 @@
 |-------|------|--------|------|
 | 1 | 命令路由地基：`matchIntakeCommand` 纯函数 + `IntakeCommand[]` 可配注册表 + `点歌`=search / `AI点歌`=ai-dj 分流 + legacy 迁移 + 设置 UI | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 评分聚合：`Track.ratingsByRater`（众评去重，**设备本地不同步**）+ `setTrackRating`/`resolveTrackRating` + rating 意图接线 + **常驻评分 chip** | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 评论意图：`applyAnnotationCommand` → 当前曲一条 `Memory`（署名+锚秒）+ 注释限流 + 落地 toast | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 评论意图：`applyAnnotationCommand` → 当前曲一条 `Memory`（署名+锚秒）+ 注释限流 + 落地 toast | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 歌词记忆浮层：抽 `useScheduledMemory` + `LyricsMemoryStrip` + `lyricsMemoryOverlay` 开关 + i18n 四语 + 版本 bump | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -505,17 +505,17 @@ export function useScheduledMemory(trackId: string | undefined): {
 **Goal:** `评论 …` 给当前曲落一条署名、锚秒的 `Memory`；toast 确认；不搜库不播歌。
 
 **Tasks:**
-- [ ] `intake-command.ts`：comment 前导 `mm:ss` 时间抽取（→ `match.atSec`）。
-- [ ] `live-request-annotation.ts`：`applyAnnotationCommand`（addMemory：note=body、author=发送者、atSec=显式 mm:ss｜否则 floating，clamp 到 [0,durationSec]）；controller comment 分支接上。
-- [ ] `ensureSingleton` 注入 `getTrackDurationSec` + `setTrackRating` + `onAnnotated/onRated`。
-- [ ] `live-request-notification.ts`：`notifyAnnotationAdded`。
-- [ ] i18n（4 语）：comment toast。
+- [x] `intake-command.ts`：comment 前导 `mm:ss` 时间抽取（→ `match.atSec`，Phase 1 已含，Phase 3 消费）。
+- [x] `live-request-annotation.ts`：`applyAnnotationCommand`（addMemory：note=body、`buildAudienceAuthor` 署名、atSec=显式 mm:ss｜否则 floating，clamp 到 [0,durationSec]）+ `createAnnotationLimiter`；controller comment 分支接上（限流 → applyAnnotationCommand）。
+- [x] `ensureSingleton` 注入 `onAnnotated → notifyAnnotationAdded`（addMemory/getTrackDurationSec 默认走 repo）。
+- [x] `live-request-notification.ts`：`notifyAnnotationAdded`（谁评论了哪首歌 + note detail）。
+- [x] i18n（4 语）：`liveRequest.{commentAdded,commentAddedBy}`。
 
 #### Phase 3 Checklist
-- [ ] `intake-command.test.ts`：comment 前导 `3:14` → atSec 194 + body 剥离；无时间 → atSec undefined（floating）。
-- [ ] `live-request-annotation.test.ts`（fake db + canned request）：comment 写 note+author；有显式 mm:ss → 锚秒（clamp）；无 → floating；空 body / 无当前曲 → ignored；限流丢弃。
-- [ ] `live-request-controller.test.ts`：`评论 x` 分叉写记忆、**不** runtime.handle；`点歌 x` 仍走 runtime；testing 来源不触发。
-- [ ] 真链路：播放中 `评论 …` → 该曲 memory 时间线 + toast。typecheck + biome + 测试通过。
+- [x] `intake-command.test.ts`（Phase 1）：comment 前导 `3:14` → atSec 194 + body 剥离；无时间 → atSec undefined（floating）。
+- [x] `live-request-annotation.test.ts`（+5 例）：comment 写 note+`audience:` 署名；显式 mm:ss → 锚秒（194 clamp 到时长 100）；无 → floating；空 body / 无当前曲 → ignored；`createAnnotationLimiter` 冷却 + 每分钟上限。
+- [x] `live-request-controller.test.ts`（+1 例，21 total）：`评论 1:00 x` 写 `{note,atSec:60,author.displayName}`、**不** runtime.handle；`点歌`/`评分` 分支不受影响；testing 来源不触发（既有）。
+- [ ] 真链路（需前台）：播放中 `评论 …` → 该曲 memory 时间线 + toast。typecheck exit 0 + biome clean + 相关测试 green。**留手动预览验证**。
 
 ### Phase 4: 歌词记忆浮层 + 收尾
 
