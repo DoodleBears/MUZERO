@@ -3,6 +3,7 @@ import { LocateFixed } from "lucide-react";
 import { animate, motion } from "motion/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LyricsMemoryStrip } from "@/components/player/lyrics-memory-strip";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { db } from "@/db/muzero-db";
@@ -108,11 +109,14 @@ export function useActiveLyricLine(
 export function SyncedLyricsView({
   emptyFallback = "search",
   showFooter = true,
+  showMemoryStrip = true,
   track,
   windowDragEnabled = false,
 }: {
   emptyFallback?: "search" | "hidden";
   showFooter?: boolean;
+  /** Top memory carousel over the lyrics (off for the immersive overlay, which has its own). */
+  showMemoryStrip?: boolean;
   track?: Track;
   windowDragEnabled?: boolean;
 }) {
@@ -223,11 +227,12 @@ export function SyncedLyricsView({
   return (
     <motion.div
       animate={{ opacity: visible ? 1 : 0 }}
-      className={cn("h-full min-h-0", windowDragEnabled && "lyrics-window-drag-surface")}
+      className={cn("relative h-full min-h-0", windowDragEnabled && "lyrics-window-drag-surface")}
       initial={false}
       style={{ pointerEvents: visible ? "auto" : "none" }}
       transition={{ duration: TRACK_LYRICS_FADE_MS / 1000, ease: "easeOut" }}
     >
+      <LyricsMemoryStrip showMemoryStrip={showMemoryStrip} />
       {content}
     </motion.div>
   );

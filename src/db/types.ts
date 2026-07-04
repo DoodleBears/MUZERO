@@ -965,6 +965,9 @@ export interface AppSettings {
   immersiveVideoTrackFlowEnabled?: boolean;
   /** Surface memories as a top popover during full-immersive (idle-only) playback. Default true. */
   immersiveMemoryOverlay?: boolean;
+  /** Surface memories as a top carousel strip while lyrics are shown (mirrors the immersive
+   *  overlay). Default true. Additive/non-indexed. See the annotation-commands PRD. */
+  lyricsMemoryOverlay?: boolean;
   /** Mount the floating performance HUD in prod builds (dev always mounts it).
    *  Visible Settings switch for perf baselining — memory-perf-audit PRD Phase 1. Default false. */
   perfHudEnabled?: boolean;

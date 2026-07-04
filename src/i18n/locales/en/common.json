@@ -714,6 +714,7 @@
       "blendMode": "Controls how the background visualizer mixes with the image below it. Try softer modes for readability and brighter modes for a more luminous look.",
       "idleOnly": "Hides the player UI after a few quiet seconds on Now Playing, leaving the background visualizer in focus.",
       "memoryOverlay": "Shows your saved memories while the player UI is hidden, so notes and timestamped moments can surface without leaving immersive mode.",
+      "lyricsMemoryOverlay": "Shows this song's memories as a strip at the top of the lyrics, so comments and timestamped moments surface as you read along.",
       "fftSize": "Controls how much audio detail the visualizer listens to. Higher can feel more precise but may react a little slower.",
       "smoothing": "Controls how quickly the motion settles. Higher feels calmer and smoother; lower reacts faster to beats.",
       "minDecibels": "Sets the quietest sound level the visualizer treats as visible. Lower picks up more quiet details; higher ignores background noise.",
@@ -745,6 +746,7 @@
     "idleOnly": "Hide player UI when idle",
     "idleOnlyHint": "On Now Playing, fade out the cover, controls, queue, header, and dock after a few idle seconds so only the background visualizer remains.",
     "memoryOverlay": "Show memories while immersive",
+    "lyricsMemoryOverlay": "Show memories over lyrics",
     "memoryOverlayHint": "When only the background and spectrum remain, surface your memories one at a time as a top popover — timestamp-pinned ones at their moment, the rest filling the quiet gaps."
   },
   "crop": {

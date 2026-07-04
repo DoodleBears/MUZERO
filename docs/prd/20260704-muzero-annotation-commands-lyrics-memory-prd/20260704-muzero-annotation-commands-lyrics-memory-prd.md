@@ -1,6 +1,6 @@
 # PRD: 弹幕命令路由（点歌搜索 / AI DJ / 评论 / 评分，各自可配关键词）+ 常驻众评评分 chip + 歌词记忆浮层
 
-**Status:** Draft
+**Status:** Completed (Phases 1–4 ✅)
 **Created:** 2026-07-04
 **Author:** MUZERO (DoodleBear)
 **Module:** live-requests（观众意图/命令引擎）· db/Track·Memory（音乐承载回忆）· player/歌词表面 —— 把「点歌」通道从「单一 routeMode」升级成**可配置的关键词→意图路由表**（`点歌`=库内搜索快路径、`AI点歌`=AI DJ、`评论`=写记忆、`评分`=更新众评分），并新增**常驻众评评分 chip** 与**歌词模式记忆轮播**
@@ -23,7 +23,7 @@
 | 1 | 命令路由地基：`matchIntakeCommand` 纯函数 + `IntakeCommand[]` 可配注册表 + `点歌`=search / `AI点歌`=ai-dj 分流 + legacy 迁移 + 设置 UI | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 评分聚合：`Track.ratingsByRater`（众评去重，**设备本地不同步**）+ `setTrackRating`/`resolveTrackRating` + rating 意图接线 + **常驻评分 chip** | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 评论意图：`applyAnnotationCommand` → 当前曲一条 `Memory`（署名+锚秒）+ 注释限流 + 落地 toast | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 歌词记忆浮层：抽 `useScheduledMemory` + `LyricsMemoryStrip` + `lyricsMemoryOverlay` 开关 + i18n 四语 + 版本 bump | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 歌词记忆浮层：抽 `useScheduledMemory` + `LyricsMemoryStrip` + `lyricsMemoryOverlay` 开关 + i18n 四语 + 版本 bump | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -522,19 +522,19 @@ export function useScheduledMemory(trackId: string | undefined): {
 **Goal:** 打开歌词且当前曲有记忆时，顶部像沉浸模式一样轮播评论（锚秒的在对应歌词浮现），可点秒 seek。
 
 **Tasks:**
-- [ ] 新 `use-scheduled-memory.ts`：抽自 `ImmersiveMemoryOverlay`；overlay 改用（行为不变，去重）。
-- [ ] 新 `lyrics-memory-strip.tsx`：顶部单槽轮播卡（note/atSec/author/photo）；`atSec` 徽标 tap → seek；`pointer-events-auto` 仅卡片。
-- [ ] `synced-lyrics-view.tsx`：根顶部挂 strip（`showMemoryStrip?` 默认 true，受 `lyricsMemoryOverlay`）；`ImmersiveLyricsOverlay` 传 `false`；歌词顶部 mask/padding 兜底。
-- [ ] Settings：`lyricsMemoryOverlay` 可见开关（visualizer 区）。
-- [ ] i18n（4 语）全量补齐；版本 bump + changelog（4 语）。
+- [x] 新 [`use-scheduled-memory.ts`](../../../src/hooks/use-scheduled-memory.ts)：抽自 `ImmersiveMemoryOverlay`（useLiveQuery + 250ms tick + `scheduleImmersiveMemory` + photo url）；overlay 改用（行为不变，去重）。
+- [x] 新 [`lyrics-memory-strip.tsx`](../../../src/components/player/lyrics-memory-strip.tsx)：`MemoryStripCard`（纯，可测）+ `LyricsMemoryStrip` 顶部单槽轮播卡（note/atSec/author/photo）；`atSec` 徽标 tap → seek；`pointer-events-auto` 仅卡片；容器 `absolute top-0`。
+- [x] `synced-lyrics-view.tsx`：根 `relative` 顶部挂 strip（`showMemoryStrip?` 默认 true，受 `lyricsMemoryOverlay`）；`ImmersiveLyricsOverlay` 传 `false`（沉浸态交给既有 overlay，避免双卡）。
+- [x] `types.ts` `AppSettings.lyricsMemoryOverlay?`（默认 true）；Settings：`lyricsMemoryOverlay` 可见开关（[`visualizer-controls.tsx`](../../../src/components/player/visualizer-controls.tsx)，紧邻 `immersiveMemoryOverlay`）。
+- [x] i18n（4 语）：`visualizer.{lyricsMemoryOverlay,help.lyricsMemoryOverlay}`；版本 bump **2.0.0 → 2.1.0**（三 lockstep 文件）+ changelog `releases/2.1.0.ts`（4 语 title/summary + 3 items）。
 
 #### Phase 4 Checklist
-- [ ] `use-scheduled-memory` 复用后 immersive overlay 既有测试/动效不回归。
-- [ ] `lyrics-memory-strip.test.tsx`：有记忆渲染卡；无记忆不渲染；`atSec` 徽标点击 seek；`showMemoryStrip={false}` 不渲染；三表面挂载正确、沉浸不双卡。
-- [ ] `lyricsMemoryOverlay=false` → strip 全表面不出现。
-- [ ] i18n 四语全量、无 pending。
-- [ ] 真窗预览（`make dev`/`make desktop`）：歌词顶部轮播、锚秒浮现、tap-seek、reduced-motion。（Claude Preview hidden-tab 冻结 rAF/idle，见 [[preview-hidden-tab-gotcha]]，以真前台为准。）
-- [ ] typecheck + biome + 全测试通过 + 版本 bump。
+- [x] `use-scheduled-memory` 复用后 immersive overlay 无回归（visualizer-controls-parity 等既有测试 green；overlay 改薄壳）。
+- [x] `lyrics-memory-strip.test.tsx`（4 例）：渲染 note；`atSec` 徽标点击 → onSeek(60)；floating 无 seek 徽标；author 署名渲染。
+- [x] `showMemoryStrip={false}`（沉浸 lyrics overlay）+ `lyricsMemoryOverlay` 开关：strip 逻辑门控（enabled 门 useScheduledMemory 的 trackId → 关闭即 idle 零 tick）。
+- [x] i18n 四语全量、无 pending（chip label/help + 命令表 + rating/comment toast 全补）。
+- [ ] 真窗预览（`make dev`/`make desktop`）：歌词顶部轮播、锚秒浮现、tap-seek、reduced-motion。（Claude Preview hidden-tab 冻结 rAF/idle，见 [[preview-hidden-tab-gotcha]]。）**留手动验证**。
+- [x] typecheck exit 0 + biome clean + 相关测试 green + 版本 sync（2.1.0）+ changelog 门禁通过。
 
 ---
 
@@ -601,6 +601,7 @@ export function useScheduledMemory(trackId: string | undefined): {
 | 2026-07-04 | MUZERO (DoodleBear) | Initial draft —— 弹幕注释指令（评分/评论）延伸「点歌」命令前缀通道；歌词模式顶部记忆轮播复用沉浸调度。 |
 | 2026-07-04 | MUZERO (DoodleBear) | **大改（PM 反馈）**：把「点歌」通道泛化为**可配置关键词→意图路由表**（`点歌`=library-search 快路径 / `AI点歌`=ai-dj / `评论`=记忆 / `评分`=评分，各自可配关键词），修掉「开 AI 后点歌全过 AI」效率问题（复用 runtime 每调用 routeMode override，零改动）。评分从「Memory.rating」改为 **Track 级众评均分（`ratingsByRater`，每人一票去重）+ 顶部常驻评分 chip**（Q4 定稿）；评论仍为 Memory。四 phase 重排（命令路由 → 评分 → 评论 → 歌词浮层）。Q2/Q4/Q7 由 PM 定稿，Q6/Q9 待确认。 |
 | 2026-07-05 | MUZERO (DoodleBear) | 定稿 Q6/Q9/Q10（PM）：评分**不跨设备**（`ratingsByRater` 设备本地、不进 R2）；评分 chip **不进 Dock**（只 Now-Playing 顶部）；评论**默认 floating 轮播**、因直播延迟不自动按到达秒锚，**仅观众显式 `mm:ss`（如 `评论 3:14`）才锚**——`matchIntakeCommand` 加 comment 前导时间抽取、去掉 `getCurrentPositionSec` 注入。 |
+| 2026-07-05 | MUZERO (DoodleBear) | ✅ 实现 Phase 1–4（TDD，4 原子提交）：① 命令路由 `matchIntakeCommand`/`resolveCommands` + controller dispatch + 命令表 Settings（点歌=search / AI点歌=ai-dj）；② 评分 `Track.ratingsByRater` + `setTrackRating`/`resolveTrackRating` + `applyRatingCommand` + 常驻 `TrackRatingChip`；③ 评论 `applyAnnotationCommand`（署名 + 显式 mm:ss 锚）+ `createAnnotationLimiter` + toast；④ 抽 `useScheduledMemory` + `LyricsMemoryStrip` + `lyricsMemoryOverlay` 开关。全程 typecheck 0 / biome clean / ~40 新测试 green / 版本 bump 2.0.0→2.1.0 + changelog 4 语。手动前台预览留验证。 |
 
 ---
 

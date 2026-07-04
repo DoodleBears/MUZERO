@@ -52,6 +52,7 @@ export function ImmersiveLyricsOverlay({
         <SyncedLyricsView
           emptyFallback={lyricsOnly ? "hidden" : "search"}
           showFooter={!lyricsOnly}
+          showMemoryStrip={false}
           track={current}
           windowDragEnabled={windowDragEnabled}
         />

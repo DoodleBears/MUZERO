@@ -131,6 +131,14 @@ export function VisualizerControls({
         />
       ) : null}
 
+      <CheckboxControl
+        controlId="lyrics-memory-overlay"
+        checked={settings.lyricsMemoryOverlay ?? true}
+        helpLabel={t("visualizer.help.lyricsMemoryOverlay")}
+        label={t("visualizer.lyricsMemoryOverlay")}
+        onCheckedChange={(checked) => void saveSettings({ lyricsMemoryOverlay: checked })}
+      />
+
       <div data-visualizer-control="tuning">
         <VisualizerTuningControls />
       </div>
