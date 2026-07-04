@@ -20,15 +20,25 @@ mkdirSync(OUT, { recursive: true });
 
 const conn = JSON.parse(readFileSync(path.join(ROOT, ".logs", "perf-control.json"), "utf8"));
 const H = { "content-type": "application/json", "x-muzero-perf-token": conn.token };
-async function ctl(method, p, body) {
-  const res = await fetch(`${conn.url}${p}`, {
-    method,
-    headers: H,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const json = await res.json();
-  if (!json.ok) throw new Error(`${p} -> ${res.status} ${json.error}`);
-  return json.data;
+async function ctl(method, p, body, tries = 3) {
+  for (let i = 0; ; i++) {
+    try {
+      const res = await fetch(`${conn.url}${p}`, {
+        method,
+        headers: H,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(`${p} -> ${res.status} ${json.error}`);
+      return json.data;
+    } catch (e) {
+      // Retry transient resets (main thread busy mid-capture); rethrow real errors
+      // (e.g. a 422 "driver not mounted") so callers can fall back.
+      const transient = /ECONNRESET|fetch failed|socket hang up|network/i.test(String(e?.message || e));
+      if (i >= tries - 1 || !transient) throw e;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
 }
 
 const target = await pickPageTarget(PORT, "localhost");
@@ -71,8 +81,44 @@ async function findSyncedLyricsIndex() {
   return Number(raw);
 }
 
+// Force the capture UI language (README + site are English) via the app's startup
+// locale (localStorage → i18n), then reload so it takes effect.
+const CAPTURE_LOCALE = process.env.MUZERO_CAPTURE_LOCALE || "en";
+const curLang = String(await ev(`document.documentElement.lang || ""`));
+if (curLang !== CAPTURE_LOCALE) {
+  // Only reload when the locale actually needs switching (reload needs Vite live).
+  await ev(`(()=>{try{localStorage.setItem('muzero-locale', ${JSON.stringify(CAPTURE_LOCALE)})}catch(e){}})()`);
+  await cdp.send("Page.reload", {});
+  await sleep(3200); // wait for reload + app boot + control-endpoint bridge re-attach
+  process.stdout.write(`  locale ${curLang || "?"} -> ${CAPTURE_LOCALE} (reloaded)\n`);
+} else {
+  process.stdout.write(`  locale already ${CAPTURE_LOCALE} (no reload)\n`);
+}
+
+// Keep the page "focused" so the visualizer/flow rAF keeps painting even when the
+// window is backgrounded — otherwise the now-playing/visualizer GIFs get 0 frames.
+await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true }).catch(() => {});
+
 const dims = JSON.parse(await ev(`JSON.stringify({w:innerWidth,h:innerHeight,dpr:devicePixelRatio})`));
-process.stdout.write(`renderer ${target.url}  viewport ${dims.w}x${dims.h} @${dims.dpr}x\n`);
+process.stdout.write(`renderer ${target.url}  window viewport ${dims.w}x${dims.h} @${dims.dpr}x\n`);
+
+// "Maximize" for capture: override the viewport to a large desktop size at 2× device
+// pixels, so the showcase shows the FULL desktop layout, retina-crisp — without
+// physically resizing the window (Electron's CDP has no Browser.setWindowBounds).
+// Input.* coordinates stay in CSS px against this overridden viewport, so the
+// rectOf-driven clicks/touches still map correctly.
+const CAPTURE_DPR = 2;
+const CAPTURE_W = Number(process.env.MUZERO_CAPTURE_W || 1920);
+const CAPTURE_H = Number(process.env.MUZERO_CAPTURE_H || 1080);
+await cdp.send("Emulation.setDeviceMetricsOverride", {
+  width: CAPTURE_W,
+  height: CAPTURE_H,
+  deviceScaleFactor: CAPTURE_DPR,
+  mobile: false,
+});
+await cdp.send("Emulation.setVisibleSize", { width: CAPTURE_W, height: CAPTURE_H }).catch(() => {});
+await sleep(700); // let the responsive layout settle at the larger size
+process.stdout.write(`  capturing ${CAPTURE_W}x${CAPTURE_H} @${CAPTURE_DPR}x (retina, full desktop)\n`);
 
 async function shot(name) {
   const r = await cdp.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
@@ -127,10 +173,13 @@ async function gif(name, { durationMs = 3000, maxWidth = 680, fps = 13, everyNth
   cdp.on("Page.screencastFrame", onFrame);
   await cdp.send("Page.startScreencast", {
     format: "jpeg",
-    quality: 80,
+    quality: 92,
     everyNthFrame: everyNth,
-    maxWidth: Math.round(maxWidth * dims.dpr),
-    maxHeight: Math.round(maxWidth * dims.dpr * 2),
+    // Supersample: grab frames at CAPTURE_DPR× the target width, then ffmpeg
+    // lanczos-downscales to `maxWidth` for anti-aliased, crisp GIF output
+    // (was 1× → the palette/scale pass had nothing to anti-alias from → soft).
+    maxWidth: Math.round(maxWidth * CAPTURE_DPR),
+    maxHeight: Math.round(maxWidth * CAPTURE_DPR * 2),
   });
   const driver = drive ? drive() : sleep(durationMs);
   await Promise.all([driver, sleep(durationMs)]);
@@ -155,6 +204,16 @@ async function gif(name, { durationMs = 3000, maxWidth = 680, fps = 13, everyNth
   process.stdout.write(`  GIF  ${path.relative(ROOT, out)}  (${frames.length} frames @ ${fps}fps, ${maxWidth}px)\n`);
 }
 
+// Poll until a selector renders (e.g. search results) before capturing.
+async function waitForSel(selector, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await rectOf(selector)) return true;
+    await sleep(150);
+  }
+  return false;
+}
+
 const want = (n) => !only || only === n;
 
 // ---- baseline visual state: dark theme, immersive flow + spectrum bars, cover stage ----
@@ -167,7 +226,7 @@ await sleep(1400);
 
 // 1) Now Playing — immersive cover stage, flow background + spectrum animating.
 if (want("now-playing")) {
-  await gif("now-playing", { durationMs: 2800, maxWidth: 720, fps: 14, everyNth: 3 });
+  await gif("now-playing", { durationMs: 2600, maxWidth: 960, fps: 13, everyNth: 5, colors: 144 });
 }
 
 // 2) Visualizer & lyrics — cycle the visualizer styles, then flip into lyrics mode
@@ -186,11 +245,11 @@ if (want("visualizer")) {
   });
   await sleep(1300);
   await gif("visualizer", {
-    durationMs: 5800,
-    maxWidth: 700,
+    durationMs: 5200,
+    maxWidth: 900,
     fps: 12,
-    everyNth: 3,
-    colors: 96,
+    everyNth: 4,
+    colors: 150,
     drive: async () => {
       for (const style of ["bars", "radial", "led-reflex", "waveform"]) {
         await ctl("POST", "/settings", { visualizerStyle: style });
@@ -224,14 +283,14 @@ if (want("switch-song")) {
     const cy = box.y + box.h / 2;
     const dx = -box.w * 0.42; // swipe left → exactly one track forward, soft landing
     await gif("switch-song", {
-      durationMs: 5200,
-      maxWidth: 560,
+      durationMs: 3600,
+      maxWidth: 760,
       fps: 12,
-      everyNth: 4,
-      colors: 64,
+      everyNth: 6,
+      colors: 110,
       drive: async () => {
         await sleep(450);
-        for (let i = 0; i < 3; i += 1) {
+        for (let i = 0; i < 2; i += 1) {
           await touchSwipe(cx, cy, dx, { steps: 14, holdMs: 16 });
           await sleep(1450);
         }
@@ -240,26 +299,85 @@ if (want("switch-song")) {
   }
 }
 
-// 4) Search — global ⌘F overlay with a live query + results.
+// 4) Search — global ⌘F/Ctrl+F overlay + a live query + results. The dev-only
+//    /search driver is tree-shaken out of the prod preview, so fall back to a real
+//    key event to open it + CDP text insert (works in both dev and prod).
 if (want("search")) {
-  await ctl("POST", "/search", { action: "reset" }).catch(() => {});
-  await ctl("POST", "/search", { action: "open" });
-  await sleep(700);
-  for (const q of ["", "tanaka"]) {
-    await ctl("POST", "/search", { action: "type", query: q });
-    await sleep(250);
+  let viaKeyboard = false;
+  try {
+    await ctl("POST", "/search", { action: "reset" }).catch(() => {});
+    await ctl("POST", "/search", { action: "open" });
+    await sleep(700);
+    await ctl("POST", "/search", { action: "type", query: "love" });
+  } catch (e) {
+    viaKeyboard = true;
+    process.stdout.write(`  search: /search driver unavailable (${e.message}); using keyboard\n`);
+    const mod = process.platform === "darwin" ? 4 : 2; // Meta(4) on mac, Ctrl(2) else
+    for (const type of ["keyDown", "keyUp"]) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        type,
+        key: "f",
+        code: "KeyF",
+        windowsVirtualKeyCode: 70,
+        modifiers: mod,
+      });
+    }
+    await sleep(800);
+    await cdp.send("Input.insertText", { text: "love" });
   }
-  await ctl("POST", "/search", { action: "type", query: "love" });
-  await sleep(900);
+  // Wait for result rows to actually render before capturing — don't shoot an empty list.
+  const gotResults = await waitForSel('[role="option"]', 5000);
+  await sleep(gotResults ? 700 : 1200);
+  process.stdout.write(`  search: results ${gotResults ? "rendered" : "NOT found (shot anyway)"}\n`);
   await shot("search");
-  await ctl("POST", "/search", { action: "close" });
+  if (viaKeyboard) {
+    for (const type of ["keyDown", "keyUp"]) {
+      await cdp
+        .send("Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 })
+        .catch(() => {});
+    }
+  } else {
+    await ctl("POST", "/search", { action: "close" }).catch(() => {});
+  }
 }
 
-// 5) Library — the 歌单 gallery (nav FAB item 2 → the "search" tab page).
+// 5) Library — the 歌单 gallery: scroll through the playlists so the GIF shows the
+//    real richness of the set wall (a single still under-sold it / caught it empty).
 if (want("library")) {
   await ctl("POST", "/nav/tab", { tab: "search" });
-  await sleep(1100);
-  await shot("library");
+  await sleep(1500);
+  const lx = Math.round(CAPTURE_W / 2);
+  const ly = Math.round(CAPTURE_H / 2);
+  await gif("library", {
+    durationMs: 3200,
+    maxWidth: 960,
+    fps: 11,
+    everyNth: 6,
+    colors: 128,
+    drive: async () => {
+      await sleep(450);
+      // Scroll the gallery down to reveal many playlists, then drift back up.
+      for (let i = 0; i < 4; i += 1) {
+        await cdp.send("Input.dispatchMouseEvent", {
+          type: "mouseWheel",
+          x: lx,
+          y: ly,
+          deltaX: 0,
+          deltaY: 380,
+        });
+        await sleep(560);
+      }
+      await sleep(300);
+      await cdp.send("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        x: lx,
+        y: ly,
+        deltaX: 0,
+        deltaY: -520,
+      });
+      await sleep(420);
+    },
+  });
 }
 
 // 6) Settings — signature visual customization (the flow-background pane).

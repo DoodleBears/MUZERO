@@ -40,7 +40,7 @@ sync, and an LLM-powered DJ into one app.
       <sub><b>Global ⌘F search</b> — across tracks, tags, lyrics, and online sources.</sub>
     </td>
     <td width="50%" valign="top">
-      <img src="./docs/media/library.png" alt="Set gallery" /><br/>
+      <img src="./docs/media/library.gif" alt="Set gallery" /><br/>
       <sub><b>Set gallery</b> — sets, albums, artists, and smart playlists in one place.</sub>
     </td>
   </tr>
