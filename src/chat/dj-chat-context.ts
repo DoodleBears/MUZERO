@@ -1,5 +1,11 @@
 import type { MuzeroDB } from "@/db/muzero-db";
-import { getAllEnrichmentGenres, getPlayQueue, getSession, getTrack } from "@/db/repositories";
+import {
+  getAllEnrichmentGenres,
+  getPlayQueue,
+  getSession,
+  getTrack,
+  getTrackTagsRevision,
+} from "@/db/repositories";
 import { type DjChatLocalIdRegistry, encodeSetRef, encodeTrackRef } from "./dj-chat-local-ids";
 import { computeFacets } from "./library-facets";
 
@@ -62,20 +68,18 @@ export async function buildSetsContext(db: MuzeroDB): Promise<string> {
 
 /**
  * Cached palette block per DB. Recomputing the full-library scan every DJ turn is wasted disk
- * I/O (the library rarely changes mid-chat), so we memoize and invalidate on a CHEAP fingerprint
- * — the track + enrichment row COUNTS. `count()` reads IndexedDB key stats without deserializing
- * rows, and the counts move on exactly the events that move the palette: add / remove a track,
- * and auto-enrich / sweep writing a new enrichment row.
+ * I/O (the library rarely changes mid-chat), so we memoize and invalidate on a CHEAP fingerprint:
+ *  - track + enrichment row COUNTS — `count()` reads IndexedDB key stats without deserializing
+ *    rows, and moves on add / remove a track and auto-enrich / sweep writing an enrichment row;
+ *  - the tag-edit revision ({@link getTrackTagsRevision}) — a tag edit on an existing track moves
+ *    no count, so `setTrackTags` bumps this instead → an edited tag shows in the palette at once.
+ * Together these cover every palette-relevant change.
  *
  * Deliberately in-memory, NOT a persisted materialized aggregate: recomputing once per app
  * session (first chat turn) is negligible against LLM latency, whereas a persisted incremental
  * count store would have to hook every write path and risks the denormalized-count DRIFT this
  * codebase moved playCount/liked OFF the track row to avoid (switch-fps). Recompute-from-source
  * can't drift. Keyed by DB (WeakMap) so tests with isolated DBs don't cross-contaminate.
- *
- * Known gap: a tag-only edit on an EXISTING track doesn't move the counts, so a freshly-added
- * tag lands in the palette on the next add/remove/enrich (or restart) — acceptable for a rough
- * vocabulary hint, and it's always correct-from-source, never stale-and-wrong.
  */
 const facetsBlockCache = new WeakMap<MuzeroDB, { fingerprint: string; block: string }>();
 
@@ -92,7 +96,9 @@ export async function buildLibraryFacetsContext(db: MuzeroDB): Promise<string> {
     db.tracks.count(),
     db.enrichments.count(),
   ]);
-  const fingerprint = `${trackCount}:${enrichmentCount}`;
+  // Counts catch add/remove/enrich; the tag revision catches tag EDITS on existing tracks
+  // (which don't move any count). Together they invalidate on every palette-relevant change.
+  const fingerprint = `${trackCount}:${enrichmentCount}:${getTrackTagsRevision(db)}`;
   const cached = facetsBlockCache.get(db);
   if (cached && cached.fingerprint === fingerprint) return cached.block;
 

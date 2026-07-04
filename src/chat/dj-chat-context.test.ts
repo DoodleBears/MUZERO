@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { createSession, playQueueSet, setTrackEnrichment } from "@/db/repositories";
+import { createSession, playQueueSet, setTrackEnrichment, setTrackTags } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import {
   buildLibraryFacetsContext,
@@ -136,6 +136,26 @@ describe("buildLibraryFacetsContext", () => {
     const third = await buildLibraryFacetsContext(db);
     expect(scan).toHaveBeenCalledTimes(2);
     expect(third).toContain("#beta");
+  });
+
+  it("invalidates the cache when tags are edited on an existing track (setTrackTags)", async () => {
+    db = new MuzeroDB("dj-facets-tag-edit");
+    await db.tracks.put({
+      ...trackRow({ id: "t1", sessionId: "s", title: "A" }),
+      tags: ["alpha"],
+    });
+    const scan = vi.spyOn(db.tracks, "toArray");
+
+    const first = await buildLibraryFacetsContext(db);
+    expect(first).toContain("#alpha");
+    expect(scan).toHaveBeenCalledTimes(1);
+
+    // Tag edit on the SAME track — row count unchanged, but setTrackTags bumps the tag
+    // revision so the palette reflects the new tag immediately (not next add/remove/enrich).
+    await setTrackTags("t1", ["alpha", "beta"], db);
+    const second = await buildLibraryFacetsContext(db);
+    expect(scan).toHaveBeenCalledTimes(2);
+    expect(second).toContain("#beta");
   });
 
   it("omits notFound (negative-cache) enrichment and empties from the palette", async () => {

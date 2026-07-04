@@ -1631,6 +1631,20 @@ export async function likedTrackAtMap(db: MuzeroDB = defaultDb): Promise<Map<str
 
 // ------------------------------------------------------------- annotations ----
 
+/**
+ * Facets (DJ "library palette") cache invalidation. A tag edit on an EXISTING track changes no
+ * row count, so `buildLibraryFacetsContext`'s count fingerprint can't see it. {@link setTrackTags}
+ * bumps this per-DB revision instead; the facets fingerprint folds it in, so an edited tag shows
+ * in the palette at once. Kept PRECISE (only real tag edits) rather than a table-wide Dexie hook —
+ * otherwise frequent background track writes (metadata hydration) would defeat the cache.
+ */
+const trackTagsRevisions = new WeakMap<MuzeroDB, number>();
+
+/** Current tag-edit revision for a DB (starts at 0). Read by the facets cache fingerprint. */
+export function getTrackTagsRevision(db: MuzeroDB = defaultDb): number {
+  return trackTagsRevisions.get(db) ?? 0;
+}
+
 export async function setTrackTags(
   id: string,
   tags: string[],
@@ -1639,6 +1653,7 @@ export async function setTrackTags(
   // Normalize: trim, drop empties, de-dupe, lowercase for stable matching.
   const clean = Array.from(new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean)));
   await db.tracks.update(id, { tags: clean, updatedAt: Date.now() });
+  trackTagsRevisions.set(db, (trackTagsRevisions.get(db) ?? 0) + 1);
 }
 
 export async function setTrackNote(
