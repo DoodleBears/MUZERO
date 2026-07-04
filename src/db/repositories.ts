@@ -2441,6 +2441,38 @@ export async function updateMemoryNote(
   await updateMemory(id, { note }, db);
 }
 
+/** Cap on distinct raters kept in `Track.ratingsByRater` (newest by insertion order). */
+export const RATING_RATER_CAP = 500;
+
+/**
+ * Record one rater's rating (1–5) for a track — crowd rating with per-rater dedup.
+ * `raterKey` is "self" (host) or an audience key; re-voting overwrites, never appends,
+ * and the map is capped to the newest {@link RATING_RATER_CAP} raters. Device-local:
+ * `ratingsByRater` is additive / non-indexed and is NOT synced to R2 (rating is
+ * per-device / per-stream — annotation-commands PRD Q6).
+ */
+export async function setTrackRating(
+  trackId: string,
+  raterKey: string,
+  score: number,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  const clamped = Math.min(5, Math.max(1, Math.round(score)));
+  await db.tracks
+    .where("id")
+    .equals(trackId)
+    .modify((track: Track) => {
+      const next: Record<string, number> = { ...(track.ratingsByRater ?? {}) };
+      next[raterKey] = clamped;
+      const keys = Object.keys(next);
+      if (keys.length > RATING_RATER_CAP) {
+        for (const key of keys.slice(0, keys.length - RATING_RATER_CAP)) delete next[key];
+      }
+      track.ratingsByRater = next;
+      track.updatedAt = Date.now();
+    });
+}
+
 /** Delete a memory and its photo blob (if any). */
 export async function deleteMemory(
   id: string,

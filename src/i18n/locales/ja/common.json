@@ -1568,7 +1568,15 @@
   "liveRequest": {
     "playedNow": "再生中：{{title}}",
     "playedNext": "次に再生：{{title}}",
-    "playedQueued": "キューに追加：{{title}}"
+    "playedQueued": "キューに追加：{{title}}",
+    "ratingAdded": "{{title}} を {{score}}★ で評価",
+    "ratingDetail": "平均 {{average}} · {{count}} 票"
+  },
+  "rating": {
+    "aria": "この曲を評価",
+    "setStar": "{{score}} 点で評価",
+    "summary": "{{average}} · {{count}} 票",
+    "none": "未評価"
   },
   "errorPage": {
     "kicker": "クラッシュレポート",

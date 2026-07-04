@@ -39,6 +39,7 @@ import { SwipeableCoverStage } from "@/components/player/swipeable-cover-stage";
 import { SyncedLyricsView } from "@/components/player/synced-lyrics-view";
 import { CurrentTrackContextMenu } from "@/components/player/track-context-menu";
 import { TrackInfoCard } from "@/components/player/track-info-card";
+import { TrackRatingChip } from "@/components/player/track-rating-chip";
 import { TransportControls } from "@/components/player/transport-controls";
 import { VisualizerModeButton } from "@/components/player/visualizer-mode-button";
 import { AnnotationEditor } from "@/components/track/annotation-editor";
@@ -199,6 +200,9 @@ function NowPlayingPageActive({
                   onTap={isNarrow ? toggleLyricsVisible : undefined}
                 />
                 {current && <TrackInfoCard track={current} />}
+                <div className="flex justify-center">
+                  <TrackRatingChip />
+                </div>
               </div>
             </RenderTraceBoundary>
           </CurrentTrackContextMenu>

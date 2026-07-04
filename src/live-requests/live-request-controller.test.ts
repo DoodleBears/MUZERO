@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { createSession, createUploadedTrack, saveSettings } from "@/db/repositories";
+import { createSession, createUploadedTrack, getTrack, saveSettings } from "@/db/repositories";
 import {
   type AudienceRequestSource,
   DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
@@ -237,6 +237,27 @@ describe("live-request-controller intent router", () => {
     await controller.handlePayload(payload(JSON.stringify({ message: "评分 5" })));
 
     expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("routes 评分 to a deduped crowd-rating vote on the current track (not the runtime)", async () => {
+    await enableIntake();
+    const home = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const current = await uploadedTrack(home.id, "Now Playing");
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({
+      db,
+      runtime,
+      controls: fakeControls(),
+      getCurrentTrackId: () => current.id,
+    });
+
+    await controller.handlePayload(
+      payload(JSON.stringify({ message: "评分 5", userid: "bob", platform: "twitch" })),
+    );
+
+    expect(handle).not.toHaveBeenCalled();
+    const row = await getTrack(current.id, db);
+    expect(row?.ratingsByRater).toEqual({ "twitch:bob": 5 });
   });
 
   it("still applies the per-source route override on the no-command fallback path", async () => {

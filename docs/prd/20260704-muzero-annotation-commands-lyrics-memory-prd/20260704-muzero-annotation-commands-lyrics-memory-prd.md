@@ -21,7 +21,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 命令路由地基：`matchIntakeCommand` 纯函数 + `IntakeCommand[]` 可配注册表 + `点歌`=search / `AI点歌`=ai-dj 分流 + legacy 迁移 + 设置 UI | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 评分聚合：`Track.ratingsByRater`（众评去重，**设备本地不同步**）+ `setTrackRating`/`resolveTrackRating` + rating 意图接线 + **常驻评分 chip** | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 评分聚合：`Track.ratingsByRater`（众评去重，**设备本地不同步**）+ `setTrackRating`/`resolveTrackRating` + rating 意图接线 + **常驻评分 chip** | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 评论意图：`applyAnnotationCommand` → 当前曲一条 `Memory`（署名+锚秒）+ 注释限流 + 落地 toast | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 歌词记忆浮层：抽 `useScheduledMemory` + `LyricsMemoryStrip` + `lyricsMemoryOverlay` 开关 + i18n 四语 + 版本 bump | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -484,20 +484,21 @@ export function useScheduledMemory(trackId: string | undefined): {
 **Goal:** `评分 5` / 主播点 chip 更新这首曲子的**众评均分（每人一票、去重）**；顶部常驻 chip 实时显示。
 
 **Tasks:**
-- [ ] `types.ts`：`Track.ratingsByRater?`（注释：去重/非索引/无 bump/封顶）。
-- [ ] `repositories.ts`：`setTrackRating(trackId, raterKey, score)`（clamp[1,5] + 去重覆盖 + 封顶淘汰 + bump updatedAt）。
-- [ ] 新 `lib/track-rating.ts`：`resolveTrackRating`（average+count，纯）。
-- [ ] `live-request-annotation.ts`：`applyRatingCommand`（raterKey 合成 + setTrackRating + onRated）；controller rating 分支接上 + 注释限流。
-- [ ] 新 `track-rating-chip.tsx`：常驻 chip（均分实心星 + 票数；主播点击投 self 票）；挂进 Now-Playing 顶部。
-- [ ] R2：**不透传** `ratingsByRater`（评分设备本地，Q6）——确认 R2 Track schema 不含该字段。
-- [ ] i18n（4 语）：chip aria / 空态 / rating toast。
+- [x] `types.ts`：`Track.ratingsByRater?`（去重/非索引/无 bump/封顶/**设备本地不进 R2**）。
+- [x] `repositories.ts`：`setTrackRating(trackId, raterKey, score)`（clamp[1,5] + 去重覆盖 + `RATING_RATER_CAP` 封顶淘汰 + bump updatedAt）。
+- [x] 新 [`lib/track-rating.ts`](../../../src/lib/track-rating.ts)：`resolveTrackRating`（average(一位小数)+count，纯）。
+- [x] 新 [`live-request-annotation.ts`](../../../src/live-requests/live-request-annotation.ts)：`applyRatingCommand`（`resolveRaterKey` 合成 + setTrackRating + onRated）；controller rating 分支接上（默认 repo writer，可注入）。**注**：评分靠 `ratingsByRater` 天然去重，Phase 2 未加显式限流（留到 Phase 3 评论的 Memory flood 场景）。
+- [x] 新 [`track-rating-chip.tsx`](../../../src/components/player/track-rating-chip.tsx)：`RatingStars`（纯，可测）+ `TrackRatingChip` 常驻 chip（均分实心星 + 票数；主播点击投 self 票）；挂进 Now-Playing 顶部（`TrackInfoCard` 下居中）。
+- [x] R2：**不透传** `ratingsByRater`（`sync/` 三文件未改）——评分设备本地（Q6）。
+- [x] i18n（4 语）：`rating.{aria,setStar,summary,none}` + `liveRequest.{ratingAdded,ratingDetail}`（toast，`notifyRatingAdded`）。
 
 #### Phase 2 Checklist
-- [ ] `track-rating.test.ts`：空→null；单票；多票均分+count；同 rater 覆盖不加 count；封顶淘汰。
-- [ ] `repositories.test.ts`：`setTrackRating` clamp / 去重 / 封顶 / updatedAt bump。
-- [ ] `live-request-annotation.test.ts`：`评分 5` 写当前曲 self/观众票；无分数/无当前曲 → ignored；限流。
-- [ ] R2 快照断言 `ratingsByRater` **不出现**在 Track manifest（设备本地，Q6）。
-- [ ] 真链路：观众 `评分 5` + 主播点 chip → 均分/票数实时变；跨设备同步。typecheck + biome + 测试通过。
+- [x] `track-rating.test.ts`（4 例）：空→null；单票；多票均分(4.3)+count；忽略非有限值。
+- [x] `rating-repo.test.ts`（3 例）：`setTrackRating` clamp(9→5) / 去重覆盖 / updatedAt bump。
+- [x] `live-request-annotation.test.ts`（4 例）：`评分 5` 写当前曲、keyed by requester；无分数/无当前曲 → ignored；`resolveRaterKey` 合成。
+- [x] `track-rating-chip.test.tsx`（2 例）：五星渲染 + filled 计数；点第 4 星 → onSelect(4)。controller `评分 5` 端到端写 `{ "twitch:bob": 5 }`（不进 runtime）。
+- [x] R2：`ratingsByRater` 未加进 manifest schema（sync/ 未改），设备本地（Q6）。
+- [ ] 真链路（需前台）：观众 `评分 5` + 主播点 chip → 均分/票数实时变。typecheck exit 0 + biome clean + 相关 125 tests green。**留手动预览验证**。
 
 ### Phase 3: 评论意图（写记忆）
 

@@ -33,3 +33,22 @@ export function notifyAudienceRequestPlayed(
   const detail = [artists, album].filter(Boolean).join(" · ") || undefined;
   notify.success(i18n.t(MESSAGE_KEY_BY_ACTION[action], { title: track.title }), { detail });
 }
+
+/**
+ * Top-left toast confirming a `评分` vote landed: the track + the new star and the
+ * updated crowd average · vote count. Same UI-dependency isolation as
+ * {@link notifyAudienceRequestPlayed} — wired in by the controller singleton.
+ */
+export function notifyRatingAdded(
+  track: Track,
+  score: number,
+  rating: { average: number; count: number } | null,
+): void {
+  const detail = rating
+    ? i18n.t("liveRequest.ratingDetail", {
+        average: rating.average.toFixed(1),
+        count: rating.count,
+      })
+    : undefined;
+  notify.success(i18n.t("liveRequest.ratingAdded", { title: track.title, score }), { detail });
+}

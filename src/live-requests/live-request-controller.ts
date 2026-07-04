@@ -1,5 +1,5 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import { getSettings } from "@/db/repositories";
+import { getPlayQueue, getSettings, getTrack, setTrackRating } from "@/db/repositories";
 import {
   type AudienceRequestIntakeSettings,
   DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
@@ -7,6 +7,7 @@ import {
 } from "@/db/types";
 import { type DesktopLiveRequestIntakeControls, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { log } from "@/lib/logger";
+import { resolveTrackRating } from "@/lib/track-rating";
 import {
   type AudienceRequestRuntime,
   type AudienceRequestRuntimeItem,
@@ -22,7 +23,8 @@ import {
 } from "./audience-request-schema";
 import { findSource, resolveSourceMapping, resolveSources } from "./audience-request-sources";
 import { matchIntakeCommand, resolveCommands } from "./intake-command";
-import { notifyAudienceRequestPlayed } from "./live-request-notification";
+import { applyRatingCommand } from "./live-request-annotation";
+import { notifyAudienceRequestPlayed, notifyRatingAdded } from "./live-request-notification";
 import { applyMapping } from "./request-mapping-presets";
 import { DEFAULT_SSN_RELAY_URL } from "./social-stream-relay";
 
@@ -66,6 +68,10 @@ export interface LiveRequestControllerDeps {
   getCurrentTrackId?: () => string | undefined | Promise<string | undefined>;
   /** Notified after a matched track is played / queued (production: a toast). */
   onRequestPlayed?: (input: { track: Track; action: AudienceRequestPlaybackAction }) => void;
+  /** Override the rating writer (tests); defaults to the `setTrackRating` repo. */
+  setTrackRating?: (trackId: string, raterKey: string, score: number) => Promise<void>;
+  /** Notified after a 评分 vote lands (production: a toast). */
+  onRated?: (input: { trackId: string; raterKey: string; score: number }) => void;
   now?: () => number;
   /** Inject the intake controls (tests); otherwise resolved from the desktop bridge. */
   controls?: DesktopLiveRequestIntakeControls;
@@ -153,6 +159,15 @@ export function createLiveRequestController(
     captures.set(sourceId, ring);
   }
 
+  // The currently-playing track for annotation intents (评论 / 评分). Prefer the
+  // injected store-cursor getter (fresh); fall back to the persisted play queue.
+  async function resolveCurrentTrackId(): Promise<string | undefined> {
+    const injected = await deps.getCurrentTrackId?.();
+    if (injected) return injected;
+    const queue = await getPlayQueue(db);
+    return queue.currentIndex >= 0 ? queue.entries[queue.currentIndex]?.trackId : undefined;
+  }
+
   async function handlePayload(payload: { sourceId?: string; body: string }): Promise<void> {
     const settings = await getSettings(db);
     const intake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
@@ -194,8 +209,18 @@ export function createLiveRequestController(
     // legacy prefix gate below, so prefix-less config and existing installs keep working.
     const command = matchIntakeCommand(request.rawMessage, resolveCommands(intake));
     if (command) {
-      if (command.command.intent === "comment" || command.command.intent === "rating") {
-        // TODO(Phase 2/3): comment → a Memory; rating → a crowd vote, on the current track.
+      if (command.command.intent === "rating") {
+        await applyRatingCommand(command, request, {
+          setTrackRating:
+            deps.setTrackRating ??
+            ((trackId, raterKey, score) => setTrackRating(trackId, raterKey, score, db)),
+          getCurrentTrackId: resolveCurrentTrackId,
+          onRated: deps.onRated,
+        });
+        return;
+      }
+      if (command.command.intent === "comment") {
+        // TODO(Phase 3): write a Memory onto the currently-playing track.
         return;
       }
       try {
@@ -319,6 +344,11 @@ function ensureSingleton(): LiveRequestController {
     },
     // Confirm the request landed with a top-left toast (title + artist · album).
     onRequestPlayed: ({ track, action }) => notifyAudienceRequestPlayed(track, action),
+    // Confirm a 评分 vote with the new star + updated crowd average · vote count.
+    onRated: async ({ trackId, score }) => {
+      const track = await getTrack(trackId, defaultDb);
+      if (track) notifyRatingAdded(track, score, resolveTrackRating(track));
+    },
   });
   return singleton;
 }

@@ -1567,7 +1567,15 @@
   "liveRequest": {
     "playedNow": "재생 중: {{title}}",
     "playedNext": "다음 곡: {{title}}",
-    "playedQueued": "대기열에 추가: {{title}}"
+    "playedQueued": "대기열에 추가: {{title}}",
+    "ratingAdded": "{{title}}에 {{score}}★ 평가",
+    "ratingDetail": "평균 {{average}} · {{count}} 표"
+  },
+  "rating": {
+    "aria": "이 곡 평가",
+    "setStar": "{{score}}점 평가",
+    "summary": "{{average}} · {{count}} 표",
+    "none": "평가 없음"
   },
   "errorPage": {
     "kicker": "크래시 리포트",

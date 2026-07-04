@@ -1568,7 +1568,15 @@
   "liveRequest": {
     "playedNow": "正在播放：{{title}}",
     "playedNext": "下一首：{{title}}",
-    "playedQueued": "已加入队列：{{title}}"
+    "playedQueued": "已加入队列：{{title}}",
+    "ratingAdded": "给《{{title}}》打了 {{score}}★",
+    "ratingDetail": "均分 {{average}} · {{count}} 票"
+  },
+  "rating": {
+    "aria": "给这首歌打分",
+    "setStar": "打 {{score}} 分",
+    "summary": "{{average}} · {{count}} 票",
+    "none": "未评分"
   },
   "errorPage": {
     "kicker": "崩溃报告",

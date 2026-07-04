@@ -164,6 +164,14 @@ export interface Track {
   liked: boolean;
   // Annotations — "music carries memories": user labels + memories (see `Memory`).
   tags: string[];
+  /**
+   * 众评评分：raterKey → 分数(1–5)。每人一票、去重（同一 rater 再投覆盖旧值）；
+   * raterKey 为主播本机 "self" 或观众 requesterKey。chip 显示 = 均分 + 票数（见
+   * `resolveTrackRating`）。追加、非索引、`Record` 值（镜像 {@link DjSession.trackRanks}）→
+   * 无 Dexie bump。**设备本地、不进 R2 同步**（评分不跨设备，annotation-commands PRD Q6）。
+   * 容量上限 `RATING_RATER_CAP` 按插入序淘汰最旧 key。
+   */
+  ratingsByRater?: Record<string, number>;
   /** Normalized embedded/generated media metadata. Raw native tag frames stay out of DB. */
   mediaMetadata?: TrackMediaMetadata;
   /** Absolute on-disk path this track was imported from — dedup key for local-folder sync. */
