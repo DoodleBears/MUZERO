@@ -343,6 +343,20 @@ describe("search projection + multi-keyword + curate-by-search", () => {
     expect(hit.tracks.map((t) => t.id)).toEqual([ids[0]]);
   });
 
+  it("projects the enrichment genre when requested (file genre ∪ external enrichment)", async () => {
+    const { ids } = await seed();
+    await setTrackEnrichment(
+      {
+        trackId: ids[0],
+        record: { source: "musicbrainz", genres: ["city pop"], styles: ["funk"], status: "found" },
+      },
+      db,
+    );
+    const out = await executeSearchTracks({ query: "city pop", fields: ["id", "genre"] }, { db });
+    expect(out.tracks).toHaveLength(1);
+    expect(out.tracks[0].genre).toEqual(["city pop", "funk"]);
+  });
+
   it("merges queries[] with match 'any' (union) and 'all' (intersection)", async () => {
     await seed();
     const anyHit = await executeSearchTracks({ queries: ["techno", "lofi"], match: "any" }, { db });

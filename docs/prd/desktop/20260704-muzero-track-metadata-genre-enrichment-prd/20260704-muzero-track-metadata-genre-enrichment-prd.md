@@ -391,6 +391,7 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 **Tasks:**
 - [x] `dj-engine.ts`：RecentTrack.genres = ∪(mediaMetadata.genres, enrichment.genres/styles)（Phase 2 已接，`getEnrichmentsByTrackIds` 批量）。
 - [x] `dj-chat-tools.ts` + `dj-chat-tool-descriptions.ts`：`library_search` 把 enrichment.genres/styles 折进搜索语料（`enrichmentGenresByTrackIdMap` + `searchTracks` 加 `enrichmentGenresByTrackId` 参数）；三语工具描述注明「导入曲可按补齐风格搜」。**PM「过滤导入歌曲」核心落点。TDD：搜 "city pop" 命中仅被补该风格的曲。**
+- [x] **结果返回风格**：`TRACK_RESULT_FIELDS` 加可投影 `genre` 字段（`projectTrack` 返回 文件 genres ∪ enrichment genres/styles，复用已算好的 corpus map，仅请求时 join）；三语描述提示 agent 可请求 `genre`。**让 DJ 不只"按风格过滤"还能"看到每曲风格"来推理策展。TDD。**
 - [x] `track-search.ts`：`searchTracks`/`matchesQuery`/`trackSearchScore` 加 `enrichmentGenresByTrackId`/`extraFreeFields`（镜像 `memoryNotesByTrackId`），enrichment 进 free 字段可搜；TDD。
 - [x] `annotation-editor.tsx`：`TrackGenreChips` 只读风格 chips（dashed + Sparkles，区分用户 tag）+ 每曲「重新获取风格」按钮（`clearTrackEnrichment` + `runAutoEnrich`）；i18n。
 - [ ]（deferred/可选）LLM 归一化：脏 rawTags 过 Vercel AI SDK 收敛——纯 `normalize` 映射已覆盖主要噪声（含真实 MB 标签迭代），LLM 为后续增强。
@@ -488,3 +489,4 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 | 2026-07-04 | MUZERO Team | **Phase 3 Settings UI 完成**：`genre-enrichment-settings.tsx`（AI section「风格标签」，图标 tags）= autoEnrich 开关 + Last.fm/Discogs key（password/失焦保存）+ sweep 进度轮询 + 立即补齐/停止/重试未找到按钮 + web 降级说明；`clearFailedEnrichments`（TDD，只清 notFound）；i18n en/zh/ja/ko 全量。**全量 3637 测全绿（+30）**。Phase 3 完成 |
 | 2026-07-04 | MUZERO Team | **Phase 4 QQ 原生 genre（TDD）**：`streamsrc/qq/qq-genre.ts`（`parseQqNativeGenre` 纯 + `fetchQqNativeGenre` guest 详情，复用导出签名）+ `enrich/qq-provider.ts`（`streamSourceId==="qq"` 自我 gate、via `native`、conf 0.85）；`EnrichmentQuery.streamSourceId`；registry auto 组合 QQ 排首。解析器用**真实 E2E 响应形状**测。**74 enrich 单测全绿（+7）、tsc/biome 干净**。Phase 4 完成（待用户库含 QQ 曲时补 in-app pipeline E2E） |
 | 2026-07-04 | MUZERO Team | **Phase 5 消费方接线（TDD）**：`track-search` `searchTracks`/`matchesQuery` 加 `enrichmentGenresByTrackId`（镜像 memoryNotes，enrichment 进 free 语料）；`dj-chat-tools` `library_search` 折进 enrichment genre（**PM「过滤导入歌曲」落点**）+ 三语工具描述；`annotation-editor` `TrackGenreChips` 只读风格 chips + 每曲重新获取按钮；i18n 4 语言。DJ RecentTrack.genres Phase 2 已接。**全量 3648 测全绿（+4）**。LLM 归一化 / ⌘F worker 语料 = deferred followup。Phase 5 完成 |
+| 2026-07-04 | MUZERO Team | **搜索结果返回 genre（Phase 5 补强）**：应问「AI DJ 搜索结果会返回风格吗」——此前只能**按**风格过滤、结果**不含** genre。加可投影 `genre` 字段（`projectTrack` 返回 文件∪enrichment，复用 corpus map 仅请求时 join）+ 三语描述提示。TDD（`fields:["id","genre"]` 返回并集）。**全量 3649 测全绿** |

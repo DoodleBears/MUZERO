@@ -14,7 +14,7 @@ export type ChatPromptLocale = "en" | "zh" | "ja" | "ko";
 
 const ZH: Record<string, string> = {
   library_search:
-    '在音乐库里做一次搜索，按 `types` 过滤（默认 ["track"]）。结果用本地 id（#T 歌曲、#S 歌单）加本结果窗口的 resultRef #R。关键词放进 `queries`（match "any" 汇集一个流派，"all" 收窄）。`types` 可含："track"（标题/文案/标签/备注/回忆/风格流派——导入曲目也可按补齐的风格搜，如 "city pop"/"lo-fi"）、"set"（匹配歌单名称）、"lyrics"（用歌词词句找歌，每个命中返回片段+时间戳）。track 组按 `fields` 投影（默认 id+title，加 "artist" 便于判断），用 `cursor`/`nextCursor` 翻页。要把一个流派收进歌单，按 title/artist 判断哪些合适，再用 set_add_tracks 加这些 #T id。',
+    '在音乐库里做一次搜索，按 `types` 过滤（默认 ["track"]）。结果用本地 id（#T 歌曲、#S 歌单）加本结果窗口的 resultRef #R。关键词放进 `queries`（match "any" 汇集一个流派，"all" 收窄）。`types` 可含："track"（标题/文案/标签/备注/回忆/风格流派——导入曲目也可按补齐的风格搜，如 "city pop"/"lo-fi"）、"set"（匹配歌单名称）、"lyrics"（用歌词词句找歌，每个命中返回片段+时间戳）。track 组按 `fields` 投影（默认 id+title，加 "artist"/"genre" 便于判断风格；"genre"=文件 + 补齐的风格数组），用 `cursor`/`nextCursor` 翻页。要把一个流派收进歌单，按 title/artist 判断哪些合适，再用 set_add_tracks 加这些 #T id。',
   library_tree:
     '用简短本地 id 以树形浏览用户音乐库。scope "library" 看所有歌单加未分类歌曲，scope "set" 配 #S id 查看单个歌单，scope "unassigned" 整理不在任何歌单里的歌。结果用 cursor/nextCursor 翻页，含 resultRef 及每条结果的序号；操作要用 #T1/#S1 这样的实体 id。',
   library_list_tags: "列出各个本地标签及其使用次数。",
@@ -52,7 +52,7 @@ const ZH: Record<string, string> = {
 
 const JA: Record<string, string> = {
   library_search:
-    'ライブラリを `types` で絞って一度検索（既定 ["track"]）。結果はローカル id（#T 曲、#S セット）とこの結果ウィンドウの resultRef #R を使う。キーワードは `queries` に（match "any" はジャンルを集め、"all" は絞る）。`types` に含められるもの："track"（タイトル/キャプション/タグ/メモ/メモリー/ジャンル——取り込んだ曲は補完されたジャンルでも検索可、例 "city pop"/"lo-fi"）、"set"（プレイリスト名で一致）、"lyrics"（歌詞の語で曲を探す。各ヒットはスニペット+タイムスタンプを返す）。track グループは `fields` に射影（既定 id+title、"artist" を足すと判断しやすい）し、`cursor`/`nextCursor` でページング。ジャンルをセットに集めるには title/artist で合うものを判断し、その #T id を set_add_tracks で追加。',
+    'ライブラリを `types` で絞って一度検索（既定 ["track"]）。結果はローカル id（#T 曲、#S セット）とこの結果ウィンドウの resultRef #R を使う。キーワードは `queries` に（match "any" はジャンルを集め、"all" は絞る）。`types` に含められるもの："track"（タイトル/キャプション/タグ/メモ/メモリー/ジャンル——取り込んだ曲は補完されたジャンルでも検索可、例 "city pop"/"lo-fi"）、"set"（プレイリスト名で一致）、"lyrics"（歌詞の語で曲を探す。各ヒットはスニペット+タイムスタンプを返す）。track グループは `fields` に射影（既定 id+title、"artist"/"genre" を足すと判断しやすい；"genre"=ファイル + 補完されたジャンル配列）し、`cursor`/`nextCursor` でページング。ジャンルをセットに集めるには title/artist で合うものを判断し、その #T id を set_add_tracks で追加。',
   library_tree:
     '短いローカル id でユーザーライブラリをツリー表示。scope "library" は全セット＋未割り当ての曲、scope "set" は #S id で単一セットを、scope "unassigned" はどのセットにもない曲を整理。結果は cursor/nextCursor でページングし resultRef と各結果の序数を含む。操作は #T1/#S1 のような実体 id を使う。',
   library_list_tags: "ローカルの各タグと使用回数を一覧表示。",
@@ -93,7 +93,7 @@ const JA: Record<string, string> = {
 
 const KO: Record<string, string> = {
   library_search:
-    '라이브러리를 `types`로 필터링해 한 번 검색(기본 ["track"]). 결과는 로컬 id(#T 곡, #S 세트)와 이 결과 창의 resultRef #R을 사용. 키워드는 `queries`에(match "any"는 장르를 모으고 "all"은 좁힘). `types`에는 "track"(제목/캡션/태그/메모/메모리/장르——가져온 곡은 채워진 장르로도 검색 가능, 예 "city pop"/"lo-fi"), "set"(플레이리스트 이름 일치), "lyrics"(가사 단어로 곡 찾기; 각 히트는 스니펫+타임스탬프 반환)이 들어갈 수 있음. track 그룹은 `fields`로 투영(기본 id+title, "artist"를 더하면 판단에 도움)하고 `cursor`/`nextCursor`로 페이징. 장르를 세트로 모으려면 title/artist로 맞는 것을 판단해 그 #T id를 set_add_tracks로 추가.',
+    '라이브러리를 `types`로 필터링해 한 번 검색(기본 ["track"]). 결과는 로컬 id(#T 곡, #S 세트)와 이 결과 창의 resultRef #R을 사용. 키워드는 `queries`에(match "any"는 장르를 모으고 "all"은 좁힘). `types`에는 "track"(제목/캡션/태그/메모/메모리/장르——가져온 곡은 채워진 장르로도 검색 가능, 예 "city pop"/"lo-fi"), "set"(플레이리스트 이름 일치), "lyrics"(가사 단어로 곡 찾기; 각 히트는 스니펫+타임스탬프 반환)이 들어갈 수 있음. track 그룹은 `fields`로 투영(기본 id+title, "artist"/"genre"를 더하면 장르 판단에 도움; "genre"=파일 + 채워진 장르 배열)하고 `cursor`/`nextCursor`로 페이징. 장르를 세트로 모으려면 title/artist로 맞는 것을 판단해 그 #T id를 set_add_tracks로 추가.',
   library_tree:
     '짧은 로컬 id로 사용자 라이브러리를 트리로 탐색. scope "library"는 모든 세트와 미분류 곡, scope "set"은 #S id로 단일 세트를, scope "unassigned"는 어떤 세트에도 없는 곡을 정리. 결과는 cursor/nextCursor로 페이징하며 resultRef와 결과별 순번을 포함; 작업은 #T1/#S1 같은 실체 id를 사용.',
   library_list_tags: "로컬 태그별 사용 횟수를 나열.",

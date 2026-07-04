@@ -72,6 +72,7 @@ export const TRACK_RESULT_FIELDS = [
   "artist",
   "album",
   "tags",
+  "genre",
   "durationSec",
   "origin",
   "kind",
@@ -108,6 +109,8 @@ function projectTrack(
   // `liked` likewise moved to the trackLikes side table (PRD scalable-track-list);
   // caller passes the liked-id set for the page.
   likedByTrack?: ReadonlySet<string>,
+  // `genre` = file-parsed genres ∪ external enrichment (its own table); caller passes the map.
+  enrichmentGenreByTrack?: ReadonlyMap<string, readonly string[]>,
 ): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   for (const f of fields) {
@@ -116,7 +119,14 @@ function projectTrack(
     else if (f === "id") row.id = encodeMaybeTrack(track.id, deps);
     else if (f === "playCount") row.playCount = playCountByTrack?.get(track.id) ?? 0;
     else if (f === "liked") row.liked = likedByTrack?.has(track.id) ?? false;
-    else row[f] = track[f as keyof Track];
+    else if (f === "genre") {
+      row.genre = Array.from(
+        new Set([
+          ...(track.mediaMetadata?.genres ?? []),
+          ...(enrichmentGenreByTrack?.get(track.id) ?? []),
+        ]),
+      );
+    } else row[f] = track[f as keyof Track];
   }
   return row;
 }
@@ -549,11 +559,16 @@ export async function executeSearchTracks(
   const likedByTrack = fieldList.includes("liked")
     ? await likedSetForTracks(pageIds, db)
     : undefined;
+  // `genres` (enrichment) is already computed for the search corpus above — reuse it for the
+  // `genre` projection so the agent SEES each track's style, not just filters by it.
+  const genreByTrack = fieldList.includes("genre") ? genres : undefined;
   return {
     total: matched.length, // full match count so the agent knows if it's truncated
     returned: page.length,
     nextCursor: nextOffset < matched.length ? nextOffset : null,
-    tracks: page.map((track) => projectTrack(track, fields, deps, playCountByTrack, likedByTrack)),
+    tracks: page.map((track) =>
+      projectTrack(track, fields, deps, playCountByTrack, likedByTrack, genreByTrack),
+    ),
   };
 }
 
