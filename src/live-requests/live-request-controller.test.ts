@@ -203,6 +203,66 @@ describe("live-request-controller pipeline", () => {
   });
 });
 
+describe("live-request-controller intent router", () => {
+  it("routes 点歌 to library-search (fast path), stripping the keyword from the query", async () => {
+    await enableIntake();
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload(payload(JSON.stringify({ message: "点歌 晴天" })));
+
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle.mock.calls[0][0]).toMatchObject({ normalizedQuery: "晴天" });
+    expect(handle.mock.calls[0][1]).toMatchObject({ routeMode: "library-search" });
+  });
+
+  it("routes AI点歌 to ai-dj", async () => {
+    await enableIntake();
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload(payload(JSON.stringify({ message: "AI点歌 citypop" })));
+
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle.mock.calls[0][0]).toMatchObject({ normalizedQuery: "citypop" });
+    expect(handle.mock.calls[0][1]).toMatchObject({ routeMode: "ai-dj" });
+  });
+
+  it("does not route comment / rating commands through the runtime (annotation intents)", async () => {
+    await enableIntake();
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload(payload(JSON.stringify({ message: "评论 这段绝了" })));
+    await controller.handlePayload(payload(JSON.stringify({ message: "评分 5" })));
+
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("still applies the per-source route override on the no-command fallback path", async () => {
+    // A source that routes everything to ai-dj: with requireCommandPrefix off and no
+    // keyword match, the source override still reaches the runtime.
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          enabled: true,
+          requireCommandPrefix: false,
+          sources: [source({ id: "default", routeMode: "ai-dj" })],
+        },
+      },
+      db,
+    );
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload(payload(JSON.stringify({ message: "lofi beats" })));
+
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle.mock.calls[0][1]).toMatchObject({ routeMode: "ai-dj" });
+  });
+});
+
 describe("live-request-controller subscription", () => {
   it("subscribes once on start (idempotent) and unsubscribes on stop", () => {
     const { runtime } = fakeRuntime();
@@ -252,7 +312,7 @@ describe("live-request-controller multi-source + testing lifecycle", () => {
     expect(controller.getCaptured("ssn")).toHaveLength(1);
   });
 
-  it("applies an active source's preset mapping and per-source route override", async () => {
+  it("applies an active source's preset mapping; the matched command's routeMode wins over the source override", async () => {
     await setSources([
       source({ id: "ssn", mappingPreset: "social-stream-ninja", routeMode: "ai-dj" }),
     ]);
@@ -266,7 +326,9 @@ describe("live-request-controller multi-source + testing lifecycle", () => {
 
     expect(handle).toHaveBeenCalledTimes(1);
     expect(handle.mock.calls[0][0]).toMatchObject({ normalizedQuery: "lofi", platform: "twitch" });
-    expect(handle.mock.calls[0][1]).toMatchObject({ routeMode: "ai-dj" });
+    // `点歌` is the song-search command (library-search) — the keyword's route wins over
+    // the source's ai-dj override (per-command routing is the point of the split).
+    expect(handle.mock.calls[0][1]).toMatchObject({ routeMode: "library-search" });
   });
 
   it("strips sensitive fields from captured payloads", async () => {

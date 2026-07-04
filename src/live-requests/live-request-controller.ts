@@ -21,6 +21,7 @@ import {
   normalizeAudienceRequest,
 } from "./audience-request-schema";
 import { findSource, resolveSourceMapping, resolveSources } from "./audience-request-sources";
+import { matchIntakeCommand, resolveCommands } from "./intake-command";
 import { notifyAudienceRequestPlayed } from "./live-request-notification";
 import { applyMapping } from "./request-mapping-presets";
 import { DEFAULT_SSN_RELAY_URL } from "./social-stream-relay";
@@ -184,6 +185,36 @@ export function createLiveRequestController(
       request = normalizeAudienceRequest(mapped, { commandPrefixes });
     } catch {
       return; // payload had no usable message field
+    }
+
+    // Keyword→intent router: the leading keyword decides intent + route. A `request`
+    // command (点歌=library-search / AI点歌=ai-dj) drives the runtime with the command's
+    // routeMode (which overrides the source/global route); comment/rating write onto the
+    // currently-playing track (wired in later phases). No command → fall through to the
+    // legacy prefix gate below, so prefix-less config and existing installs keep working.
+    const command = matchIntakeCommand(request.rawMessage, resolveCommands(intake));
+    if (command) {
+      if (command.command.intent === "comment" || command.command.intent === "rating") {
+        // TODO(Phase 2/3): comment → a Memory; rating → a crowd vote, on the current track.
+        return;
+      }
+      try {
+        await runtime.handle(
+          {
+            ...request,
+            normalizedQuery: command.body,
+            matchedCommandPrefix: command.matchedPrefix,
+          },
+          {
+            routeMode: command.command.routeMode ?? source.routeMode ?? intake.routeMode,
+            playbackAction:
+              command.command.playbackAction ?? source.playbackAction ?? intake.playbackAction,
+          },
+        );
+      } catch (error) {
+        log.error("liveRequests", "failed to handle audience request", error);
+      }
+      return;
     }
 
     // "Only prefixed messages count as requests": when enabled and prefixes are

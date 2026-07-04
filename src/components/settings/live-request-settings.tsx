@@ -1,11 +1,11 @@
 import { KeyRound, Plus, RotateCcw, Server } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CommandTableEditor } from "@/components/settings/live-request/command-table-editor";
 import { MappingDialog } from "@/components/settings/live-request/mapping-dialog";
 import { SourceCard } from "@/components/settings/live-request/source-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChipInput } from "@/components/ui/chip-input";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -21,11 +21,13 @@ import {
   type AudienceRequestSource,
   type AudienceRequestTransport,
   DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+  type IntakeCommand,
 } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { type LiveRequestIntakePayload, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { newId } from "@/lib/id";
 import { resolveSources } from "@/live-requests/audience-request-sources";
+import { resolveCommands } from "@/live-requests/intake-command";
 import { applyLiveRequestIntake } from "@/live-requests/live-request-controller";
 import { DEFAULT_SSN_RELAY_URL } from "@/live-requests/social-stream-relay";
 
@@ -64,6 +66,13 @@ export function LiveRequestSettings() {
 
   const patchSource = (id: string, patch: Partial<AudienceRequestSource>) =>
     void update({ sources: sources.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+
+  // Persist the edited command table; keep the legacy `commandPrefixes` mirror in sync
+  // with the song-search row (it still drives the no-command fallback + require-prefix gate).
+  const onCommandsChange = (commands: IntakeCommand[]) => {
+    const song = commands.find((command) => command.id === "song-search");
+    void update({ commands, commandPrefixes: song?.prefixes ?? intake.commandPrefixes });
+  };
 
   const addSource = () =>
     void update({
@@ -222,19 +231,6 @@ export function LiveRequestSettings() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label={tk("settings.liveRequestsCommandPrefixes", "Command prefixes")}>
-            <ChipInput
-              value={intake.commandPrefixes}
-              onChange={(commandPrefixes) => void update({ commandPrefixes })}
-              placeholder={tk("settings.liveRequestsCommandPrefixesPlaceholder", "点歌, !sr …")}
-              removeLabel={(prefix) =>
-                t("settings.liveRequestsRemovePrefix", {
-                  defaultValue: "Remove {{prefix}}",
-                  prefix,
-                })
-              }
-            />
-          </Field>
           <Field label={tk("settings.liveRequestsRateLimit", "Max / minute")}>
             <Input
               type="number"
@@ -256,6 +252,8 @@ export function LiveRequestSettings() {
             />
           </Field>
         </div>
+
+        <CommandTableEditor commands={resolveCommands(intake)} onChange={onCommandsChange} />
 
         <Toggle
           checked={intake.requireCommandPrefix ?? true}

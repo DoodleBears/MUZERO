@@ -806,6 +806,14 @@
     "liveRequestsCommandPrefixes": "コマンド接頭辞",
     "liveRequestsCommandPrefixesPlaceholder": "接頭辞を入力して Enter",
     "liveRequestsRemovePrefix": "{{prefix}} を削除",
+    "liveRequestsCommands": "コマンドキーワード",
+    "liveRequestsCommandsHint": "点歌 = ライブラリ内クイック検索 · AI点歌 = AI DJ · 评论 = メモリーを残す · 评分 5 = 再生中の曲を評価",
+    "liveRequestsCommand": {
+      "song-search": "点歌 · ライブラリ検索",
+      "ai-dj": "AI DJ · 生成",
+      "comment": "评论 · コメント",
+      "rating": "评分 · 評価"
+    },
     "liveRequestsRequirePrefix": "コマンド接頭辞を必須にする",
     "liveRequestsRequirePrefixHint": "上記の接頭辞で始まるチャットメッセージのみをリクエストとして扱います。オフ: すべてのメッセージがリクエストになります。",
     "liveRequestsConfidence": "信頼度しきい値",

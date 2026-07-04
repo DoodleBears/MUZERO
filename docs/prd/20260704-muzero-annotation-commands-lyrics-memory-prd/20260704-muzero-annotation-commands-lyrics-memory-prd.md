@@ -20,7 +20,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 命令路由地基：`matchIntakeCommand` 纯函数 + `IntakeCommand[]` 可配注册表 + `点歌`=search / `AI点歌`=ai-dj 分流 + legacy 迁移 + 设置 UI | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 命令路由地基：`matchIntakeCommand` 纯函数 + `IntakeCommand[]` 可配注册表 + `点歌`=search / `AI点歌`=ai-dj 分流 + legacy 迁移 + 设置 UI | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 评分聚合：`Track.ratingsByRater`（众评去重，**设备本地不同步**）+ `setTrackRating`/`resolveTrackRating` + rating 意图接线 + **常驻评分 chip** | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 评论意图：`applyAnnotationCommand` → 当前曲一条 `Memory`（署名+锚秒）+ 注释限流 + 落地 toast | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 歌词记忆浮层：抽 `useScheduledMemory` + `LyricsMemoryStrip` + `lyricsMemoryOverlay` 开关 + i18n 四语 + 版本 bump | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -466,18 +466,18 @@ export function useScheduledMemory(trackId: string | undefined): {
 **Goal:** 弹幕按关键词分流；`点歌`→library-search 快路径、`AI点歌`→ai-dj；关键词可配；legacy 平滑迁移。
 
 **Tasks:**
-- [ ] 新 `intake-command.ts`：`IntakeCommand` 类型 + `DEFAULT_INTAKE_COMMANDS` + `matchIntakeCommand`（最长前缀优先 + score 抽取）。纯函数。
-- [ ] `types.ts`：`AudienceRequestIntakeSettings.commands?` + DEFAULT 回填；`IntakeCommandIntent`。
-- [ ] `audience-request-sources.ts`：`resolveCommands(intake)`——`commands` 缺省时由 legacy `commandPrefixes`/`routeMode` 合成 song-search + 补默认 ai-dj/comment/rating。
-- [ ] `live-request-controller.ts`：`handlePayload` 改 match + dispatch（本 phase 只接 `request` 意图，comment/rating 分支留桩 → Phase 2/3）。request 命令传 `routeMode` override 给 runtime。
-- [ ] Settings：命令表编辑器（关键词 + request 命令 route），前缀冲突校验。
-- [ ] i18n（4 语）：命令表 label / route 选项 / 示例。
+- [x] 新 [`intake-command.ts`](../../../src/live-requests/intake-command.ts)：`matchIntakeCommand`（最长前缀优先 + rating score / comment 前导 mm:ss 抽取）+ `resolveCommands`。纯函数。
+- [x] `types.ts`：`IntakeCommandIntent` / `IntakeCommand` / `DEFAULT_INTAKE_COMMANDS` + `AudienceRequestIntakeSettings.commands?`（非索引可选、无 bump）。
+- [x] `resolveCommands(intake)`（放在 `intake-command.ts`，比 sources 更内聚）——`commands` 缺省时由 legacy `commandPrefixes`/`routeMode` 合成 song-search + 补默认 ai-dj/comment/rating。
+- [x] `live-request-controller.ts`：`handlePayload` 改 match + dispatch（本 phase 只接 `request` 意图，comment/rating 分支留桩 → Phase 2/3）。request 命令 `routeMode` override 传给 runtime（并用 `command.body` 覆盖 `normalizedQuery`，剥掉新前缀）。
+- [x] Settings：命令表编辑器 [`command-table-editor.tsx`](../../../src/components/settings/live-request/command-table-editor.tsx)（每命令关键词 ChipInput + request 命令 route Select）；写 `commands` 时把 legacy `commandPrefixes` 同步到 song-search 行。
+- [x] i18n（4 语）：命令表 label（`settings.liveRequestsCommands*` / `liveRequestsCommand.<id>`）。
 
 #### Phase 1 Checklist
-- [ ] `intake-command.test.ts` 穷举：最长前缀优先；大小写不敏感；命中返回 command+body(+score)；未命中 null；disabled 跳过。
-- [ ] `live-request-controller.test.ts`：`点歌 x` → runtime.handle(routeMode="library-search")；`AI点歌 x` → routeMode="ai-dj"；legacy（无 commands）迁移后 `点歌` 仍工作。
-- [ ] 桌面真链路：`点歌 <库内歌>` 快命中入队、**不**触发 AI 生成；`AI点歌 <vibe>` 进 AI DJ。
-- [ ] controller 不进 store state（grep）。typecheck + biome + 目标测试通过。
+- [x] `intake-command.test.ts`（16 例）：最长前缀优先；大小写不敏感；命中返回 command+body(+score/atSec)；未命中 null；disabled 跳过；rating 星标/数字/`9/10`/clamp；comment `mm:ss`/`hh:mm:ss`/无时间；`resolveCommands` legacy 迁移。
+- [x] `live-request-controller.test.ts`（+4 router 例）：`点歌 x` → routeMode="library-search"（keyword 覆盖 source ai-dj）；`AI点歌 x` → "ai-dj"；`评论`/`评分` 不进 runtime；no-command fallback 仍走 source override。既有 19 例全绿。
+- [ ] 桌面真链路（需 Electron，本环境未起）：`点歌 <库内歌>` 快命中入队、**不**触发 AI 生成；`AI点歌 <vibe>` 进 AI DJ。**留手动验证**。
+- [x] controller 不进 store state（grep 仅既有 `getState()` deps）。typecheck exit 0 + biome clean（11 files）+ live-requests/default-settings 116 tests green。
 
 ### Phase 2: 评分聚合（交付「常驻评分 chip」）
 

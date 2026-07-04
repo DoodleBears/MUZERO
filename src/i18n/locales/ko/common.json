@@ -806,6 +806,14 @@
     "liveRequestsCommandPrefixes": "명령 접두사",
     "liveRequestsCommandPrefixesPlaceholder": "접두사 입력 후 Enter",
     "liveRequestsRemovePrefix": "{{prefix}} 제거",
+    "liveRequestsCommands": "명령 키워드",
+    "liveRequestsCommandsHint": "点歌 = 라이브러리 빠른 검색 · AI点歌 = AI DJ · 评论 = 메모리 남기기 · 评分 5 = 현재 곡 평가",
+    "liveRequestsCommand": {
+      "song-search": "点歌 · 라이브러리 검색",
+      "ai-dj": "AI DJ · 생성",
+      "comment": "评论 · 댓글",
+      "rating": "评分 · 평점"
+    },
     "liveRequestsRequirePrefix": "명령 접두사 필수",
     "liveRequestsRequirePrefixHint": "위 접두사로 시작하는 채팅 메시지만 신청곡으로 처리합니다. 끄면 모든 메시지가 신청곡이 됩니다.",
     "liveRequestsConfidence": "신뢰도 임계값",

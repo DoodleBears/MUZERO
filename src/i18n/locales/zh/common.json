@@ -806,6 +806,14 @@
     "liveRequestsCommandPrefixes": "命令前缀",
     "liveRequestsCommandPrefixesPlaceholder": "输入前缀，按回车添加",
     "liveRequestsRemovePrefix": "移除 {{prefix}}",
+    "liveRequestsCommands": "命令关键词",
+    "liveRequestsCommandsHint": "点歌 = 库内快速搜索 · AI点歌 = AI DJ · 评论 = 留下记忆 · 评分 5 = 给当前曲打分",
+    "liveRequestsCommand": {
+      "song-search": "点歌 · 库内搜索",
+      "ai-dj": "AI DJ · 生成",
+      "comment": "评论 · 留言",
+      "rating": "评分 · 打分"
+    },
     "liveRequestsRequirePrefix": "必须带命令前缀",
     "liveRequestsRequirePrefixHint": "只有以上述前缀开头的聊天消息才算点歌；关闭则每条消息都算点歌。",
     "liveRequestsConfidence": "置信阈值",

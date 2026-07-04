@@ -707,6 +707,12 @@ export interface AudienceRequestIntakeSettings {
   requireApprovalForPlayNow: boolean;
   /** Configured intake sources. Defaults to a single auto-mapping "default" source. */
   sources?: AudienceRequestSource[];
+  /**
+   * 关键词→意图命令表（点歌搜索 / AI DJ / 评论 / 评分，各自可配前缀）。缺省时由
+   * `resolveCommands` 从 legacy `commandPrefixes`/`routeMode` 合成 song-search + 回填
+   * 默认命令。追加、非索引 → 无 Dexie bump。
+   */
+  commands?: IntakeCommand[];
   /** Transport: local HTTP webhook (desktop) or outbound SSN WebSocket (web/desktop). */
   transport?: AudienceRequestTransport;
   /** SSN relay base URL (ssn-websocket transport); defaults to the public relay. */
@@ -722,6 +728,42 @@ export const DEFAULT_AUDIENCE_REQUEST_SOURCE: AudienceRequestSource = {
   authMode: "open",
   mappingPreset: "auto",
 };
+
+/** Which action a keyword command triggers when its prefix matches an incoming message. */
+export type IntakeCommandIntent = "request" | "comment" | "rating";
+
+/**
+ * One keyword→intent route. A message whose (case-insensitive, longest-prefix-first)
+ * prefix matches drives this command: `request` commands carry a `routeMode` that
+ * overrides the source/global route (点歌=library-search fast path vs AI点歌=ai-dj);
+ * `comment`/`rating` write a Memory / a crowd-rating vote onto the currently-playing
+ * track instead of searching. `id` is codename-stable — never rename a shipped id.
+ */
+export interface IntakeCommand {
+  id: string;
+  intent: IntakeCommandIntent;
+  /** Trigger keywords (user-configurable). */
+  prefixes: string[];
+  /** `request` only: the route this command forces (overrides source/global routeMode). */
+  routeMode?: AudienceRequestRouteMode;
+  /** `request` only: optional per-command playback action override. */
+  playbackAction?: AudienceRequestPlaybackAction;
+  /** Default true; set false to disable a command without deleting it. */
+  enabled?: boolean;
+}
+
+/** Built-in command table: fast 点歌 library search, explicit AI DJ, comment, rating. */
+export const DEFAULT_INTAKE_COMMANDS: IntakeCommand[] = [
+  {
+    id: "song-search",
+    intent: "request",
+    prefixes: ["点歌", "!sr", "song:"],
+    routeMode: "library-search",
+  },
+  { id: "ai-dj", intent: "request", prefixes: ["AI点歌", "DJ", "生成", "ai:"], routeMode: "ai-dj" },
+  { id: "comment", intent: "comment", prefixes: ["评论", "comment:", "留言"] },
+  { id: "rating", intent: "rating", prefixes: ["评分", "rate:", "打分"] },
+];
 
 export const DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS: AudienceRequestIntakeSettings = {
   enabled: false,

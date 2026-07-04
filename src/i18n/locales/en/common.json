@@ -824,6 +824,14 @@
     "liveRequestsCommandPrefixes": "Command prefixes",
     "liveRequestsCommandPrefixesPlaceholder": "Type a prefix, press Enter",
     "liveRequestsRemovePrefix": "Remove {{prefix}}",
+    "liveRequestsCommands": "Command keywords",
+    "liveRequestsCommandsHint": "点歌 = quick library search · AI点歌 = AI DJ · 评论 = leave a memory · 评分 5 = rate the current song",
+    "liveRequestsCommand": {
+      "song-search": "点歌 · library search",
+      "ai-dj": "AI DJ · generate",
+      "comment": "评论 · comment",
+      "rating": "评分 · rating"
+    },
     "liveRequestsRequirePrefix": "Require a command prefix",
     "liveRequestsRequirePrefixHint": "Only chat messages that start with a prefix above are treated as song requests. Off: every message is a request.",
     "liveRequestsConfidence": "Confidence threshold",
