@@ -138,8 +138,8 @@ describe("buildLibraryFacetsContext", () => {
     expect(third).toContain("#beta");
   });
 
-  it("invalidates the cache when tags are edited on an existing track (setTrackTags)", async () => {
-    db = new MuzeroDB("dj-facets-tag-edit");
+  it("reflects a tag edit incrementally — new tag appears with NO full rescan", async () => {
+    db = new MuzeroDB("dj-facets-tag-add");
     await db.tracks.put({
       ...trackRow({ id: "t1", sessionId: "s", title: "A" }),
       tags: ["alpha"],
@@ -150,12 +150,33 @@ describe("buildLibraryFacetsContext", () => {
     expect(first).toContain("#alpha");
     expect(scan).toHaveBeenCalledTimes(1);
 
-    // Tag edit on the SAME track — row count unchanged, but setTrackTags bumps the tag
-    // revision so the palette reflects the new tag immediately (not next add/remove/enrich).
+    // Add a tag to the SAME track: no row-count change, and the palette must reflect it
+    // WITHOUT rescanning the table — the delta updates the cached counts in place.
     await setTrackTags("t1", ["alpha", "beta"], db);
     const second = await buildLibraryFacetsContext(db);
-    expect(scan).toHaveBeenCalledTimes(2);
-    expect(second).toContain("#beta");
+    expect(second).toContain("#alpha (1)");
+    expect(second).toContain("#beta (1)");
+    expect(scan).toHaveBeenCalledTimes(1); // ← no rescan
+  });
+
+  it("drops a tag from the palette when it's edited off its only track — still no rescan", async () => {
+    db = new MuzeroDB("dj-facets-tag-remove");
+    await db.tracks.bulkPut([
+      { ...trackRow({ id: "t1", sessionId: "s", title: "A" }), tags: ["keep", "gone"] },
+      { ...trackRow({ id: "t2", sessionId: "s", title: "B" }), tags: ["keep"] },
+    ]);
+    const scan = vi.spyOn(db.tracks, "toArray");
+
+    const first = await buildLibraryFacetsContext(db);
+    expect(first).toContain("keep (2)");
+    expect(first).toContain("gone (1)");
+    expect(scan).toHaveBeenCalledTimes(1);
+
+    await setTrackTags("t1", ["keep"], db); // remove "gone"
+    const second = await buildLibraryFacetsContext(db);
+    expect(second).toContain("#keep (2)");
+    expect(second).not.toContain("gone");
+    expect(scan).toHaveBeenCalledTimes(1); // ← still no rescan
   });
 
   it("omits notFound (negative-cache) enrichment and empties from the palette", async () => {

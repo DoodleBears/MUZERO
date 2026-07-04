@@ -234,6 +234,10 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments.length === 2 && segments[0] === "enrich" && segments[1] === "probe") {
     return { kind: "enrichProbe", payload: body };
   }
+  // DJ library-palette perf bench: POST /facets/bench (cold vs warm vs post-tag-edit build)
+  if (method === "POST" && segments.length === 2 && segments[0] === "facets" && segments[1] === "bench") {
+    return { kind: "facetsBench", payload: body };
+  }
   return null;
 }
 

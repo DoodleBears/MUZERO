@@ -66,6 +66,15 @@ export class MuzeroDB extends Dexie {
   downloadJobs!: EntityTable<DownloadJob, "id">;
   enrichments!: EntityTable<TrackEnrichment, "id">;
 
+  /**
+   * Monotonic in-memory counter bumped whenever the track SET or enrichment SET changes —
+   * a track added/removed, or an enrichment row created/updated/removed — but NOT on a plain
+   * `tracks.update` (tag edit, streamMeta/metadata hydration). A cheap change signal for the DJ
+   * "library palette" cache so it can check freshness without a per-turn `count()` query (which
+   * is slow right after a write). Wired by the creating/deleting hooks in the constructor.
+   */
+  libraryMutationRevision!: () => number;
+
   constructor(name = "muzero-db") {
     super(name);
 
@@ -458,6 +467,22 @@ export class MuzeroDB extends Dexie {
     this.version(32).stores({
       enrichments: "id, &trackId",
     });
+
+    // Library-palette change signal (see `libraryMutationRevision`). creating/deleting ONLY —
+    // a plain `tracks.update` (tag edit, background metadata hydration) must never bump it, or
+    // the palette cache would be busted by high-churn background writes. Enrichment writes DO
+    // change genres, so all three enrichment hooks bump. Per-row (bulk ops bump N times) but
+    // it's a single integer increment inside the existing write transaction.
+    let mutationRevision = 0;
+    const bumpMutationRevision = () => {
+      mutationRevision += 1;
+    };
+    this.tracks.hook("creating", bumpMutationRevision);
+    this.tracks.hook("deleting", bumpMutationRevision);
+    this.enrichments.hook("creating", bumpMutationRevision);
+    this.enrichments.hook("updating", bumpMutationRevision);
+    this.enrichments.hook("deleting", bumpMutationRevision);
+    this.libraryMutationRevision = () => mutationRevision;
   }
 }
 

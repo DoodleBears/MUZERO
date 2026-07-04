@@ -436,8 +436,9 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 - [x] genre 口径与 `projectTrack` 的 `genre` 字段一致（文件 ∪ enrichment `status:"found"`）。
 - [x] palette 注入不写 tracks 行、不阻塞。
 - [x] 空库 / 无风格 / 负缓存(`notFound`) → 不产出噪声块。
-- [x] **性能：per-DB 内存缓存 + `count()` 指纹失效**，只在增删曲/补齐时重扫，不每回合全表反序列化；不磁盘持久化（避反规范化漂移，源头重算永不漂移）。
-- [x] **tag 编辑即时反映**：`setTrackTags` bump `trackTagsRevision` → 折进指纹；精确到该路径而非表级 hook（避后台 hydration 打掉缓存）。
+- [x] **性能：per-DB 内存缓存**，不每回合全表反序列化；不磁盘持久化（避反规范化漂移，源头重算永不漂移）。
+- [x] **指纹 = `MuzeroDB.libraryMutationRevision`**（Dexie `creating`/`deleting` 钩子，只捕增删曲/enrichment 变、不捕 `update`）——命中路径零 DB 读，取代慢的每回合 `count()`（写后尤慢）。
+- [x] **tag 编辑增量 + 即时反映**：`onTrackTagsEdited` 依赖倒置事件带 old→new delta → `applyTagEditToCounts` 只调整缓存计数、**不重扫**、不 bump revision。E2E 实测 postEditMs 236→0。
 
 ---
 
@@ -512,3 +513,4 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 | 2026-07-04 | MUZERO Team | **Phase 7 DJ 库风格视野（TDD）**：应 PM「system prompt 注入全库风格+数量 set / 查歌单返回其风格+数量 set（tag 同理）」。`chat/library-facets.ts` 纯 `computeFacets`（genre=文件∪enrichment(found)、每曲计一次、count 排序+cap）+ `repositories.getAllEnrichmentGenres`（全库一次流式扫描，只读 enrichments 零 tracks 扇出）+ `dj-chat-context.buildLibraryFacetsContext`（「Library palette」块每回合注入 system prompt）+ `executeSetGet` 返回歌单级 `facets`。TDD 先红后绿，**+13 facets 单测全绿、facets 代码 tsc/biome 干净**（提交前 scope-stash 了并发 session 未完成的 dj-tool-activity WIP 以过 pre-commit 全项目 tsc）|
 | 2026-07-04 | MUZERO Team | **Phase 7 palette 缓存（性能，TDD）**：`buildLibraryFacetsContext` 原本每 DJ 回合全表 `tracks.toArray()`（反序列化全库）——改为 **per-DB 内存缓存 + 廉价指纹失效**：指纹 = `tracks.count()`+`enrichments.count()`（IndexedDB `count()` 不反序列化行），只在增删曲/补齐（计数变化）时重扫，多回合对话不再每条消息重扫。**刻意不磁盘持久化 + 增量计数**（避免本仓库已规避的反规范化计数漂移，源头重算永不漂移；一次会话首回合重算一次可忽略）。已知小 gap：existing 曲的纯 tag 编辑不改计数 → 下次增删/补齐或重启才进 palette。TDD（spy `toArray`：二次调用不重扫、加曲后重扫）。**+1 测（14 facets 全绿）** |
 | 2026-07-04 | MUZERO Team | **Phase 7 缓存关掉 tag-编辑 gap（TDD）**：上一条的已知 gap——existing 曲的纯 tag 编辑不改行计数、看不见——已修：`setTrackTags` bump per-DB `trackTagsRevision`，facets 指纹加第三段 `getTrackTagsRevision(db)`。**刻意精确到 `setTrackTags`（而非表级 Dexie `hook('updating')`）**：播放期后台 metadata hydration 会频繁改写 track 行（见 disk-io 记忆），表级 hook 会被它不断打掉缓存、抵消优化。TDD（spy `toArray`：改 tag 后计数不变但仍重扫、带出新 tag）。**+1 测（15 facets 全绿）** |
+| 2026-07-04 | MUZERO Team | **Phase 7 tag-编辑增量 + revision 指纹（E2E 实测驱动）**：加 `facetsBench` 控制端点(`POST /facets/bench`，改真实曲 tag 后 try/finally 还原)在**用户真实库(6036 曲/4582 补齐)**实测。**发现①**：tag 编辑其实**没**触发全表扫描(调试计数证 `scans` 不增、增量 listener 命中)——但 `postEditMs=236ms`，慢在指纹的 **2×`count()`**(IndexedDB 把 count 读事务排在 tag 写事务后)。**发现②**：`count()` 每回合都跑。**修**：(a) 增量更新——`library-facets` 抽 `computeFacetCounts`(完整 map)+`applyTagEditToCounts`(增删 tag 计数 O(变更)) + `repositories.onTrackTagsEdited` 依赖倒置事件(带 old→new delta) → tag 编辑只调整缓存计数、不重扫；(b) `MuzeroDB.libraryMutationRevision`(**Dexie `creating`/`deleting` 钩子**——只捕捉增删曲/enrichment 变，**不**捕捉 `update` → hydration/tag 编辑不误触发)取代 `count()` 指纹 → 命中路径零 DB 读。**E2E 复测**：coldMs 143(一次性)、**warmMs 0、tagEditMs ~3、postEditMs 0**(从 236→0)、`noRescanOnTagEdit:true`，三次一致。**全量 3678 测全绿** |

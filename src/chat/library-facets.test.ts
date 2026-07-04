@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Track } from "@/db/types";
-import { computeFacets } from "./library-facets";
+import { applyTagEditToCounts, computeFacets } from "./library-facets";
 
 function track(over: Partial<Track> & { id: string }): Track {
   return {
@@ -80,5 +80,24 @@ describe("computeFacets", () => {
 
   it("is empty-safe", () => {
     expect(computeFacets([], new Map())).toEqual({ genres: [], tags: [] });
+  });
+});
+
+describe("applyTagEditToCounts", () => {
+  it("increments added, decrements removed, leaves shared untouched, deletes at zero", () => {
+    const counts = new Map([
+      ["a", 2],
+      ["b", 1],
+    ]);
+    applyTagEditToCounts(counts, ["a", "b"], ["a", "c"]); // keep a, remove b, add c
+    expect(counts.get("a")).toBe(2);
+    expect(counts.has("b")).toBe(false); // 1 → 0 → deleted
+    expect(counts.get("c")).toBe(1);
+  });
+
+  it("no-ops when the tag set is unchanged", () => {
+    const counts = new Map([["a", 3]]);
+    applyTagEditToCounts(counts, ["a"], ["a"]);
+    expect(counts.get("a")).toBe(3);
   });
 });

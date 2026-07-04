@@ -77,7 +77,8 @@ export interface PerfControlCommand {
     | "ttsPreview"
     | "notifications"
     | "chatTrace"
-    | "enrichProbe";
+    | "enrichProbe"
+    | "facetsBench";
   actionId?: string;
   /** voiceTranscript: the text to feed into the voice→DJ pipeline (no mic). */
   text?: string;
@@ -382,6 +383,70 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "enrichProbe": {
         if (!deps.enrichProbe) throw new Error("enrichProbe not wired");
         return deps.enrichProbe(command.payload ?? {});
+      }
+      // Measures the DJ "library palette" build against the REAL library: cold (full scan) vs
+      // warm (cache hit) vs post-tag-edit — proving a tag edit reflects incrementally with NO
+      // full rescan. Edits one real track's tags then restores them (try/finally, net-zero).
+      case "facetsBench": {
+        const { db } = await import("@/db/muzero-db");
+        const { buildLibraryFacetsContext } = await import("@/chat/dj-chat-context");
+        const ms = (start: number) => Number((performance.now() - start).toFixed(1));
+
+        const [trackCount, enrichmentCount] = await Promise.all([
+          db.tracks.count(),
+          db.enrichments.count(),
+        ]);
+        let t = performance.now();
+        const coldBlock = await buildLibraryFacetsContext(db); // fresh boot → cold full scan
+        const coldMs = ms(t);
+        t = performance.now();
+        await buildLibraryFacetsContext(db); // cache hit
+        const warmMs = ms(t);
+
+        const probe = "__facets_perf_probe__";
+        const track = await db.tracks.toCollection().first();
+        let tagEditMs = -1;
+        let postEditMs = -1;
+        let probeAppeared = false;
+        // Capture the fingerprint inputs immediately around the tag-edit build: if a background
+        // write (sweep / auto-enrich adding an enrichment row, or a track add) moves them, the
+        // count fingerprint legitimately busts the cache and post-edit rescans — that's churn,
+        // not a flaw in the incremental tag path. `fingerprintStable` tells the two apart.
+        let ecBefore = -1;
+        let ecAfter = -1;
+        let tcAfter = -1;
+        if (track) {
+          const original = track.tags ?? [];
+          try {
+            [ecBefore] = [await db.enrichments.count()];
+            t = performance.now();
+            await setTrackTags(track.id, [...original, probe], db);
+            tagEditMs = ms(t);
+            t = performance.now();
+            const postBlock = await buildLibraryFacetsContext(db);
+            postEditMs = ms(t);
+            probeAppeared = postBlock.includes(probe);
+            [tcAfter, ecAfter] = await Promise.all([db.tracks.count(), db.enrichments.count()]);
+          } finally {
+            await setTrackTags(track.id, original, db); // restore — never corrupt the library
+          }
+        }
+        const fingerprintStable = tcAfter === trackCount && ecBefore === ecAfter;
+        return {
+          library: { trackCount, enrichmentCount },
+          coldMs,
+          warmMs,
+          tagEditMs,
+          postEditMs,
+          probeAppeared,
+          blockBytes: coldBlock.length,
+          fingerprintStable,
+          counts: { ecBefore, ecAfter, tcAfter },
+          // The claim under test: with the fingerprint stable, a tag edit rebuilds the palette
+          // WITHOUT a rescan (post-edit ≈ warm, far below cold) AND shows the new tag.
+          noRescanOnTagEdit:
+            fingerprintStable && probeAppeared && postEditMs <= Math.max(coldMs / 3, warmMs + 5),
+        };
       }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);

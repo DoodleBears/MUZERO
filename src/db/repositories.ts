@@ -1632,17 +1632,26 @@ export async function likedTrackAtMap(db: MuzeroDB = defaultDb): Promise<Map<str
 // ------------------------------------------------------------- annotations ----
 
 /**
- * Facets (DJ "library palette") cache invalidation. A tag edit on an EXISTING track changes no
- * row count, so `buildLibraryFacetsContext`'s count fingerprint can't see it. {@link setTrackTags}
- * bumps this per-DB revision instead; the facets fingerprint folds it in, so an edited tag shows
- * in the palette at once. Kept PRECISE (only real tag edits) rather than a table-wide Dexie hook —
- * otherwise frequent background track writes (metadata hydration) would defeat the cache.
+ * Observers of a track tag edit, fired by {@link setTrackTags} with the (normalized) old + new
+ * tags. Lets an in-memory aggregate — the DJ "library palette" — update INCREMENTALLY (just the
+ * two changed tags' counts) instead of rescanning the whole tracks table on the next DJ turn.
+ * Dependency-inverted: the DB layer emits, higher layers subscribe; repositories never imports
+ * the cache. Precise to real tag edits (not a table-wide Dexie hook), so frequent background
+ * track writes — metadata hydration — never touch it.
  */
-const trackTagsRevisions = new WeakMap<MuzeroDB, number>();
+export interface TrackTagsEdit {
+  db: MuzeroDB;
+  trackId: string;
+  oldTags: string[];
+  newTags: string[];
+}
 
-/** Current tag-edit revision for a DB (starts at 0). Read by the facets cache fingerprint. */
-export function getTrackTagsRevision(db: MuzeroDB = defaultDb): number {
-  return trackTagsRevisions.get(db) ?? 0;
+const trackTagsEditListeners = new Set<(edit: TrackTagsEdit) => void>();
+
+/** Subscribe to tag edits (returns an unsubscribe). Fired after the row write commits. */
+export function onTrackTagsEdited(cb: (edit: TrackTagsEdit) => void): () => void {
+  trackTagsEditListeners.add(cb);
+  return () => trackTagsEditListeners.delete(cb);
 }
 
 export async function setTrackTags(
@@ -1652,8 +1661,13 @@ export async function setTrackTags(
 ): Promise<void> {
   // Normalize: trim, drop empties, de-dupe, lowercase for stable matching.
   const clean = Array.from(new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean)));
+  // Read the prior tags (one row) so subscribers get the exact delta — cheap, O(1).
+  const prev = await db.tracks.get(id);
   await db.tracks.update(id, { tags: clean, updatedAt: Date.now() });
-  trackTagsRevisions.set(db, (trackTagsRevisions.get(db) ?? 0) + 1);
+  if (prev && trackTagsEditListeners.size > 0) {
+    const edit: TrackTagsEdit = { db, trackId: id, oldTags: prev.tags ?? [], newTags: clean };
+    for (const cb of trackTagsEditListeners) cb(edit);
+  }
 }
 
 export async function setTrackNote(

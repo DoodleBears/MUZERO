@@ -4,10 +4,15 @@ import {
   getPlayQueue,
   getSession,
   getTrack,
-  getTrackTagsRevision,
+  onTrackTagsEdited,
 } from "@/db/repositories";
 import { type DjChatLocalIdRegistry, encodeSetRef, encodeTrackRef } from "./dj-chat-local-ids";
-import { computeFacets } from "./library-facets";
+import {
+  applyTagEditToCounts,
+  computeFacetCounts,
+  type FacetCounts,
+  topFacets,
+} from "./library-facets";
 
 /** Cap per dimension in the prompt block — conveys the palette without bloating the prompt. */
 const FACETS_PROMPT_LIMIT = 50;
@@ -67,55 +72,34 @@ export async function buildSetsContext(db: MuzeroDB): Promise<string> {
 }
 
 /**
- * Cached palette block per DB. Recomputing the full-library scan every DJ turn is wasted disk
- * I/O (the library rarely changes mid-chat), so we memoize and invalidate on a CHEAP fingerprint:
- *  - track + enrichment row COUNTS — `count()` reads IndexedDB key stats without deserializing
- *    rows, and moves on add / remove a track and auto-enrich / sweep writing an enrichment row;
- *  - the tag-edit revision ({@link getTrackTagsRevision}) — a tag edit on an existing track moves
- *    no count, so `setTrackTags` bumps this instead → an edited tag shows in the palette at once.
- * Together these cover every palette-relevant change.
+ * Cached palette per DB. Recomputing the full-library scan every DJ turn is wasted disk I/O
+ * (the library rarely changes mid-chat), so we memoize the full genre/tag COUNT MAPS + the
+ * derived block, and invalidate cheaply:
+ *  - track + enrichment row COUNTS fingerprint (`count()` reads IndexedDB key stats without
+ *    deserializing rows) → a genuine change (add/remove a track, auto-enrich/sweep writing a
+ *    row) triggers a full rebuild;
+ *  - a tag EDIT on an existing track moves no count, so instead of forcing a rescan we update
+ *    the cached tag counts INCREMENTALLY from the (old,new) delta (see the listener below) and
+ *    re-derive the block — O(changed tags), never a scan.
  *
- * Deliberately in-memory, NOT a persisted materialized aggregate: recomputing once per app
- * session (first chat turn) is negligible against LLM latency, whereas a persisted incremental
- * count store would have to hook every write path and risks the denormalized-count DRIFT this
- * codebase moved playCount/liked OFF the track row to avoid (switch-fps). Recompute-from-source
- * can't drift. Keyed by DB (WeakMap) so tests with isolated DBs don't cross-contaminate.
+ * Deliberately in-memory, NOT a persisted materialized aggregate: a rebuild only happens on a
+ * real add/remove/enrich (or first turn), negligible against LLM latency, while the frequent
+ * case (tagging songs) never scans. Recompute-from-source on any count change means the
+ * incremental tag counts can't permanently DRIFT (they reset on the next add/remove/enrich) —
+ * the property this codebase protects by keeping counts off the track row (switch-fps). Keyed
+ * by DB (WeakMap) so tests with isolated DBs don't cross-contaminate.
  */
-const facetsBlockCache = new WeakMap<MuzeroDB, { fingerprint: string; block: string }>();
-
-/**
- * The "library palette" — the distinct genres + listener tags actually present in the library,
- * with per-genre/tag track counts, injected every turn so the DJ curates from what EXISTS
- * (e.g. "放点 city pop" → it knows there are 34) instead of guessing or inventing genres the
- * library doesn't have. Genre = file genres ∪ enrichment; both dimensions capped to the top
- * {@link FACETS_PROMPT_LIMIT} by count. Empty string when the library has no genres/tags yet.
- * Memoized on a count fingerprint (see {@link facetsBlockCache}) so it only rescans on change.
- */
-export async function buildLibraryFacetsContext(db: MuzeroDB): Promise<string> {
-  const [trackCount, enrichmentCount] = await Promise.all([
-    db.tracks.count(),
-    db.enrichments.count(),
-  ]);
-  // Counts catch add/remove/enrich; the tag revision catches tag EDITS on existing tracks
-  // (which don't move any count). Together they invalidate on every palette-relevant change.
-  const fingerprint = `${trackCount}:${enrichmentCount}:${getTrackTagsRevision(db)}`;
-  const cached = facetsBlockCache.get(db);
-  if (cached && cached.fingerprint === fingerprint) return cached.block;
-
-  const block = await computeLibraryFacetsBlock(db, trackCount);
-  facetsBlockCache.set(db, { fingerprint, block });
-  return block;
+interface CachedPalette extends FacetCounts {
+  fingerprint: string;
+  block: string;
 }
+const paletteCache = new WeakMap<MuzeroDB, CachedPalette>();
 
-async function computeLibraryFacetsBlock(db: MuzeroDB, trackCount: number): Promise<string> {
-  if (trackCount === 0) return "";
-  const [tracks, enrichmentGenres] = await Promise.all([
-    db.tracks.toArray(),
-    getAllEnrichmentGenres(db),
-  ]);
-  const { genres, tags } = computeFacets(tracks, enrichmentGenres, { limit: FACETS_PROMPT_LIMIT });
+/** Derive the injected block from the count maps (top-N per dimension). "" when both are empty. */
+function formatPaletteBlock(counts: FacetCounts): string {
+  const genres = topFacets(counts.genreCounts, FACETS_PROMPT_LIMIT);
+  const tags = topFacets(counts.tagCounts, FACETS_PROMPT_LIMIT);
   if (genres.length === 0 && tags.length === 0) return "";
-
   const lines = [
     "Library palette — the genres and tags the listener's library ACTUALLY contains right now (number = tracks). Curate/filter using these exact names; don't invent genres the library lacks. For a genre/mood request, library_search these names, then keep only the songs that truly fit:",
   ];
@@ -127,3 +111,42 @@ async function computeLibraryFacetsBlock(db: MuzeroDB, trackCount: number): Prom
   }
   return lines.join("\n");
 }
+
+/**
+ * The "library palette" — the distinct genres + listener tags actually present in the library,
+ * with per-genre/tag track counts, injected every turn so the DJ curates from what EXISTS
+ * (e.g. "放点 city pop" → it knows there are 34) instead of guessing or inventing genres the
+ * library doesn't have. Genre = file genres ∪ enrichment; both dimensions capped to the top
+ * {@link FACETS_PROMPT_LIMIT} by count. Empty string when the library has no genres/tags yet.
+ * Memoized (see {@link paletteCache}) so it only rescans on a real change, and a tag edit
+ * updates it incrementally with no scan at all.
+ */
+export async function buildLibraryFacetsContext(db: MuzeroDB): Promise<string> {
+  // Fingerprint = in-memory mutation revision (add/remove track, enrichment change) — an instant
+  // integer read, NOT a per-turn `db.count()` query (which is slow right after a write). A tag
+  // edit doesn't bump it (it's applied incrementally by the listener below), so tagging a song
+  // never forces this rebuild. See MuzeroDB.libraryMutationRevision.
+  const fingerprint = String(db.libraryMutationRevision());
+  const cached = paletteCache.get(db);
+  if (cached && cached.fingerprint === fingerprint) return cached.block;
+
+  const [tracks, enrichmentGenres] = await Promise.all([
+    db.tracks.toArray(),
+    getAllEnrichmentGenres(db),
+  ]);
+  const counts = computeFacetCounts(tracks, enrichmentGenres);
+  const block = formatPaletteBlock(counts);
+  paletteCache.set(db, { ...counts, fingerprint, block });
+  return block;
+}
+
+// Incremental tag-edit update: adjust the cached tag counts + re-derive the block WITHOUT a
+// full rescan (the frequent case — tagging songs). No-op when nothing is cached for that DB
+// yet (the next build computes fresh) or when the edit didn't change the top-N block text.
+// Registered once at module load; per-DB via the cache's WeakMap key.
+onTrackTagsEdited(({ db, oldTags, newTags }) => {
+  const cached = paletteCache.get(db);
+  if (!cached) return;
+  applyTagEditToCounts(cached.tagCounts, oldTags, newTags);
+  cached.block = formatPaletteBlock(cached);
+});
