@@ -1029,6 +1029,8 @@
     "djTitle": "AI DJ (LLM)",
     "djCapabilitiesTitle": "AI DJ capabilities",
     "djCapabilitiesHint": "These chips show the tool calls the DJ can use. Select one to see what it can do and when it is available.",
+    "djToolActivityNotify": "Show tool steps in notifications",
+    "djToolActivityNotifyHint": "As the DJ works, mirror each tool step (its title and what it ran) into the top-left notifications — the same as the activity above the composer.",
     "llmAddCustom": "Add custom provider",
     "llmCustomBaseUrl": "Base URL",
     "llmCustomDelete": "Delete",

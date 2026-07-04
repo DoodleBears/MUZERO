@@ -34,6 +34,7 @@ import { ChatActivityPopover, deriveChatActivity } from "@/components/chat/chat-
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ChatReplyNotification } from "@/components/chat/chat-reply-notification";
 import { ChatSessionHome } from "@/components/chat/chat-session-home";
+import { DjToolActivityNotifier } from "@/components/chat/dj-tool-activity-notifier";
 import { type SlashCommand, SlashMenu, useSlashCommands } from "@/components/chat/slash-commands";
 import { useSettings } from "@/hooks/use-app-data";
 import { useVoiceRecordingState } from "@/hooks/use-voice-recording";
@@ -203,6 +204,9 @@ export function DjChatEntry({
     // Always flex-1 so the Sparkles icon stays pinned at the SAME far-left spot
     // in both chip and mini (the dock row right-aligns the memory/nav icons).
     <div className={cn("relative flex min-w-0 flex-1", className)}>
+      {/* Mirror each DJ tool-call step into the notification stack (toggleable).
+          A null-render leaf with its own subscription so it fires in any mode. */}
+      <DjToolActivityNotifier />
       <ChatActivityPopover
         activity={visibleCompactActivity}
         labels={activityLabels}

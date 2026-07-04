@@ -1011,6 +1011,8 @@
     "djTitle": "AI DJ（大语言模型）",
     "djCapabilitiesTitle": "AI DJ 能力",
     "djCapabilitiesHint": "这些 chip 展示 DJ 可调用的工具。点击任意功能即可查看它能做什么、何时可用。",
+    "djToolActivityNotify": "在通知中显示工具调用步骤",
+    "djToolActivityNotifyHint": "DJ 工作时，把每一步工具调用（标题和执行的内容）同步显示到左上角通知——与输入框上方的活动展示一致。",
     "llmAddCustom": "添加自定义 provider",
     "llmCustomBaseUrl": "Base URL",
     "llmCustomDelete": "删除",

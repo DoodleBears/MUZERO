@@ -1011,6 +1011,8 @@
     "djTitle": "AI DJ（LLM）",
     "djCapabilitiesTitle": "AI DJ の機能",
     "djCapabilitiesHint": "これらのチップは DJ が使える tool call です。選択すると、その機能と利用条件を確認できます。",
+    "djToolActivityNotify": "ツール実行ステップを通知に表示",
+    "djToolActivityNotifyHint": "DJ の作業中、各ツールステップ（タイトルと実行内容）を左上の通知にも表示します——入力欄の上のアクティビティと同じ。",
     "llmAddCustom": "カスタムプロバイダーを追加",
     "llmCustomBaseUrl": "Base URL",
     "llmCustomDelete": "削除",

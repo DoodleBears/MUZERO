@@ -1010,6 +1010,8 @@
     "djTitle": "AI DJ (LLM)",
     "djCapabilitiesTitle": "AI DJ 기능",
     "djCapabilitiesHint": "이 칩들은 DJ가 사용할 수 있는 tool call입니다. 선택하면 기능 설명과 사용 조건을 볼 수 있습니다.",
+    "djToolActivityNotify": "도구 실행 단계를 알림에 표시",
+    "djToolActivityNotifyHint": "DJ가 작업하는 동안 각 도구 단계(제목과 실행 내용)를 왼쪽 위 알림에도 표시합니다 — 입력창 위 활동 표시와 동일합니다.",
     "llmAddCustom": "사용자 지정 프로바이더 추가",
     "llmCustomBaseUrl": "Base URL",
     "llmCustomDelete": "삭제",

@@ -988,6 +988,26 @@ export function SettingsPage({ pageActive }: { pageActive?: boolean } = {}) {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
                   <DjToolCapabilities />
+                  {/* Mirror each DJ tool-call step into the top-left notifications
+                      (title + key input), matching the dock activity card. On by default. */}
+                  <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.djToolActivityNotify ?? true}
+                      onChange={(e) =>
+                        void saveSettings({ djToolActivityNotify: e.currentTarget.checked })
+                      }
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">
+                        {t("settings.djToolActivityNotify")}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.djToolActivityNotifyHint")}
+                      </span>
+                    </span>
+                  </label>
                   {/* Multi-provider presets + dynamic customs + per-provider keys
                     + global default model (chat PRD §6.1). Replaces the legacy
                     two-provider form; legacy llmProvider/llmModel stay in the
