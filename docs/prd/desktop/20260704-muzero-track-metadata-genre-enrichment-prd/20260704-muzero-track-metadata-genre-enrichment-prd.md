@@ -1,6 +1,6 @@
 # PRD: 曲目元数据补齐（风格 / 流派 / 情绪标签）— 让导入歌曲能被 DJ 过滤
 
-**Status:** Phases 1–5 Completed（Phase 6 optional / 待独立 review）
+**Status:** Phases 1–5 + 7 Completed（Phase 6 optional / 待独立 review）
 **Created:** 2026-07-04
 **Author:** MUZERO Team
 **Module:** enrich/*（新，镜像 `src/lyrics/`）· db（独立 `enrichments` 表 v32）· dj/dj-engine（RecentTrack.genres）· chat/dj-chat-tools（library_search 按风格过滤）· lib/track-search · components/settings + track · streamsrc/qq
@@ -17,6 +17,7 @@
 | 4 | 华语复用：QQ 原生 genre provider（排首、自我 gate）；NetEase 回退外部库 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 消费方接线：DJ 续歌 + chat agent 按风格过滤 + 搜索语料 + annotation 手动补齐 + i18n | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | （可选 / 可拆独立 PRD）Essentia.js 内容分析兜底：零元数据也能出风格 | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
+| 7 | DJ 库风格视野：system prompt 注入库级 genre/tag「palette」(name+count) + `set_get` 返回歌单级 facets | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -420,6 +421,22 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 - [ ] 内存/CPU 在 prod build 二次循环复测达标（呼应内存复现规则）。
 - [ ] **若成本超预算 → 拆为独立 PRD**，不阻塞 Phase 1–5 上线。
 
+### Phase 7: DJ 库风格视野（palette + set facets）
+
+**Goal:** 让 DJ 知道「库里到底有哪些风格/标签、各多少首」，从**存在的东西**里策展而非臆造/漏掉；查歌单时也返回该歌单的风格/标签分布。源自 PM 追问「搜索结果都会返回风格吗 + system prompt 注入全库风格 set + 查歌单返回其风格 set（tag 同理）」。
+
+**Tasks:**
+- [x] `chat/library-facets.ts`：纯 `computeFacets(tracks, enrichmentGenreByTrack)` → `{ genres, tags }` 各 `{name,count}`（genre = 文件 ∪ enrichment(found)，每曲去重计一次，count desc + name asc + cap）；单测。
+- [x] `repositories.getAllEnrichmentGenres`：全库 `trackId→found genres∪styles` 一次流式扫描（**只读 `enrichments`，零 tracks 行扇出**）。
+- [x] `dj-chat-context.buildLibraryFacetsContext`：库级「Library palette」文本块（top-50 genre/tag + count），每回合注入 system prompt（`dj-chat-agent` contextBlocks，紧随 now-playing/sets）；空库→`""`。
+- [x] `executeSetGet` 返回 `facets`（歌单级 genre/tag 分布，复用 `computeFacets` + 该集 enrichment）。
+- [x] 集成测：`computeFacets` 纯 4 + `buildLibraryFacetsContext` 3（含负缓存排除）+ `executeSetGet` facets 2。
+
+### Phase 7 Checklist
+- [x] genre 口径与 `projectTrack` 的 `genre` 字段一致（文件 ∪ enrichment `status:"found"`）。
+- [x] palette 注入不写 tracks 行、不阻塞（每回合 2 次只读扫描，被 LLM 延迟摊薄）。
+- [x] 空库 / 无风格 / 负缓存(`notFound`) → 不产出噪声块。
+
 ---
 
 ## 7. 硬规则对齐（CLAUDE.md）
@@ -490,3 +507,4 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 | 2026-07-04 | MUZERO Team | **Phase 4 QQ 原生 genre（TDD）**：`streamsrc/qq/qq-genre.ts`（`parseQqNativeGenre` 纯 + `fetchQqNativeGenre` guest 详情，复用导出签名）+ `enrich/qq-provider.ts`（`streamSourceId==="qq"` 自我 gate、via `native`、conf 0.85）；`EnrichmentQuery.streamSourceId`；registry auto 组合 QQ 排首。解析器用**真实 E2E 响应形状**测。**74 enrich 单测全绿（+7）、tsc/biome 干净**。Phase 4 完成（待用户库含 QQ 曲时补 in-app pipeline E2E） |
 | 2026-07-04 | MUZERO Team | **Phase 5 消费方接线（TDD）**：`track-search` `searchTracks`/`matchesQuery` 加 `enrichmentGenresByTrackId`（镜像 memoryNotes，enrichment 进 free 语料）；`dj-chat-tools` `library_search` 折进 enrichment genre（**PM「过滤导入歌曲」落点**）+ 三语工具描述；`annotation-editor` `TrackGenreChips` 只读风格 chips + 每曲重新获取按钮；i18n 4 语言。DJ RecentTrack.genres Phase 2 已接。**全量 3648 测全绿（+4）**。LLM 归一化 / ⌘F worker 语料 = deferred followup。Phase 5 完成 |
 | 2026-07-04 | MUZERO Team | **搜索结果返回 genre（Phase 5 补强）**：应问「AI DJ 搜索结果会返回风格吗」——此前只能**按**风格过滤、结果**不含** genre。加可投影 `genre` 字段（`projectTrack` 返回 文件∪enrichment，复用 corpus map 仅请求时 join）+ 三语描述提示。TDD（`fields:["id","genre"]` 返回并集）。**全量 3649 测全绿** |
+| 2026-07-04 | MUZERO Team | **Phase 7 DJ 库风格视野（TDD）**：应 PM「system prompt 注入全库风格+数量 set / 查歌单返回其风格+数量 set（tag 同理）」。`chat/library-facets.ts` 纯 `computeFacets`（genre=文件∪enrichment(found)、每曲计一次、count 排序+cap）+ `repositories.getAllEnrichmentGenres`（全库一次流式扫描，只读 enrichments 零 tracks 扇出）+ `dj-chat-context.buildLibraryFacetsContext`（「Library palette」块每回合注入 system prompt）+ `executeSetGet` 返回歌单级 `facets`。TDD 先红后绿，**+13 facets 单测全绿、facets 代码 tsc/biome 干净**（提交前 scope-stash 了并发 session 未完成的 dj-tool-activity WIP 以过 pre-commit 全项目 tsc）|

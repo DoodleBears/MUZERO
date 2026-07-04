@@ -1717,6 +1717,23 @@ export async function getEnrichmentsByTrackIds(
 }
 
 /**
+ * `trackId → found genre/style names` over the WHOLE enrichments table (one streaming pass) —
+ * for the DJ "library palette" facets block. `notFound` (negative-cache) rows contribute
+ * nothing. Reads only `enrichments` (never `tracks`), so it's cheap relative to the track scan.
+ */
+export async function getAllEnrichmentGenres(
+  db: MuzeroDB = defaultDb,
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  await db.enrichments.each((e) => {
+    if (e.status !== "found") return;
+    const genres = [...e.genres, ...(e.styles ?? [])];
+    if (genres.length > 0) map.set(e.trackId, genres);
+  });
+  return map;
+}
+
+/**
  * Upsert a track's enrichment (auto-fetched or manual). Reuses the existing row id so the
  * 1:1 mapping stays stable. `record.status === "notFound"` is the negative cache that stops
  * re-hitting the API. Writes the `enrichments` table, NOT the track row (no list fan-out).

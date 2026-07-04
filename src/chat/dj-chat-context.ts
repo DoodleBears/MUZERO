@@ -1,6 +1,10 @@
 import type { MuzeroDB } from "@/db/muzero-db";
-import { getPlayQueue, getSession, getTrack } from "@/db/repositories";
+import { getAllEnrichmentGenres, getPlayQueue, getSession, getTrack } from "@/db/repositories";
 import { type DjChatLocalIdRegistry, encodeSetRef, encodeTrackRef } from "./dj-chat-local-ids";
+import { computeFacets } from "./library-facets";
+
+/** Cap per dimension in the prompt block — conveys the palette without bloating the prompt. */
+const FACETS_PROMPT_LIMIT = 50;
 
 /**
  * A compact snapshot of what the listener is playing right now — the active 歌单
@@ -54,4 +58,32 @@ export async function buildSetsContext(db: MuzeroDB): Promise<string> {
   const count = await db.sessions.count();
   if (count === 0) return "";
   return `You have ${count} saved set(s) (歌单). Before creating a new set, call set_list (optionally with a name query) to find an existing one to REUSE with set_add_tracks — don't make near-duplicates, and never leave a set empty.`;
+}
+
+/**
+ * The "library palette" — the distinct genres + listener tags actually present in the library,
+ * with per-genre/tag track counts, injected every turn so the DJ curates from what EXISTS
+ * (e.g. "放点 city pop" → it knows there are 34) instead of guessing or inventing genres the
+ * library doesn't have. Genre = file genres ∪ enrichment; both dimensions capped to the top
+ * {@link FACETS_PROMPT_LIMIT} by count. Empty string when the library has no genres/tags yet.
+ */
+export async function buildLibraryFacetsContext(db: MuzeroDB): Promise<string> {
+  const [tracks, enrichmentGenres] = await Promise.all([
+    db.tracks.toArray(),
+    getAllEnrichmentGenres(db),
+  ]);
+  if (tracks.length === 0) return "";
+  const { genres, tags } = computeFacets(tracks, enrichmentGenres, { limit: FACETS_PROMPT_LIMIT });
+  if (genres.length === 0 && tags.length === 0) return "";
+
+  const lines = [
+    "Library palette — the genres and tags the listener's library ACTUALLY contains right now (number = tracks). Curate/filter using these exact names; don't invent genres the library lacks. For a genre/mood request, library_search these names, then keep only the songs that truly fit:",
+  ];
+  if (genres.length > 0) {
+    lines.push(`- Genres: ${genres.map((g) => `${g.name} (${g.count})`).join(", ")}`);
+  }
+  if (tags.length > 0) {
+    lines.push(`- Tags: ${tags.map((t) => `#${t.name} (${t.count})`).join(", ")}`);
+  }
+  return lines.join("\n");
 }

@@ -54,6 +54,7 @@ import {
 } from "./dj-chat-local-ids";
 import { toolDescription } from "./dj-chat-tool-descriptions";
 import { type DjReplyEvent, emitDjReply } from "./dj-reply-bus";
+import { computeFacets, type LibraryFacets } from "./library-facets";
 
 export const agentWriteResultSchema = z.object({
   status: z.enum(["ok", "error"]),
@@ -1005,12 +1006,13 @@ export async function executeSetGet(
   input: { sessionId: string },
   deps: { db?: MuzeroDB } & LocalIdDeps = {},
 ): Promise<
-  | { session: DjSession | undefined; tracks: Track[] }
+  | { session: DjSession | undefined; tracks: Track[]; facets: LibraryFacets }
   | {
       request: { sessionId: string };
       resultRef: string;
       set: ReturnType<typeof projectSetForAgent> | undefined;
       tool: "set_get";
+      facets: LibraryFacets;
       tracks: Array<Record<string, unknown> & { ordinal: number }>;
     }
 > {
@@ -1019,7 +1021,13 @@ export async function executeSetGet(
   const session = await getSession(sessionId, db);
   const orderedIds = session ? orderedSetTrackIds(session.trackIds, session.trackRanks) : [];
   const tracks = session ? await getTracksByIds(orderedIds, db) : [];
-  if (!deps.localIds) return { session, tracks };
+  // The set's genre/tag makeup (genre = file ∪ enrichment) so the DJ can reason about the
+  // playlist's composition — "this set is 60% mandopop" — without paging every track.
+  const enrichmentGenres = enrichmentGenresByTrackIdMap(
+    await getEnrichmentsByTrackIds(orderedIds, db),
+  );
+  const facets = computeFacets(tracks, enrichmentGenres);
+  if (!deps.localIds) return { session, tracks, facets };
   const ref = resultRef("set_get", deps, { returned: tracks.length, sessionId: input.sessionId });
   await persistLocalIds(deps);
   return {
@@ -1028,6 +1036,7 @@ export async function executeSetGet(
       ref ?? encodeResultRef(deps.resultId ?? newId("res"), deps.localIds, { toolName: "set_get" }),
     set: session ? projectSetForAgent(session, deps) : undefined,
     tool: "set_get",
+    facets,
     tracks: withOrdinal(tracks.map((track) => projectTrack(track, ["id", "title", "kind"], deps))),
   };
 }

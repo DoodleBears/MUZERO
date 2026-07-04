@@ -1,9 +1,13 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { createSession, playQueueSet } from "@/db/repositories";
+import { createSession, playQueueSet, setTrackEnrichment } from "@/db/repositories";
 import type { Track } from "@/db/types";
-import { buildNowPlayingContext, buildSetsContext } from "./dj-chat-context";
+import {
+  buildLibraryFacetsContext,
+  buildNowPlayingContext,
+  buildSetsContext,
+} from "./dj-chat-context";
 import { createDjChatLocalIdRegistry } from "./dj-chat-local-ids";
 
 let db: MuzeroDB;
@@ -77,6 +81,47 @@ describe("buildSetsContext", () => {
     // No per-set dump — the searchable/paginated tool handles that at scale.
     expect(context).not.toContain("Focus Work");
     expect(context).not.toContain("Chill Vibes");
+  });
+});
+
+describe("buildLibraryFacetsContext", () => {
+  it("returns '' for an empty library", async () => {
+    db = new MuzeroDB("dj-facets-empty");
+    expect(await buildLibraryFacetsContext(db)).toBe("");
+  });
+
+  it("lists genres (file ∪ enrichment) and tags with per-track counts", async () => {
+    db = new MuzeroDB("dj-facets-content");
+    await db.tracks.bulkPut([
+      {
+        ...trackRow({ id: "t1", sessionId: "s", title: "A" }),
+        tags: ["roadtrip"],
+        mediaMetadata: { genres: ["Pop"], artists: ["X"], parser: "music-metadata", parsedAt: 0 },
+      },
+      { ...trackRow({ id: "t2", sessionId: "s", title: "B" }), tags: ["roadtrip"] },
+    ]);
+    // t2 has no file genre — its "pop" comes from enrichment, merged case-insensitively with t1's.
+    await setTrackEnrichment(
+      { trackId: "t2", record: { source: "musicbrainz", genres: ["pop"], status: "found" } },
+      db,
+    );
+
+    const ctx = await buildLibraryFacetsContext(db);
+
+    expect(ctx).toContain("Library palette");
+    expect(ctx).toContain("pop (2)");
+    expect(ctx).toContain("#roadtrip (2)");
+  });
+
+  it("omits notFound (negative-cache) enrichment and empties from the palette", async () => {
+    db = new MuzeroDB("dj-facets-negcache");
+    await db.tracks.put(trackRow({ id: "t1", sessionId: "s", title: "A" }));
+    await setTrackEnrichment(
+      { trackId: "t1", record: { source: "musicbrainz", genres: [], status: "notFound" } },
+      db,
+    );
+
+    expect(await buildLibraryFacetsContext(db)).toBe("");
   });
 });
 

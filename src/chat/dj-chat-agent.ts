@@ -12,7 +12,11 @@ import type { MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
 import i18n from "@/i18n/i18n";
 import { canGenerateMusic, hasEnabledStreamSources } from "./dj-chat-availability";
-import { buildNowPlayingContext, buildSetsContext } from "./dj-chat-context";
+import {
+  buildLibraryFacetsContext,
+  buildNowPlayingContext,
+  buildSetsContext,
+} from "./dj-chat-context";
 import { DEFAULT_CHAT_CONTEXT_BUDGET, selectContextWindow } from "./dj-chat-context-budget";
 import { djChatSystemPrompt } from "./dj-chat-prompt";
 import {
@@ -64,8 +68,11 @@ export function createDjChatTransport({
       // the two don't race on the shared local-id registry.
       const nowPlaying = await buildNowPlayingContext(db, localIds);
       const setsContext = await buildSetsContext(db);
+      // The library "palette" (genres/tags actually present + counts) so the DJ curates from
+      // what exists instead of guessing — same rationale as the sets-awareness hint above.
+      const facetsContext = await buildLibraryFacetsContext(db);
       await persistLocalIds();
-      const contextBlocks = [nowPlaying, setsContext].filter(Boolean).join("\n\n");
+      const contextBlocks = [nowPlaying, setsContext, facetsContext].filter(Boolean).join("\n\n");
       const agent = new ToolLoopAgent({
         model,
         tools,
