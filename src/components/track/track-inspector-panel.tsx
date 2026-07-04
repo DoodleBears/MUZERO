@@ -1,6 +1,6 @@
 import { Download, FolderSearch, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { Disc3Icon } from "@/components/ui/disc-3";
@@ -9,6 +9,7 @@ import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { createFolderFs, grantFolderAccess, pickFolder } from "@/lib/folder-import";
 import { repairTrackSourcePathFromFolder } from "@/lib/local-file-repair";
+import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { trackAlbum, trackArtists } from "@/lib/track-display";
 import {
   describeTrackCoverSource,
@@ -31,9 +32,17 @@ export const TrackInspectorPanel = memo(function TrackInspectorPanel({
   track,
 }: TrackInspectorPanelProps) {
   const { t } = useTranslation();
+  // Own Lenis instance, like the sibling track list / wall / Settings columns. The
+  // gallery wall keeps a Lenis attached even in tracks mode where it is
+  // `overflow-hidden`; that idle wrapper swallows wheel events over any descendant
+  // that lacks its own instance, so without this the pane could not scroll (the
+  // list scrolled only because it carries its own). No-op when smooth scroll is off.
+  const scrollRef = useRef<HTMLElement | null>(null);
+  useSmoothScroll(scrollRef);
 
   return (
     <aside
+      ref={scrollRef}
       className={cn(
         // Its own bounded scroll column (the parent grid row caps its height), so the
         // detail pane scrolls independently of the list and its top dissolves under the

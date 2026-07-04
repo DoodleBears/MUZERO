@@ -2,6 +2,27 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v2.0.0 — 2026-07-04 · Talk to your DJ
+
+MUZERO 2.0 turns the AI DJ into someone you talk to. Hold a shortcut and just say what you want — 'play something more chill, no vocals' — and the DJ switches songs, searches your library, and curates on the spot, then answers you in the top-left (and reads it aloud if you set up a voice). Imported songs now get genre and style tags filled in automatically, so the DJ — and search — can finally filter your uploads and streaming imports by 'city pop' or 'lo-fi'. Plus the music crossfades on pause and song changes, the DJ curates with real taste and reuses your existing sets instead of making empty ones, and you can filter your sets by AI / made by you / imported.
+
+### Highlights
+- **dj** Talk to your DJ — hold a key and just say it — Set a push-to-talk shortcut, hold it, and speak. Groq (your key) transcribes what you said and hands it to the AI DJ, which switches songs, searches your library, curates a set, or generates — then replies with a line in the top-left ('switched to lo-fi instrumentals, no vocals here'). It picks up your current conversation, so you can steer it hands-free: 'a bit more chill', 'keep this one', 'now something with vocals'. Your mic is only on while you hold the key; audio and transcripts are never stored or uploaded. _(desktop)_
+- **library** Imported songs get genre and style tags — automatically — Until now the DJ could only judge an imported song by its title and artist. MUZERO now looks up genre, style, and mood for your uploads and streaming imports in the background — from MusicBrainz (keyless, works on web too), plus Last.fm and Discogs if you add a key, and QQ Music's own genre for Chinese tracks — and writes them onto the track. The DJ's picks, its 'library_search' tool, and your own search all start filtering by style, so 'play some city pop' or '#lo-fi' actually finds them. Turn it on under Settings → Genre tags; each track is looked up once.
+
+### Added
+- **dj** The DJ can talk back — read replies aloud with Fish Audio — Add a Fish Audio key (BYOK) and pick a voice — search Fish's library, preview samples, or paste any public voice ID. Turn on 'Speak replies aloud' and the DJ reads each reply out loud, gently ducking the music while it talks and restoring the volume when it's done. Great alongside push-to-talk for a fully hands-free DJ; leave it off to keep the DJ's replies as quiet top-left notifications. _(desktop)_
+- **player** Fade in / out when pausing and switching songs — Playback now fades smoothly instead of cutting abruptly — when you pause or resume, and across track changes. On by default; turn it off under Settings → Playback ('Fade in / out').
+- **sets** Filter your sets by origin: AI, made by you, or imported — The Sets tab now has an origin filter, so you can quickly narrow to the sets the AI DJ built, the ones you made yourself, or the ones you imported from a playlist — instead of scrolling everything together.
+
+### Changed
+- **dj** The DJ curates with taste and reuses your sets — When you ask the chat DJ to build a set, it now judges each candidate with real music knowledge instead of dumping a whole search result in, and it adds to a fitting set you already have rather than creating empty duplicates. Fewer stray tracks, fewer half-empty sets.
+- **dj** The DJ speaks your language — The DJ's instructions and tools are now localized to your app language, and its replies come back in that language too — even when you speak to it in another. Set your language once and the DJ matches it.
+- **dj** See every step the DJ takes — Each action the DJ runs — search, curate, switch, generate — now shows an icon, a label, and the query it used, both in the chat and mirrored to the top-left notifications, so you can follow along. The chat also sticks to the newest message and adds a jump-to-bottom button when you scroll up.
+
+### Fixed
+- **streaming** Accurate progress for background playlist imports — After playlist writes became instant in 1.6.0, the background import notification could jump straight to done; its progress now tracks the actual fetch of each track's details, so the bar fills in accurately as a big list imports. _(desktop)_
+
 ## v1.6.0 — 2026-07-02 · A home for your downloads
 
 1.6.0 gives downloads a first-class home: a new Downloads tab in your library lists every download with live progress, a status filter (in progress / completed / failed), and clear-finished or clear-all — virtualized so a 500-song favorites batch stays smooth. Plus, ⌘F filtering now matches pinyin and Japanese kana/romaji, playlist imports run in the background with a progress notification (and import far faster for big lists), you can filter the online playlist list before importing, and live-video backgrounds render reliably.

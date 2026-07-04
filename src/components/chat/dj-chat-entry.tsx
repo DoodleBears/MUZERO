@@ -32,7 +32,6 @@ import {
 import { DJ_CHAT_TOOL_METADATA } from "@/chat/dj-chat-tool-metadata";
 import { ChatActivityPopover, deriveChatActivity } from "@/components/chat/chat-activity-popover";
 import { ChatPanel } from "@/components/chat/chat-panel";
-import { ChatReplyNotification } from "@/components/chat/chat-reply-notification";
 import { ChatSessionHome } from "@/components/chat/chat-session-home";
 import { DjToolActivityNotifier } from "@/components/chat/dj-tool-activity-notifier";
 import { type SlashCommand, SlashMenu, useSlashCommands } from "@/components/chat/slash-commands";
@@ -341,7 +340,6 @@ export function DjChatEntry({
         />
       )}
 
-      {typeof document !== "undefined" && createPortal(<ChatReplyNotification />, document.body)}
       {typeof document !== "undefined" &&
         createPortal(
           <AnimatePresence>
