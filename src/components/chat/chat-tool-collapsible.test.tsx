@@ -74,6 +74,27 @@ describe("ChatToolCollapsible", () => {
     expect(screen.queryByText("dj_generate_tracks")).not.toBeInTheDocument();
   });
 
+  it("shows the tool's key input as the summary sub-line (icon + label + detail)", () => {
+    const part = {
+      type: "tool-library_search",
+      toolCallId: "call_s",
+      state: "output-available",
+      input: { queries: ["jazz", "lofi"] },
+      output: { total: 3 },
+    } satisfies ToolUIPart;
+
+    render(
+      <ChatToolCollapsible
+        labels={{ ...labels, tools: { library_search: { label: "Search library" } } }}
+        part={part}
+      />,
+    );
+
+    expect(screen.getByText("Search library")).toBeInTheDocument();
+    // The key input (queries joined) surfaces as the sub-line — the "executed content".
+    expect(screen.getByText("jazz、lofi")).toBeInTheDocument();
+  });
+
   it("renders tool output and errors without requiring approval actions", () => {
     const outputPart = {
       type: "tool-set_create",

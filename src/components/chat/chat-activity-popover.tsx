@@ -1,50 +1,11 @@
 import { type DynamicToolUIPart, getToolName, isToolUIPart, type ToolUIPart } from "ai";
-import {
-  AlertCircle,
-  Disc3,
-  Download,
-  FolderTree,
-  Globe,
-  ListMusic,
-  ListOrdered,
-  ListPlus,
-  ListX,
-  Loader2,
-  type LucideIcon,
-  Pencil,
-  Play,
-  Repeat,
-  Search,
-  Sparkles,
-  StickyNote,
-  Tags,
-  Wand2,
-} from "lucide-react";
+import { AlertCircle, Loader2, Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
 import { summarizeToolInput, toolIconName } from "@/chat/dj-tool-display";
 import type { DjChatRuntimeSnapshot } from "@/chat/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
-
-/** Lucide component per {@link toolIconName} key — the DJ-tool icon set. */
-const TOOL_ICON_COMPONENT: Record<string, LucideIcon> = {
-  search: Search,
-  "folder-tree": FolderTree,
-  tags: Tags,
-  "disc-3": Disc3,
-  "list-music": ListMusic,
-  "list-plus": ListPlus,
-  pencil: Pencil,
-  "list-ordered": ListOrdered,
-  repeat: Repeat,
-  "list-x": ListX,
-  play: Play,
-  "sticky-note": StickyNote,
-  sparkles: Sparkles,
-  globe: Globe,
-  download: Download,
-  "wand-2": Wand2,
-};
+import { TOOL_ICON_COMPONENT } from "./tool-icon";
 
 type ChatToolPart = ToolUIPart | DynamicToolUIPart;
 type ChatToolState = ChatToolPart["state"];

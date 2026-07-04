@@ -1,8 +1,10 @@
 import { type DynamicToolUIPart, getToolName, type ToolUIPart } from "ai";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
+import { summarizeToolInput, toolIconName } from "@/chat/dj-tool-display";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ToolStepIcon } from "./tool-icon";
 
 export type ChatToolPart = ToolUIPart | DynamicToolUIPart;
 type ChatToolState = ChatToolPart["state"];
@@ -47,6 +49,13 @@ export function ChatToolCollapsible({
   const toolName = getToolName(part);
   const toolLabel = labels.tools?.[toolName]?.label ?? part.title ?? toolName;
   const toolDescription = labels.tools?.[toolName]?.description;
+  // The tool's key input (search query / set name / generated title…) — the same
+  // "executed content" the dock activity card shows. Falls back to the tool's
+  // generic description when there's no single summarizable param.
+  const inputDetail = summarizeToolInput(
+    toolName,
+    hasPayload(part, "input") ? part.input : undefined,
+  );
 
   return (
     <details
@@ -58,9 +67,12 @@ export function ChatToolCollapsible({
           aria-hidden
           className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
         />
+        <ToolStepIcon iconKey={toolIconName(toolName)} className="size-4 shrink-0 text-primary" />
         <span className="min-w-0 flex-1 truncate">
           <span className="block truncate font-medium">{toolLabel}</span>
-          {toolDescription ? (
+          {inputDetail ? (
+            <span className="block truncate text-muted-foreground text-xs">{inputDetail}</span>
+          ) : toolDescription ? (
             <span className="block truncate text-muted-foreground text-xs">{toolDescription}</span>
           ) : null}
         </span>
