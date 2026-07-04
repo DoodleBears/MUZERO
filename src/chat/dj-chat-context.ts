@@ -61,18 +61,52 @@ export async function buildSetsContext(db: MuzeroDB): Promise<string> {
 }
 
 /**
+ * Cached palette block per DB. Recomputing the full-library scan every DJ turn is wasted disk
+ * I/O (the library rarely changes mid-chat), so we memoize and invalidate on a CHEAP fingerprint
+ * — the track + enrichment row COUNTS. `count()` reads IndexedDB key stats without deserializing
+ * rows, and the counts move on exactly the events that move the palette: add / remove a track,
+ * and auto-enrich / sweep writing a new enrichment row.
+ *
+ * Deliberately in-memory, NOT a persisted materialized aggregate: recomputing once per app
+ * session (first chat turn) is negligible against LLM latency, whereas a persisted incremental
+ * count store would have to hook every write path and risks the denormalized-count DRIFT this
+ * codebase moved playCount/liked OFF the track row to avoid (switch-fps). Recompute-from-source
+ * can't drift. Keyed by DB (WeakMap) so tests with isolated DBs don't cross-contaminate.
+ *
+ * Known gap: a tag-only edit on an EXISTING track doesn't move the counts, so a freshly-added
+ * tag lands in the palette on the next add/remove/enrich (or restart) — acceptable for a rough
+ * vocabulary hint, and it's always correct-from-source, never stale-and-wrong.
+ */
+const facetsBlockCache = new WeakMap<MuzeroDB, { fingerprint: string; block: string }>();
+
+/**
  * The "library palette" — the distinct genres + listener tags actually present in the library,
  * with per-genre/tag track counts, injected every turn so the DJ curates from what EXISTS
  * (e.g. "放点 city pop" → it knows there are 34) instead of guessing or inventing genres the
  * library doesn't have. Genre = file genres ∪ enrichment; both dimensions capped to the top
  * {@link FACETS_PROMPT_LIMIT} by count. Empty string when the library has no genres/tags yet.
+ * Memoized on a count fingerprint (see {@link facetsBlockCache}) so it only rescans on change.
  */
 export async function buildLibraryFacetsContext(db: MuzeroDB): Promise<string> {
+  const [trackCount, enrichmentCount] = await Promise.all([
+    db.tracks.count(),
+    db.enrichments.count(),
+  ]);
+  const fingerprint = `${trackCount}:${enrichmentCount}`;
+  const cached = facetsBlockCache.get(db);
+  if (cached && cached.fingerprint === fingerprint) return cached.block;
+
+  const block = await computeLibraryFacetsBlock(db, trackCount);
+  facetsBlockCache.set(db, { fingerprint, block });
+  return block;
+}
+
+async function computeLibraryFacetsBlock(db: MuzeroDB, trackCount: number): Promise<string> {
+  if (trackCount === 0) return "";
   const [tracks, enrichmentGenres] = await Promise.all([
     db.tracks.toArray(),
     getAllEnrichmentGenres(db),
   ]);
-  if (tracks.length === 0) return "";
   const { genres, tags } = computeFacets(tracks, enrichmentGenres, { limit: FACETS_PROMPT_LIMIT });
   if (genres.length === 0 && tags.length === 0) return "";
 

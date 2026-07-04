@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import { createSession, playQueueSet, setTrackEnrichment } from "@/db/repositories";
 import type { Track } from "@/db/types";
@@ -111,6 +111,31 @@ describe("buildLibraryFacetsContext", () => {
     expect(ctx).toContain("Library palette");
     expect(ctx).toContain("pop (2)");
     expect(ctx).toContain("#roadtrip (2)");
+  });
+
+  it("computes once and reuses the block until the library changes (add invalidates)", async () => {
+    db = new MuzeroDB("dj-facets-cache");
+    await db.tracks.put({
+      ...trackRow({ id: "t1", sessionId: "s", title: "A" }),
+      tags: ["alpha"],
+    });
+    // The expensive step is the full-row scan; the count-fingerprint must gate it.
+    const scan = vi.spyOn(db.tracks, "toArray");
+
+    const first = await buildLibraryFacetsContext(db);
+    expect(scan).toHaveBeenCalledTimes(1);
+    expect(first).toContain("#alpha");
+
+    // No change → served from cache, no rescan.
+    const second = await buildLibraryFacetsContext(db);
+    expect(second).toBe(first);
+    expect(scan).toHaveBeenCalledTimes(1);
+
+    // Adding a track moves the count fingerprint → recompute picks up the new tag.
+    await db.tracks.put({ ...trackRow({ id: "t2", sessionId: "s", title: "B" }), tags: ["beta"] });
+    const third = await buildLibraryFacetsContext(db);
+    expect(scan).toHaveBeenCalledTimes(2);
+    expect(third).toContain("#beta");
   });
 
   it("omits notFound (negative-cache) enrichment and empties from the palette", async () => {

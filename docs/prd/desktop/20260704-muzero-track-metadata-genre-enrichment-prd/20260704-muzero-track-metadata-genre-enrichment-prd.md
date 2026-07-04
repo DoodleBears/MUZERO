@@ -434,8 +434,9 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 
 ### Phase 7 Checklist
 - [x] genre 口径与 `projectTrack` 的 `genre` 字段一致（文件 ∪ enrichment `status:"found"`）。
-- [x] palette 注入不写 tracks 行、不阻塞（每回合 2 次只读扫描，被 LLM 延迟摊薄）。
+- [x] palette 注入不写 tracks 行、不阻塞。
 - [x] 空库 / 无风格 / 负缓存(`notFound`) → 不产出噪声块。
+- [x] **性能：per-DB 内存缓存 + `count()` 指纹失效**，只在增删曲/补齐时重扫，不每回合全表反序列化；不磁盘持久化（避反规范化漂移，源头重算永不漂移）。
 
 ---
 
@@ -508,3 +509,4 @@ return toHit(parsed);                          // 纯：EnrichmentHit{ rawTags, 
 | 2026-07-04 | MUZERO Team | **Phase 5 消费方接线（TDD）**：`track-search` `searchTracks`/`matchesQuery` 加 `enrichmentGenresByTrackId`（镜像 memoryNotes，enrichment 进 free 语料）；`dj-chat-tools` `library_search` 折进 enrichment genre（**PM「过滤导入歌曲」落点**）+ 三语工具描述；`annotation-editor` `TrackGenreChips` 只读风格 chips + 每曲重新获取按钮；i18n 4 语言。DJ RecentTrack.genres Phase 2 已接。**全量 3648 测全绿（+4）**。LLM 归一化 / ⌘F worker 语料 = deferred followup。Phase 5 完成 |
 | 2026-07-04 | MUZERO Team | **搜索结果返回 genre（Phase 5 补强）**：应问「AI DJ 搜索结果会返回风格吗」——此前只能**按**风格过滤、结果**不含** genre。加可投影 `genre` 字段（`projectTrack` 返回 文件∪enrichment，复用 corpus map 仅请求时 join）+ 三语描述提示。TDD（`fields:["id","genre"]` 返回并集）。**全量 3649 测全绿** |
 | 2026-07-04 | MUZERO Team | **Phase 7 DJ 库风格视野（TDD）**：应 PM「system prompt 注入全库风格+数量 set / 查歌单返回其风格+数量 set（tag 同理）」。`chat/library-facets.ts` 纯 `computeFacets`（genre=文件∪enrichment(found)、每曲计一次、count 排序+cap）+ `repositories.getAllEnrichmentGenres`（全库一次流式扫描，只读 enrichments 零 tracks 扇出）+ `dj-chat-context.buildLibraryFacetsContext`（「Library palette」块每回合注入 system prompt）+ `executeSetGet` 返回歌单级 `facets`。TDD 先红后绿，**+13 facets 单测全绿、facets 代码 tsc/biome 干净**（提交前 scope-stash 了并发 session 未完成的 dj-tool-activity WIP 以过 pre-commit 全项目 tsc）|
+| 2026-07-04 | MUZERO Team | **Phase 7 palette 缓存（性能，TDD）**：`buildLibraryFacetsContext` 原本每 DJ 回合全表 `tracks.toArray()`（反序列化全库）——改为 **per-DB 内存缓存 + 廉价指纹失效**：指纹 = `tracks.count()`+`enrichments.count()`（IndexedDB `count()` 不反序列化行），只在增删曲/补齐（计数变化）时重扫，多回合对话不再每条消息重扫。**刻意不磁盘持久化 + 增量计数**（避免本仓库已规避的反规范化计数漂移，源头重算永不漂移；一次会话首回合重算一次可忽略）。已知小 gap：existing 曲的纯 tag 编辑不改计数 → 下次增删/补齐或重启才进 palette。TDD（spy `toArray`：二次调用不重扫、加曲后重扫）。**+1 测（14 facets 全绿）** |
