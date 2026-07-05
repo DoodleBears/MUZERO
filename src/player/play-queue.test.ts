@@ -13,6 +13,7 @@ import {
   removeEntry,
   replaceEntries,
   requestBlockTrackIds,
+  trimPastEntries,
   unconsumedTrackIds,
 } from "./play-queue";
 
@@ -313,5 +314,24 @@ describe("removeEntriesByTrackIds", () => {
   it("returns the same state when nothing matches", () => {
     const before = state(["a", "b"], 1);
     expect(removeEntriesByTrackIds(before, new Set())).toBe(before);
+  });
+});
+
+describe("trimPastEntries", () => {
+  it("keeps the current entry and future queue while capping old history", () => {
+    const next = trimPastEntries(state(["a", "b", "c", "d", "e", "f"], 4), 2);
+    expect(ids(next)).toEqual(["c", "d", "e", "f"]);
+    expect(next.currentIndex).toBe(2);
+    expect(next.entries[next.currentIndex]?.trackId).toBe("e");
+  });
+
+  it("does nothing when history is within the cap", () => {
+    const before = state(["a", "b", "c"], 1);
+    expect(trimPastEntries(before, 2)).toBe(before);
+  });
+
+  it("does not trim idle queues", () => {
+    const before = state(["a", "b", "c"], -1);
+    expect(trimPastEntries(before, 1)).toBe(before);
   });
 });

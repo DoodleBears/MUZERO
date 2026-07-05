@@ -20,6 +20,7 @@ import {
   removeEntriesByTrackIds,
   removeEntry,
   replaceEntries,
+  trimPastEntries,
 } from "@/player/play-queue";
 import { clampIndex } from "@/player/queue";
 import { orderedSetTrackIds, planReorder, ranksAtTop, rebalance } from "@/player/set-order";
@@ -2809,6 +2810,7 @@ async function purgeTracksFromPlayQueue(removed: Set<string>, db: MuzeroDB): Pro
  */
 
 const PLAY_QUEUE_ID = "main" as const;
+const PLAY_QUEUE_HISTORY_CAP = 200;
 
 export async function getPlayQueue(db: MuzeroDB = defaultDb): Promise<PlayQueue> {
   const row = await db.playQueue.get(PLAY_QUEUE_ID);
@@ -2944,7 +2946,11 @@ export async function playQueueSetIndex(
   db: MuzeroDB = defaultDb,
 ): Promise<PlayQueue> {
   const pq = await getPlayQueue(db);
-  return writePlayQueue({ ...pq, currentIndex: clampIndex(pq.entries.length, index) }, db);
+  const next = trimPastEntries(
+    { entries: pq.entries, currentIndex: clampIndex(pq.entries.length, index) },
+    PLAY_QUEUE_HISTORY_CAP,
+  );
+  return writePlayQueue({ ...pq, entries: next.entries, currentIndex: next.currentIndex }, db);
 }
 
 /** Set the loop mode. */

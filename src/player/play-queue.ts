@@ -142,6 +142,22 @@ export function replaceEntries(newEntries: PlayQueueEntry[], currentIndex = 0): 
 }
 
 /**
+ * Drop only deep playback history while preserving the current track and all
+ * future entries. This keeps long-running queues bounded without changing what
+ * plays next or mutating the source Set/session history.
+ */
+export function trimPastEntries(state: PlayQueueState, maxPastEntries: number): PlayQueueState {
+  if (state.currentIndex < 0 || state.entries.length === 0) return state;
+  const maxPast = Math.max(0, Math.floor(maxPastEntries));
+  if (state.currentIndex <= maxPast) return state;
+  const drop = state.currentIndex - maxPast;
+  return {
+    entries: state.entries.slice(drop),
+    currentIndex: state.currentIndex - drop,
+  };
+}
+
+/**
  * The 歌单(Set) tracks not yet fed into the play queue — matched by id, so it's
  * robust to the set's order changing (new tracks are PREPENDED to the top now, no
  * longer appended). Returns them in the set's current order. The store keeps a

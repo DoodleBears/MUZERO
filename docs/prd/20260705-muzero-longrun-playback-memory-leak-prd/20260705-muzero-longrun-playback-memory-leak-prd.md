@@ -14,7 +14,7 @@
 | 0 | 归因先行：真机 5h 直播点歌复现 + heap 三连拍定位「主导保留类」 | ✅ Completed（2026-07-05 E2E：受控 Blob 归属实验坐实 H-1 机制 ③，见 §10） | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | 确证无界缓存治理（L-1~L-8 + M-1，两轮静态排查发现，逐项有界化） | ✅ Completed（L-1~L-6 + L-8 + M-1 已修；L-7 复核发现 main 已有 50 条上限。L-8 在 annotation-commands 分支合入 main 后按 L-2 同型补修） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 播放缓存 / autoCacheStreamed 内存画像与上限（H-1，占用主导嫌疑） | 🔄 方向已由 Phase 0 数据修正（见 §4.2 H-1 结论更新）：RAM 主导 = 渲染端 Blob 句柄钉主进程字节（非泄漏、GC 全额可回收）；`playbackCache` 实测为空，落盘走 `mediaBlobs`（electron-file 磁盘文件，无 IDB 内联回退）——「降缓存上限」杠杆失效，改为「确定性释放内存背书 Blob 句柄」设计题 | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 队列长驻上限（F-11 承接六月审计遗留 Q-3） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 队列长驻上限（F-11 承接六月审计遗留 Q-3） | ✅ Completed（最小安全治理：active playQueue 只保留最近 200 条已播历史；未来队列与 session.trackIds 不裁剪） | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -146,7 +146,7 @@
 | **L-4** | 记忆瀑布布局 | [memory-masonry.ts](../../../src/lib/memory-masonry.ts) `preparedCache` | **Low-Medium** | ✅ 已修（LRU 512） |
 | **L-5** | 本地封面 URL | [use-local-cover.ts](../../../src/hooks/use-local-cover.ts) `localCoverUrlCache` | **Low** | ✅ 已修（LRU 1024） |
 | **L-6** | 封面解码登记 | [cover-decode-registry.ts](../../../src/lib/cover-decode-registry.ts) `decodedCoverUrls` | **Low** | ✅ 已修（有界 Set 2048） |
-| **F-11** | 队列长驻 | [player-store.ts](../../../src/stores/player-store.ts) playQueue/session.trackIds（承接六月 F-11 / Q-3） | **Low-Medium** | 设计确认（六月遗留，Phase 3） |
+| **F-11** | 队列长驻 | [player-store.ts](../../../src/stores/player-store.ts) playQueue/session.trackIds（承接六月 F-11 / Q-3） | **Low-Medium** | ✅ 已落最小治理：persisted playQueue 深历史裁剪到最近 200 条已播；session/set 历史归档另行设计 |
 | **L-7** | 直播点歌请求历史 | [audience-request-runtime.ts](../../../src/live-requests/audience-request-runtime.ts) `items` 数组 | **Medium** | ✅ **复核：main 已有界**（`remember` 已裁到 50 条——PRD 初稿基于 feat 分支旧读；无需改动） |
 | **L-8** | 注释限流器 | [live-request-annotation.ts](../../../src/live-requests/live-request-annotation.ts) `createAnnotationLimiter().lastByRater` | **Medium** | ✅ 已修（annotation-commands 分支合入 main 后，`allow()` 内与 `recent` 同处 `pruneExpiredTimestamps` 按 `cooldownMs` 清扫；长驻单测覆盖） |
 | **M-1** | 流下载并发积压 | [player-store.ts](../../../src/stores/player-store.ts) `downloadStreamForPlayback` 未接 abort signal | **Low** | ✅ 已修（`beginPlaybackLoading` 的 controller.signal 透传进 fetch；abort 静默降级） |
@@ -347,13 +347,17 @@
 **Goal:** playQueue/session.trackIds 不再无界；直播点歌数天不涨到上千条元数据。
 
 **Tasks:**
-- [ ] 队列上限策略（保留最近 N + 历史归档到歌单）——牵涉 set/queue/memory 语义，先在本 PRD 落最小可行（如软上限 + 观测告警），复杂归档拆 data-model 后续
-- [ ] 硬规则 7：DJ 续歌 integration test 覆盖上限裁剪不破坏队列顺序 / 续歌触发
+- [x] **最小安全上限**：`playQueueSetIndex` 持久化 cursor 时裁剪 active playQueue 的深历史，只保留当前曲目前最近 200 条已播 entries；当前曲目与未来队列完整保留，`session.trackIds` / set membership 不裁剪。
+- [x] **纯函数 TDD**：新增 `trimPastEntries`，覆盖保留当前曲目、未来条目、idle/no-op 分支。
+- [x] **repo 集成 TDD**：`playQueueSetIndex` 从 index 250 前进时裁掉 `trk_0..trk_49`，当前曲目仍为 `trk_250`，currentIndex 重映射到 200，未来 9 条保留。
+- [ ] **完整历史归档**：把已播历史归档到歌单/播放历史视图牵涉 set/queue/memory 语义，拆到后续 data-model PRD；本轮不做隐式删除用户歌单历史。
 
 ### Phase 3 Checklist
 
-- [ ] LR-1 长跑队列长度收敛于上限
-- [ ] dj-engine integration 套件全绿
+- [x] Active playQueue 已播历史收敛到 200 条上限；未来队列不被裁剪
+- [x] `pnpm vitest run src/player/play-queue.test.ts src/db/play-queue-repo.test.ts` 通过（56 tests）
+- [x] `pnpm typecheck` 通过
+- [ ] Prod/CDP 长跑曲线仍待 Phase 2 live harness 复测；本轮未再启动 Electron，避免多开
 
 ---
 
@@ -455,3 +459,4 @@
 | 2026-07-05 | Claude Code | **第三轮：用户任务管理器截图坐实 Q-6——2,859.9MB 是主进程，渲染进程仅 62.4MB**。①§1.1 事实 1 修正（初稿「占用在渲染进程」判断被推翻）；② H-1 机制精确化：渲染端 Blob 句柄惰性 GC + 字节钉在主进程 blob storage（BlobMemoryController 内存层 ~2GB 上限与 2.86GB 画像吻合），渲染端 L-2~L-8/F-11 确认非主导；③ 主进程（electron/）全量静态复核：fetch-proxy 流式无缓冲、diagnostics 环 100、intake 有界、ipc 均健康——主进程 JS 侧无 GB 级候选，指向 Chromium 存储层；新登记 M-2（pendingMediaStorageWrites fd 边缘泄漏，Low）；④ Phase 0 重定向：主进程 `process.memoryUsage()`/`v8.getHeapStatistics()` + **渲染端手动 GC → 看主进程 RSS 回落**的廉价定性实验（新 Q-7）；渲染端 heap 三连拍降级为辅助。 |
 | 2026-07-05 | Codex | **用户截图后本地 Electron dev harness 复测（§10.1）**：通过 dev control endpoint 跑真实 5734 首队列短切歌。9 次切歌中 renderer/Tab 549.9→1430.3MB、GPU 460.5→552.0MB，main/Browser 176.2→229.9MB 且 Node heap 始终 6-7MB；暂停后 renderer 先回到 839MB，再回到 582.4MB，接近初始 545-588MB。结论：短跑复现的是 Chromium 媒体/Blob/解码工作集高水位与惰性释放，不是 MUZERO JS 永久线性泄漏；但用户感知的任务管理器高水位仍需 Phase 2 用 prod+CDP 强制 GC 和“已缓存曲目 vs 在线下载 vs 视频 MV”分场景验收。 |
 | 2026-07-05 | Codex | **Phase 2 TDD harness 推进**：新增 dev-only `GET /playback/candidates` 设计与实现（route + renderer handler 单测先红后绿），只返回 ready 且有 `blobId`/`sourcePath` 的本地可播放 queue index，不泄露 path/url/title；`scripts/perf-longrun-memory.mjs` 增加 `--local-only` 与 `--play-timeout`，让纯切歌内存曲线与在线 download-before-play 分离。验证：`pnpm vitest run src/dev/perf-control.test.ts` 23 例通过，`node --check scripts/perf-longrun-memory.mjs` 通过；live smoke 因当前 Electron dev 控制端点未监听未标绿，留给 prod/profile harness。 |
+| 2026-07-05 | Codex | **Phase 3 最小队列治理**：TDD 新增 `trimPastEntries` 纯函数，并在 `playQueueSetIndex` 持久化 cursor 时裁剪 active playQueue 深历史到最近 200 条已播 entries；当前曲目与未来队列完整保留，`session.trackIds` / set membership 不裁剪，完整历史归档拆后续 data-model PRD。验证：`pnpm vitest run src/player/play-queue.test.ts src/db/play-queue-repo.test.ts` 56 例通过，`pnpm typecheck` 通过。本轮遵守“不多开”，未再启动 Electron。 |

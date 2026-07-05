@@ -86,6 +86,18 @@ describe("playQueue repo", () => {
     expect(pq.repeat).toBe("all");
     expect(pq.contextSetId).toBe("ses_9");
   });
+
+  it("playQueueSetIndex prunes deep playback history while preserving current and future", async () => {
+    const ids = Array.from({ length: 260 }, (_, i) => `trk_${i}`);
+    await playQueueSet(ids, { currentIndex: 0 }, db);
+    await playQueueSetIndex(250, db);
+
+    const pq = await getPlayQueue(db);
+    expect(trackIds(pq).at(pq.currentIndex)).toBe("trk_250");
+    expect(trackIds(pq)[0]).toBe("trk_50");
+    expect(pq.currentIndex).toBe(200);
+    expect(pq.entries).toHaveLength(210);
+  });
 });
 
 describe("v2 → v3 migration seeds the play queue from the resume point", () => {
