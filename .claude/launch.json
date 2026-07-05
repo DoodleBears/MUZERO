@@ -10,14 +10,20 @@
     {
       "name": "muzero-preview",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "MUZERO_DEV_PORT=1440 pnpm dev"],
-      "port": 1440
+      "runtimeArgs": ["-c", "MUZERO_DEV_PORT=41733 pnpm dev"],
+      "port": 41733
     },
     {
       "name": "muzero-web",
       "runtimeExecutable": "sh",
       "runtimeArgs": ["-c", "MUZERO_DEV_PORT=41735 pnpm dev"],
       "port": 41735
+    },
+    {
+      "name": "muzero-web-2",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "MUZERO_DEV_PORT=41750 pnpm dev"],
+      "port": 41750
     },
     {
       "name": "site-dev",
