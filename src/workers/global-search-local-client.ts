@@ -93,8 +93,12 @@ async function searchGlobalLocalLibraryInline(
 ): Promise<GlobalSearchLocalResults> {
   const startedAt = performance.now();
   await ensureTransliterationLoaded();
-  const [tracks, memories] = await Promise.all([db.tracks.toArray(), db.memories.toArray()]);
-  const results = buildGlobalSearchLocalResults(tracks, memories, input);
+  const [tracks, memories, trackPlaybackStats] = await Promise.all([
+    db.tracks.toArray(),
+    db.memories.toArray(),
+    db.trackPlaybackStats.toArray(),
+  ]);
+  const results = buildGlobalSearchLocalResults(tracks, memories, { ...input, trackPlaybackStats });
   notePerfWork("globalSearch.localInline", performance.now() - startedAt, {
     albums: results.albums.length,
     artists: results.artists.length,

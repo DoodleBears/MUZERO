@@ -1,4 +1,4 @@
-import type { Memory, Track } from "@/db/types";
+import type { Memory, Track, TrackPlaybackStats } from "@/db/types";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
 import { buildAlbumIndex, buildArtistIndex } from "@/lib/library-index";
 import { queryRows } from "@/lib/search-core";
@@ -18,6 +18,8 @@ export interface GlobalSearchLocalInput {
    * already loads every row, so this is a free predicate on the existing pass.
    */
   mediaKind?: "audio" | "video";
+  /** Folded in by the local worker / inline fallback; callers do not need to post this. */
+  trackPlaybackStats?: readonly TrackPlaybackStats[];
 }
 
 export interface GlobalSearchLocalResults {
@@ -34,13 +36,17 @@ export function buildGlobalSearchLocalResults(
 ): GlobalSearchLocalResults {
   const query = input.query.trim();
   const resultLimit = Math.max(1, input.resultLimit);
+  const lastPlayedAtByTrackId = lastPlayedByTrack(input.trackPlaybackStats ?? []);
   const readyTracks = input.includeTracks
     ? tracks
         .filter(
           (track) =>
             track.status === "ready" && (!input.mediaKind || track.kind === input.mediaKind),
         )
-        .sort((a, b) => b.createdAt - a.createdAt)
+        .sort(
+          (a, b) =>
+            trackActivityAt(b, lastPlayedAtByTrackId) - trackActivityAt(a, lastPlayedAtByTrackId),
+        )
     : [];
   const memoryNotes = input.includeTracks
     ? memoryNotesByTrack(memories)
@@ -73,6 +79,19 @@ export function buildGlobalSearchLocalResults(
   ]);
 
   return { albums, artists, coverTrackIds, trackIds };
+}
+
+function lastPlayedByTrack(stats: readonly TrackPlaybackStats[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const row of stats) {
+    if (row.lastPlayedAt == null) continue;
+    map.set(row.trackId, Math.max(map.get(row.trackId) ?? 0, row.lastPlayedAt));
+  }
+  return map;
+}
+
+function trackActivityAt(track: Track, lastPlayedAtByTrackId: ReadonlyMap<string, number>): number {
+  return lastPlayedAtByTrackId.get(track.id) ?? track.updatedAt ?? track.createdAt;
 }
 
 function memoryNotesByTrack(memories: Memory[]): Map<string, string[]> {

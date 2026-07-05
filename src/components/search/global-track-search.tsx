@@ -265,13 +265,16 @@ export function GlobalTrackSearch({
   const showArtists = scope.showArtists;
   const showOnline = scope.showOnline;
   const forcedSource = filter?.kind === "source" ? filter.source : undefined;
+  const defaultRecentTracksRequested =
+    deferredSearchText.length === 0 && filter === null && showTrackResults;
   const localWorkerRequested =
     open &&
     !needsLyricTracks &&
     scope.runsLocalWorker &&
-    // @video / @audio browse the whole local library even with no query (like the
-    // album/artist facets), so "show me my videos" works on an empty box.
-    (deferredSearchText.length > 0 ||
+    (defaultRecentTracksRequested ||
+      // @video / @audio browse the whole local library even with no query (like the
+      // album/artist facets), so "show me my videos" works on an empty box.
+      deferredSearchText.length > 0 ||
       filter?.kind === "album" ||
       filter?.kind === "artist" ||
       scope.mediaKind != null);
@@ -287,8 +290,8 @@ export function GlobalTrackSearch({
     }
     let cancelled = false;
     void searchGlobalLocalLibrary({
-      includeAlbums: showAlbums,
-      includeArtists: showArtists,
+      includeAlbums: showAlbums && !defaultRecentTracksRequested,
+      includeArtists: showArtists && !defaultRecentTracksRequested,
       includeTracks: showTrackResults,
       query: localWorkerQuery,
       resultLimit: Math.max(MAX_SONG_RESULTS, MAX_ENTITY_RESULTS),
@@ -306,6 +309,7 @@ export function GlobalTrackSearch({
     showArtists,
     showTrackResults,
     scope.mediaKind,
+    defaultRecentTracksRequested,
   ]);
 
   const localTrackIdsKey = localResults.trackIds.join("|");

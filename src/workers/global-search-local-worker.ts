@@ -31,8 +31,15 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const startedAt = performance.now();
   try {
     await dictionariesReady;
-    const [tracks, memories] = await Promise.all([db.tracks.toArray(), db.memories.toArray()]);
-    const results = buildGlobalSearchLocalResults(tracks, memories, msg.input);
+    const [tracks, memories, trackPlaybackStats] = await Promise.all([
+      db.tracks.toArray(),
+      db.memories.toArray(),
+      db.trackPlaybackStats.toArray(),
+    ]);
+    const results = buildGlobalSearchLocalResults(tracks, memories, {
+      ...msg.input,
+      trackPlaybackStats,
+    });
     ctx.postMessage({
       durationMs: performance.now() - startedAt,
       reqId: msg.reqId,

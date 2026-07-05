@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 空查询最近歌曲：Ctrl+F 打开即显示最近播放/更新的 ready tracks | Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 空查询最近歌曲：Ctrl+F 打开即显示最近播放/更新的 ready tracks | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 搜索结果携带分数：tracks / artists / albums / sets 统一可排序 | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 最佳匹配混排区：让高置信歌手/专辑不被固定分组埋住 | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -338,20 +338,20 @@ Tie breakers:
 
 **Tasks:**
 
-- [ ] Change `localWorkerRequested` in `global-track-search.tsx` so the default empty unfiltered state requests local tracks.
-- [ ] Update `global-search-local-worker.ts` and inline fallback to load `trackPlaybackStats` with `tracks` / `memories`.
-- [ ] In `buildGlobalSearchLocalResults`, when `query === ""`, sort ready tracks by `(lastPlayedAt ?? updatedAt ?? createdAt)` desc instead of `createdAt` desc.
-- [ ] Fold multiple `TrackPlaybackStats` rows per track by taking max `lastPlayedAt`.
-- [ ] Keep `@video` / `@audio` empty browse behavior working with the same recent-activity ordering.
-- [ ] Add worker test coverage for empty query ordering by `lastPlayedAt`, then `updatedAt`, with legacy fallback to `createdAt`.
+- [x] Change `localWorkerRequested` in `global-track-search.tsx` so the default empty unfiltered state requests local tracks.
+- [x] Update `global-search-local-worker.ts` and inline fallback to load `trackPlaybackStats` with `tracks` / `memories`.
+- [x] In `buildGlobalSearchLocalResults`, when `query === ""`, sort ready tracks by `(lastPlayedAt ?? updatedAt ?? createdAt)` desc instead of `createdAt` desc.
+- [x] Fold multiple `TrackPlaybackStats` rows per track by taking max `lastPlayedAt`.
+- [x] Keep `@video` / `@audio` empty browse behavior working with the same recent-activity ordering.
+- [x] Add worker test coverage for empty query ordering by `lastPlayedAt`, then `updatedAt`, with legacy fallback to `createdAt`.
 
 ### Phase 1 Checklist
 
-- [ ] Ctrl+F open on a populated library shows up to `MAX_SONG_RESULTS` ready songs.
-- [ ] Recently played tracks appear before merely edited tracks.
-- [ ] Most recently edited/tagged/memory-updated never-played track appears before older created never-played tracks.
-- [ ] Legacy tracks without `lastPlayedAt` / `updatedAt` still appear correctly via `createdAt`.
-- [ ] Enter plays selected recent song; Shift+Enter queues next.
+- [x] Ctrl+F open on a populated library shows up to `MAX_SONG_RESULTS` ready songs.
+- [x] Recently played tracks appear before merely edited tracks.
+- [x] Most recently edited/tagged/memory-updated never-played track appears before older created never-played tracks.
+- [x] Legacy tracks without `lastPlayedAt` / `updatedAt` still appear correctly via `createdAt`.
+- [x] Enter plays selected recent song; Shift+Enter queues next.
 
 ### Phase 2: Scored Local Results
 
@@ -447,3 +447,4 @@ Tie breakers:
 |------|--------|---------|
 | 2026-07-05 | Codex | Initial draft: relevance mixed ranking + empty-query recent songs |
 | 2026-07-05 | Codex | Resolved open questions; changed empty query ordering to prioritize `lastPlayedAt` |
+| 2026-07-05 | Codex | Completed Phase 1: empty Ctrl+F now requests recent activity songs |

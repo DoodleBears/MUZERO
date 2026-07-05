@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Memory, Track } from "@/db/types";
+import type { Memory, Track, TrackPlaybackStats } from "@/db/types";
 import { buildGlobalSearchLocalResults } from "./global-search-local-core";
 
 describe("buildGlobalSearchLocalResults", () => {
@@ -92,6 +92,36 @@ describe("buildGlobalSearchLocalResults", () => {
     // Newest-first within the video set: createdAt 15,14,13,12 → indices 5,4,3,2.
     expect(results.trackIds).toEqual(["trk_video_5", "trk_video_4", "trk_video_3", "trk_video_2"]);
   });
+
+  it("orders empty-query tracks by lastPlayedAt, then updatedAt, then createdAt", () => {
+    const tracks = [
+      makeTrack("trk_created_new", "Created New", 300),
+      makeTrack("trk_updated", "Updated", 100, { updatedAt: 400 }),
+      makeTrack("trk_played_old", "Played Old", 50),
+      makeTrack("trk_played_new", "Played New", 10, { updatedAt: 20 }),
+    ];
+    const stats: TrackPlaybackStats[] = [
+      makeStats("trk_played_old", "dvc_a", 500),
+      makeStats("trk_played_new", "dvc_a", 450),
+      makeStats("trk_played_new", "dvc_b", 700),
+    ];
+
+    const results = buildGlobalSearchLocalResults(tracks, [], {
+      includeAlbums: false,
+      includeArtists: false,
+      includeTracks: true,
+      query: "",
+      resultLimit: 8,
+      trackPlaybackStats: stats,
+    });
+
+    expect(results.trackIds).toEqual([
+      "trk_played_new",
+      "trk_played_old",
+      "trk_updated",
+      "trk_created_new",
+    ]);
+  });
 });
 
 function makeTrack(
@@ -103,6 +133,7 @@ function makeTrack(
     artists?: string[];
     coverBlobId?: string;
     kind?: Track["kind"];
+    updatedAt?: number;
   } = {},
 ): Track {
   return {
@@ -126,5 +157,22 @@ function makeTrack(
     status: "ready",
     tags: [],
     title,
+    updatedAt: metadata.updatedAt,
+  };
+}
+
+function makeStats(
+  trackId: string,
+  devicePublicId: string,
+  lastPlayedAt: number,
+): TrackPlaybackStats {
+  return {
+    devicePublicId,
+    id: `${devicePublicId}:${trackId}`,
+    lastPlayedAt,
+    listenedSec: 60,
+    playCount: 1,
+    trackId,
+    updatedAt: lastPlayedAt,
   };
 }
