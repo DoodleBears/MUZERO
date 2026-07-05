@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DownloadsPanel } from "@/components/downloads/downloads-panel";
 import { PlaylistSyncControls } from "@/components/downloads/playlist-sync-controls";
@@ -17,11 +17,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { saveSettings } from "@/db/repositories";
-import type { StreamSourceId } from "@/db/types";
+import type { DjSession, StreamSourceId } from "@/db/types";
 import { useSessions, useSettings } from "@/hooks/use-app-data";
+import { useOnlinePlaylistCatalog } from "@/hooks/use-online-playlist-catalog";
 import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { useNavStore } from "@/stores/nav-store";
-import { notify } from "@/stores/notification-store";
 import { DEFAULT_VIDEO_QUALITY } from "@/streamsrc/download-action";
 import {
   cookieStringHasAuth,
@@ -29,10 +29,11 @@ import {
   streamSourcesAfterLogin,
   streamSourcesAfterLogout,
 } from "@/streamsrc/login";
-import { clearOnlinePlaylistCatalogSource } from "@/streamsrc/playlist-catalog";
+import {
+  clearOnlinePlaylistCatalogSource,
+  filterOnlinePlaylists,
+} from "@/streamsrc/playlist-catalog";
 import type { StreamPlaylist } from "@/streamsrc/provider";
-import { createStreamSource } from "@/streamsrc/registry";
-import { createStreamHttp } from "@/streamsrc/stream-http";
 
 /** Implemented sources + their quality options (brand names are not i18n'd). */
 const SOURCES: { id: StreamSourceId; label: string; qualities: string[] }[] = [
@@ -282,35 +283,22 @@ export function StreamSourcesSettings() {
  */
 function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
   const { t } = useTranslation();
-  const settings = useSettings();
   const sessions = useSessions();
   const openOnlinePlaylist = useNavStore((s) => s.openOnlinePlaylist);
-  const [playlists, setPlaylists] = useState<StreamPlaylist[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [importTarget, setImportTarget] = useState<StreamPlaylist | null>(null);
-
-  async function load() {
-    setLoading(true);
-    try {
-      const source = createStreamSource(sourceId, {
-        http: createStreamHttp(),
-        now: () => Date.now(),
-        getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
-      });
-      setPlaylists((await source?.getUserPlaylists?.()) ?? []);
-    } catch {
-      setPlaylists([]);
-      notify.error(t("streamSources.playlistsError"));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const catalog = useOnlinePlaylistCatalog(false);
+  const sourceCatalog = catalog.catalog?.[sourceId];
+  const playlists = useMemo(
+    () => catalog.playlists.filter((playlist) => playlist.source === sourceId),
+    [catalog.playlists, sourceId],
+  );
+  const loading = catalog.syncingSources.has(sourceId);
 
   const dialog = (
     <PlaylistImportDialog playlist={importTarget} onClose={() => setImportTarget(null)} />
   );
 
-  if (playlists === null) {
+  if (!sourceCatalog) {
     return (
       <>
         <Button
@@ -318,7 +306,7 @@ function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
           variant="outline"
           size="sm"
           disabled={loading}
-          onClick={() => void load()}
+          onClick={() => void catalog.refreshSource(sourceId)}
         >
           {loading ? t("streamSources.loadingPlaylists") : t("streamSources.syncPlaylists")}
         </Button>
@@ -327,47 +315,125 @@ function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
     );
   }
   if (playlists.length === 0) {
-    return <p className="text-muted-foreground text-xs">{t("streamSources.noPlaylists")}</p>;
+    return (
+      <div className="space-y-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={loading}
+          onClick={() => void catalog.refreshSource(sourceId)}
+        >
+          {loading ? t("streamSources.loadingPlaylists") : t("streamSources.syncPlaylists")}
+        </Button>
+        <p className="text-muted-foreground text-xs">{t("streamSources.noPlaylists")}</p>
+      </div>
+    );
   }
   return (
     <>
-      <div className="space-y-1 border-border border-t pt-2">
-        {playlists.map((pl) => {
-          const matched = sessions.find(
-            (s) => s.streamPlaylistRef?.source === pl.source && s.streamPlaylistRef?.id === pl.id,
-          );
-          return (
-            <div
-              key={pl.id}
-              className="space-y-1.5 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
-            >
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => openOnlinePlaylist(pl)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="block truncate font-medium">{pl.name}</span>
-                  <span className="block truncate text-muted-foreground text-xs">
-                    {t("streamSources.trackCount", { count: pl.trackCount })}
-                  </span>
-                </button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setImportTarget(pl)}>
-                  {t("streamSources.import")}
-                </Button>
-              </div>
-              <PlaylistSyncControls
-                source={pl.source}
-                playlistId={pl.id}
-                name={pl.name}
-                coverUrl={pl.coverUrl}
-                matched={matched}
-              />
-            </div>
-          );
-        })}
-      </div>
+      <SourcePlaylistList
+        playlists={playlists}
+        sessions={sessions}
+        onOpen={openOnlinePlaylist}
+        onImport={setImportTarget}
+        onRefresh={() => void catalog.refreshSource(sourceId)}
+        loading={loading}
+        syncedAt={sourceCatalog.syncedAt}
+      />
       {dialog}
     </>
+  );
+}
+
+export function SourcePlaylistList({
+  playlists,
+  sessions,
+  onOpen,
+  onImport,
+  onRefresh,
+  loading = false,
+  syncedAt,
+}: {
+  playlists: StreamPlaylist[];
+  sessions: DjSession[];
+  onOpen: (playlist: StreamPlaylist) => void;
+  onImport: (playlist: StreamPlaylist) => void;
+  onRefresh?: () => void;
+  loading?: boolean;
+  syncedAt?: number;
+}) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const visible = useMemo(() => filterOnlinePlaylists(playlists, query), [playlists, query]);
+
+  return (
+    <div className="space-y-2 border-border border-t pt-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t("streamSources.filterPlaylistsPlaceholder")}
+          aria-label={t("streamSources.filterPlaylistsPlaceholder")}
+          className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        {onRefresh ? (
+          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={onRefresh}>
+            {loading ? t("streamSources.loadingPlaylists") : t("streamSources.refreshPlaylists")}
+          </Button>
+        ) : null}
+      </div>
+      {syncedAt ? (
+        <p className="text-muted-foreground text-xs">
+          {t("streamSources.lastSynced", { time: new Date(syncedAt).toLocaleString() })}
+        </p>
+      ) : null}
+      {visible.length === 0 ? (
+        <p className="py-4 text-center text-muted-foreground text-xs">
+          {t("streamSources.filterPlaylistsNoMatches")}
+        </p>
+      ) : (
+        <div
+          className="thin-transparent-scrollbar max-h-[min(42vh,420px)] space-y-1 overflow-y-auto pr-1"
+          data-stream-playlist-scroll
+        >
+          {visible.map((pl) => {
+            const matched = sessions.find(
+              (s) => s.streamPlaylistRef?.source === pl.source && s.streamPlaylistRef?.id === pl.id,
+            );
+            return (
+              <div
+                key={pl.id}
+                className="space-y-1.5 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
+              >
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpen(pl)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="block truncate font-medium">{pl.name}</span>
+                    <span className="block truncate text-muted-foreground text-xs">
+                      {t("streamSources.trackCount", { count: pl.trackCount })}
+                    </span>
+                  </button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => onImport(pl)}>
+                    {t("streamSources.import")}
+                  </Button>
+                </div>
+                <PlaylistSyncControls
+                  source={pl.source}
+                  playlistId={pl.id}
+                  name={pl.name}
+                  coverUrl={pl.coverUrl}
+                  matched={matched}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

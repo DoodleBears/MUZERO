@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 本地在线歌单目录缓存 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library 展示同步歌单并自动刷新 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Settings 歌单列表限高 + filter | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Settings 歌单列表限高 + filter | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | i18n / 测试 / 视觉收尾 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -388,21 +388,31 @@ Scrollbar requirement:
 **Goal:** Settings 在线音源不再撑出超长页面，并能搜索歌单。
 
 **Tasks:**
-- [ ] Refactor `SourcePlaylists` to read/write the shared catalog.
-- [ ] Add filter input with localized placeholder.
-- [ ] Wrap rows in bounded scroll container.
-- [ ] Add thin transparent scrollbar style.
-- [ ] Preserve open/import/sync row actions.
-- [ ] Show last synced time + refresh action.
+- [x] Refactor `SourcePlaylists` to read/write the shared catalog.
+- [x] Add filter input with localized placeholder.
+- [x] Wrap rows in bounded scroll container.
+- [x] Add thin transparent scrollbar style.
+- [x] Preserve open/import/sync row actions.
+- [x] Show last synced time + refresh action.
 
 ### Phase 3 Checklist
 
-- [ ] 100+ playlists stay inside bounded container.
-- [ ] Filter matches playlist name and source aliases.
-- [ ] No match state is visible.
-- [ ] Scrollbar is thin and has no filled background/gutter.
-- [ ] Keyboard focus order remains sensible: refresh -> filter -> rows/actions.
-- [ ] Existing `PlaylistSyncControls` still works per row.
+- [x] 100+ playlists stay inside bounded container.
+- [x] Filter matches playlist name and source aliases.
+- [x] No match state is visible.
+- [x] Scrollbar is thin and has no filled background/gutter.
+- [x] Keyboard focus order remains sensible: refresh -> filter -> rows/actions.
+- [x] Existing `PlaylistSyncControls` still works per row.
+
+**Phase 3 Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\settings\stream-sources-settings.test.tsx src\streamsrc\playlist-catalog.test.ts`
+- `node_modules\.bin\biome.CMD check src\components\settings\stream-sources-settings.tsx src\components\settings\stream-sources-settings.test.tsx src\i18n\locales\en\common.json src\i18n\locales\zh\common.json src\i18n\locales\ja\common.json src\i18n\locales\ko\common.json`
+- `node_modules\.bin\tsc.CMD --noEmit --pretty false`
+
+**Phase 3 Implementation Notes:**
+- Refactored Settings `SourcePlaylists` to read the persisted online playlist catalog, show last synced time, and refresh the current source through `useOnlinePlaylistCatalog`.
+- Added exported `SourcePlaylistList` with a search input, no-match state, bounded `max-h-[min(42vh,420px)]` scroll region, and existing `thin-transparent-scrollbar` utility.
+- Preserved row-level open, import, and `PlaylistSyncControls` actions.
 
 ### Phase 4: i18n / 测试 / 视觉收尾
 
@@ -501,3 +511,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Resolved Open Questions per product feedback: online playlists live in sets wall; auto-sync stale window is 15 minutes; logout clears cached catalog; v1 follows existing sets wall view; large catalogs reuse existing gallery/VirtualCardGrid architecture. Added source identity chips and platform filter chips for Bilibili / 网易云 / QQ 音乐. |
 | 2026-07-05 | Codex | Completed Phase 1: metadata-only online playlist catalog types, catalog helper module, TDD coverage for merge/dedupe/stale/filter/error retention, and logout catalog clearing. |
 | 2026-07-05 | Codex | Completed Phase 2: Library sets wall now renders persisted online playlists, source identity/filter chips, 15-minute metadata auto-sync, manual refresh, direct online detail open, import dialog reuse, and VirtualCardGrid-backed large catalog rendering. |
+| 2026-07-05 | Codex | Completed Phase 3: Settings online-source playlists now read the shared catalog, refresh per source, filter by text/source aliases, and render in a bounded thin-transparent-scrollbar container while preserving open/import/sync controls. |
