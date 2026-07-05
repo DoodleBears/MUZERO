@@ -102,6 +102,23 @@ const release: ChangelogRelease = {
       },
     },
     {
+      area: "library",
+      category: "feature",
+      platform: "desktop",
+      title: {
+        en: "Online playlists now live in the Library",
+        zh: "在线歌单现在直接进入资料库",
+        ja: "オンラインプレイリストがライブラリに登場",
+        ko: "온라인 플레이리스트가 라이브러리에 들어왔습니다",
+      },
+      description: {
+        en: "Logged-in streaming sources can sync their playlist catalog into the Library wall, with persisted source filters for local-only, online-only, or a specific platform. Online playlists sit under local sets in collapsible sections, use the same card grid style, and share the outer Library scroller so large catalogs stay smooth. Opening a 6,000-track playlist caches the track list until you explicitly refresh, and playing one song keeps the full online playlist context without importing the whole thing into your local library.",
+        zh: "已登录的在线音源现在可以把歌单目录同步到资料库墙，并持久化来源过滤：只看本地、只看在线，或只看某个平台。在线歌单会位于本地歌单下方的可折叠分区里，使用同一套卡片网格样式，并共用资料库外层滚动容器，大歌单目录滚动也更稳。打开 6000 首级别的在线歌单后，曲目列表会缓存到你主动刷新为止；播放某一首时仍保留整张在线歌单上下文，但不会把整张歌单导入本地库。",
+        ja: "ログイン済みのストリーミングソースは、プレイリストカタログをライブラリウォールへ同期できるようになりました。ローカルのみ、オンラインのみ、特定プラットフォームだけ、といったソースフィルターも保持されます。オンラインプレイリストはローカルセットの下に折りたたみ可能なセクションとして並び、同じカードグリッドの見た目で、ライブラリ外側のスクロールを共有するため大きなカタログでも滑らかです。6,000 曲規模のプレイリストを開いても、曲目一覧は明示的に更新するまでキャッシュされ、1 曲を再生しても全体のオンライン文脈は保ちつつローカルライブラリへ丸ごと取り込みません。",
+        ko: "로그인한 스트리밍 소스의 플레이리스트 카탈로그를 이제 라이브러리 월에 동기화할 수 있으며, 로컬만 보기, 온라인만 보기, 특정 플랫폼만 보기 같은 소스 필터도 유지됩니다. 온라인 플레이리스트는 로컬 세트 아래의 접을 수 있는 섹션에 놓이고 같은 카드 그리드 스타일을 쓰며, 라이브러리의 바깥 스크롤러를 공유해 큰 카탈로그도 부드럽게 움직입니다. 6,000곡 규모의 플레이리스트를 열어도 트랙 목록은 명시적으로 새로고침하기 전까지 캐시되고, 한 곡을 재생해도 전체 온라인 플레이리스트 문맥은 유지하되 로컬 라이브러리로 통째로 가져오지는 않습니다.",
+      },
+    },
+    {
       area: "dj",
       category: "improvement",
       platform: "all",
