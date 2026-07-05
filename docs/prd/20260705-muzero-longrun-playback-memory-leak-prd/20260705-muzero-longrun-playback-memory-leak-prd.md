@@ -413,6 +413,31 @@
 | LR-4 | 缓存上限 1GiB 时 RSS 平台期 | **Moot**——playbackCache 为空，上限不是杠杆（Q-4） | — |
 | 回归 | 直播点歌注入（append-queue ×3，含重复 query） | 全部 `completed` 且命中正确曲目；L-2 清扫不改变路由/去重语义 | ✅ |
 
+### 10.1 Local Electron Dev Harness Loop（2026-07-05 用户截图后补测）
+
+> 目的：复查用户在 Windows 任务管理器中观察到的「每切一首歌 Electron 内存线性增长」是否是永久泄漏，还是 Chromium 媒体/解码/Blob 工作集的惰性释放。环境为**当前本地 Electron dev**（`MUZERO_PERF_CONTROL=1`，控制端点 `.logs/perf-control.json`，未开启 CDP remote-debug，因此没有强制 renderer GC）；真实库 `queueLength=5734`，当前 set `ses_21d1b74a-0db3-40ed-8ace-92d5eea36831`，`displayMode="cover"`。
+
+| Step | Main/Browser WS | Main Node heap | Renderer/Tab WS | GPU WS | 结论 |
+|------|-----------------|----------------|-----------------|--------|------|
+| 初始 `/processes` | 155.3MB | ~7MB | 545.2MB | 460.5MB | 本轮 dev 起点最大不是 main，而是 renderer + GPU；任务管理器必须按进程类型归因 |
+| `/memory/diag` 初始 | — | JS heap 104MB | — | — | `playbackCache=0`；`mediaBlobs` 已落盘：electron-file 2.65GB、IndexedDB 55.9MB、OPFS 17.2MB；有界缓存很小 |
+| 切歌 loop（9 次，约 4s dwell） | 176.2 → 229.9MB（波动） | 6-7MB | **549.9 → 1430.3MB** | 460.5 → 552.0MB | “看起来线性增长”的主体在 renderer/GPU 媒体工作集；main JS 堆没有跟随增长 |
+| 暂停 + 2.5s | 188.5MB | 7.6MB | **839.0MB** | 447.0MB | 峰值已明显回落，说明不是每首永久保留 |
+| 暂停后再等一轮 | 190.9MB | 7.1MB | **582.4MB** | 450.3MB | renderer 基本回到接近初始的 545-588MB 区间；短跑未复现永久线性泄漏 |
+
+**本轮结论：**
+
+1. 用户截图里的“每切歌涨”在本地 dev 可复现为**短时 renderer/GPU 工作集上涨**，但暂停/等待后会回落；这更像 Chromium 媒体解码缓存、Blob 句柄、文件读入缓冲的惰性释放，而不是 MUZERO JS 层永久泄漏。
+2. 主播放 `MediaEngine.loadBlob()` 仍符合 revoke-before-replace：切歌前会 `URL.revokeObjectURL(this.objectUrl)`；本轮 `playbackCache=0` 也再次证明“播放缓存 2GiB 上限”不是当前增长杠杆。
+3. 真正需要继续治理的是**用户感知层面的高水位**：即使最终可回落，连续切歌时 renderer 峰值会从 ~550MB 冲到 ~1.4GB；长时间不断切歌/下载时，如果 V8/Chromium 不及时 GC，任务管理器会呈现“线性爬升”的危险观感。
+4. 第二轮脚本在某个 `playIndex` 上长时间未返回，说明测试样本混入了在线/未缓存下载路径。后续验收必须把场景拆成：A. 已本地缓存/引用文件切歌；B. 在线 download-before-play；C. 视频 MV；否则会把网络下载暂存、媒体解码和播放器释放问题混在一起。
+
+**后续要求（追加到 Phase 2 的验收口径）：**
+
+- 增加一个 harness 场景只挑选 `mediaBlobs` 已落盘或本地引用文件的 ready tracks，避免在线下载卡住 `playIndex`，用于测“纯切歌释放”。
+- Profile/prod build 下开启 CDP remote-debug，跑同样 loop 后执行 renderer `HeapProfiler.collectGarbage`，记录 renderer/GPU/main 回落幅度，给“惰性释放”一个可重复的 before/after 数字。
+- 若 prod 下 pause+20s 仍不能回到平台期，再进入代码修复：优先检查媒体元素 detach/load 顺序、object URL 句柄、封面/video decode surface、可视化 WebGL texture 生命周期。
+
 ---
 
 ## 11. Document Change Log
@@ -423,3 +448,4 @@
 | 2026-07-05 | Claude Code | 第二轮深挖（3 路 agent 二次交叉 + 人工复核）：① 排除「点歌入队囤 Blob」「逐帧累积」两个 GB 级假说（下载在播放时才触发、rAF 站点全部干净）；② 新登记 L-7（`items` 请求历史数组无界）、L-8（`lastByRater` 限流 Map 只增不删）、M-1（下载未接 abort signal，瞬态积压）——均 MB 级；③ H-1 机制细化：IDB 内联回退有**两处**站点（playback-cache.ts:78 + media-blob-storage.ts:103,138，OPFS 失败即 GB 级堆内驻留）、同曲双重缓存（playbackCache + mediaBlobs）、每次写入全表 toArray 物化；④ 关键校准：Blob 字节驻留 Electron **main** 进程侧——2.86GB 究竟在哪个进程（新 Q-6）成为 Phase 0 第一步（`app.getAppMetrics()`）。本分支新增功能（命令路由/评分/歌词记忆）复核健康，不贡献 GB 级。 |
 | 2026-07-05 | Claude Code | **第四轮：E2E 实测归因 + Phase 1 落地**。① Phase 0 完成：受控 Blob 归属实验（`perf-blob-pinning-probe.mjs`，100×8MB）坐实机制 ③——主进程精确 +801MB、渲染端 GC 后**全额回落** ⇒ 2.8GB = 惰性 GC 钉字节，**非泄漏**（Q-1/Q-7 答）；`playbackCache` 实测为空、流媒体落盘走 `mediaBlobs` electron-file（Q-2 证伪 IDB 内联回退、Q-4 moot——**Phase 2 原「降缓存上限」方案作废**，改「确定性释放内存背书 Blob 句柄」+「mediaBlobs/autoCacheStreamed 磁盘策略」）。② Phase 1 完成：L-1~L-6 有界化（新 `src/lib/bounded-cache.ts` LRU/BoundedSet + 各站点接入 + 穷举单测）、L-2 `pruneExpiredTimestamps` 窗口清扫、M-1 abort signal 接线；**L-7 复核 main 已有 50 条上限（初稿误读）、L-8 所指文件不在 main（N/A）**。③ 观测设施：`GET /memory/diag`、`/processes.mainProcess`、`scripts/perf-longrun-memory.mjs`。④ 验证：全量 vitest 3693 通过；直播点歌注入回归 3/3 completed；14 切歌主进程 +17.6MB 收敛、有界缓存全部 ≤ cap（§10 回填）。 |
 | 2026-07-05 | Claude Code | **第三轮：用户任务管理器截图坐实 Q-6——2,859.9MB 是主进程，渲染进程仅 62.4MB**。①§1.1 事实 1 修正（初稿「占用在渲染进程」判断被推翻）；② H-1 机制精确化：渲染端 Blob 句柄惰性 GC + 字节钉在主进程 blob storage（BlobMemoryController 内存层 ~2GB 上限与 2.86GB 画像吻合），渲染端 L-2~L-8/F-11 确认非主导；③ 主进程（electron/）全量静态复核：fetch-proxy 流式无缓冲、diagnostics 环 100、intake 有界、ipc 均健康——主进程 JS 侧无 GB 级候选，指向 Chromium 存储层；新登记 M-2（pendingMediaStorageWrites fd 边缘泄漏，Low）；④ Phase 0 重定向：主进程 `process.memoryUsage()`/`v8.getHeapStatistics()` + **渲染端手动 GC → 看主进程 RSS 回落**的廉价定性实验（新 Q-7）；渲染端 heap 三连拍降级为辅助。 |
+| 2026-07-05 | Codex | **用户截图后本地 Electron dev harness 复测（§10.1）**：通过 dev control endpoint 跑真实 5734 首队列短切歌。9 次切歌中 renderer/Tab 549.9→1430.3MB、GPU 460.5→552.0MB，main/Browser 176.2→229.9MB 且 Node heap 始终 6-7MB；暂停后 renderer 先回到 839MB，再回到 582.4MB，接近初始 545-588MB。结论：短跑复现的是 Chromium 媒体/Blob/解码工作集高水位与惰性释放，不是 MUZERO JS 永久线性泄漏；但用户感知的任务管理器高水位仍需 Phase 2 用 prod+CDP 强制 GC 和“已缓存曲目 vs 在线下载 vs 视频 MV”分场景验收。 |
