@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 本地在线歌单目录缓存 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 本地在线歌单目录缓存 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library 展示同步歌单并自动刷新 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings 歌单列表限高 + filter | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | i18n / 测试 / 视觉收尾 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -325,19 +325,27 @@ Scrollbar requirement:
 **Goal:** 同步账号歌单 metadata 并持久化到 settings，可供 Library/Settings 共读。
 
 **Tasks:**
-- [ ] Add optional `AppSettings.onlinePlaylistCatalog` type.
-- [ ] Add catalog merge/clear helpers in repository or a dedicated `streamsrc/playlist-catalog.ts`.
-- [ ] Implement source sync using `createStreamSource(id).getUserPlaylists`.
-- [ ] Clear source catalog on logout.
-- [ ] Add pure filter/dedupe helpers.
+- [x] Add optional `AppSettings.onlinePlaylistCatalog` type.
+- [x] Add catalog merge/clear helpers in repository or a dedicated `streamsrc/playlist-catalog.ts`.
+- [x] Implement source sync using `createStreamSource(id).getUserPlaylists`.
+- [x] Clear source catalog on logout.
+- [x] Add pure filter/dedupe helpers.
 
 ### Phase 1 Checklist
 
-- [ ] No Dexie version bump; legacy settings work.
-- [ ] Dedupes duplicate playlist ids.
-- [ ] Partial source failure keeps other source catalogs and last successful data.
-- [ ] Logout clears or hides the source's cached playlist names.
-- [ ] Tests cover dedupe, merge, stale retention, logout clear.
+- [x] No Dexie version bump; legacy settings work.
+- [x] Dedupes duplicate playlist ids.
+- [x] Partial source failure keeps other source catalogs and last successful data.
+- [x] Logout clears or hides the source's cached playlist names.
+- [x] Tests cover dedupe, merge, stale retention, logout clear.
+
+**Phase 1 Verification:**
+- `node_modules\.bin\vitest.CMD run src\streamsrc\playlist-catalog.test.ts`
+
+**Phase 1 Implementation Notes:**
+- Added metadata-only `AppSettings.onlinePlaylistCatalog` plus `OnlinePlaylistCatalogEntry` / `OnlinePlaylistCatalogSource` in [`types.ts`](../../../src/db/types.ts).
+- Added [`playlist-catalog.ts`](../../../src/streamsrc/playlist-catalog.ts) for dedupe, stale checks, source-alias filtering, sync merge, error retention, and source clear.
+- Wired Settings logout to clear the logged-out source catalog.
 
 ### Phase 2: Library 展示同步歌单并自动刷新
 
@@ -481,3 +489,4 @@ Scrollbar requirement:
 |------|--------|---------|
 | 2026-07-05 | Codex | Initial draft from product request: Library displays persisted synced online playlists with auto/manual refresh; Settings source playlist list becomes bounded and filterable with thin transparent scrollbar. |
 | 2026-07-05 | Codex | Resolved Open Questions per product feedback: online playlists live in sets wall; auto-sync stale window is 15 minutes; logout clears cached catalog; v1 follows existing sets wall view; large catalogs reuse existing gallery/VirtualCardGrid architecture. Added source identity chips and platform filter chips for Bilibili / 网易云 / QQ 音乐. |
+| 2026-07-05 | Codex | Completed Phase 1: metadata-only online playlist catalog types, catalog helper module, TDD coverage for merge/dedupe/stale/filter/error retention, and logout catalog clearing. |

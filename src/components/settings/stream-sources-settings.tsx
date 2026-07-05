@@ -29,6 +29,7 @@ import {
   streamSourcesAfterLogin,
   streamSourcesAfterLogout,
 } from "@/streamsrc/login";
+import { clearOnlinePlaylistCatalogSource } from "@/streamsrc/playlist-catalog";
 import type { StreamPlaylist } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
@@ -113,7 +114,13 @@ export function StreamSourcesSettings() {
   }
 
   async function logout(source: StreamSourceId) {
-    await saveSettings({ streamSources: streamSourcesAfterLogout(settings.streamSources, source) });
+    await saveSettings({
+      streamSources: streamSourcesAfterLogout(settings.streamSources, source),
+      onlinePlaylistCatalog: clearOnlinePlaylistCatalogSource(
+        settings.onlinePlaylistCatalog,
+        source,
+      ),
+    });
   }
 
   async function setQuality(source: StreamSourceId, quality: string) {

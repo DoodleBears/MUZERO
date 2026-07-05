@@ -60,6 +60,21 @@ export interface StreamSourceConfig {
   lastAuthAt?: number;
 }
 
+/** Metadata-only directory of a user's online playlists, persisted locally. */
+export interface OnlinePlaylistCatalogEntry {
+  id: string;
+  name: string;
+  coverUrl?: string;
+  trackCount: number;
+  source: StreamSourceId;
+}
+
+export interface OnlinePlaylistCatalogSource {
+  playlists: OnlinePlaylistCatalogEntry[];
+  syncedAt: number;
+  error?: string;
+}
+
 /** Snapshot of an external track's display metadata, so the library renders offline. */
 export interface StreamSourceMeta {
   artist?: string;
@@ -834,6 +849,8 @@ export interface AppSettings {
    * logs in per source in Settings. Cookies/tokens stay on-device (rule 2).
    */
   streamSources?: Partial<Record<StreamSourceId, StreamSourceConfig>>;
+  /** Metadata-only cache of logged-in source playlists, for Library browsing. */
+  onlinePlaylistCatalog?: Partial<Record<StreamSourceId, OnlinePlaylistCatalogSource>>;
   /** The set that collects songs played from an online source via global search. */
   streamOnlineSetId?: string;
   /** The set that collects videos downloaded into the library (origin streamed + blobId). */
