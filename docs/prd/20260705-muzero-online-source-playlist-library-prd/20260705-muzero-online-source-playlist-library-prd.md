@@ -538,6 +538,27 @@ Scrollbar requirement:
 
 ---
 
+## Follow-up: Played Online Track Visibility
+
+**Date:** 2026-07-05  
+**Status:** Completed
+
+**Problem:** 在线歌单详情为了保持整张歌单的播放上下文，会把歌单曲目 metadata materialize 成 streamed Track rows。对于 6000+ 曲目的网易云歌单，如果这些 context-only rows 直接出现在 `listAllTracks` / 全局搜索里，用户点播一首就像把整张在线歌单导入了本地库。
+
+**Product Decision:** 在线歌单“听歌”不是“导入歌单”。点击在线歌单里的某一首时，播放队列仍保持整张在线歌单上下文；但 Library / 全局搜索只显示用户实际播放并进入 online cache set 的曲目。未播放的在线歌单曲目只是队列上下文，不作为本地库内容展示。
+
+**Implementation Notes:**
+- `playOnlinePlaylist` 保留完整 online-playlist queue context，但只把被点击的 track id 加入专用 online cache set membership。
+- 播放期继续走 streamed resolve -> download-before-play -> `cacheStreamedTrackBlob`，所以被点击播放的曲目会在播放后本地缓存媒体 blob。
+- 在线歌单点播不再对整张歌单批量缓存封面；仅缓存被点击曲目的封面。批量封面缓存仍留给显式导入 / 同步路径。
+- `listAllTracks` 和 `listGlobalSearchTracks` 过滤 streamed context-only rows：只有已属于某个 `DjSession.trackIds` membership 的 streamed tracks 才进入 Library / 搜索。
+
+**Verification:**
+- `node_modules\.bin\vitest.CMD run src\db\repositories.test.ts -t "listAllTracks library membership filtering|listGlobalSearchTracks"`
+- `node_modules\.bin\vitest.CMD run src\stores\player-store.test.ts -t "online playlist"`
+
+---
+
 ## 7. Out of Scope
 
 - Importing every synced playlist automatically as `DjSession`.
@@ -620,3 +641,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Adjusted all-source wall ordering so local playlists remain the primary middle section and online playlists render underneath them, with roving keyboard order matching the visible layout. |
 | 2026-07-05 | Codex | Added collapsible sets-wall sections for smart/local/online playlists and prevented local+online grid overlap by avoiding multiple ancestor-scroller virtual grids in the same wall. |
 | 2026-07-05 | Codex | Cached online playlist detail tracks with TanStack Query so reopening a large online playlist does not refetch unless the user explicitly refreshes; daily recommendations keep reroll/afresh behavior. |
+| 2026-07-05 | Codex | Completed played-online-track visibility follow-up: online playlist playback keeps full context but only the clicked/played track joins visible Library membership and playback media cache; context-only streamed rows are filtered from Library/global search. |

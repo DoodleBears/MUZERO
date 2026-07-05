@@ -1528,8 +1528,9 @@ export async function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> 
   noteDbRequery("listAllTracks");
   const startedAt = performance.now();
   const rows = await db.tracks.toArray();
-  notePerfWork("db.listAllTracks", performance.now() - startedAt, { rows: rows.length });
-  return rows;
+  const visible = await filterLibraryVisibleTracks(rows, db);
+  notePerfWork("db.listAllTracks", performance.now() - startedAt, { rows: visible.length });
+  return visible;
 }
 
 /**
@@ -1541,16 +1542,17 @@ export async function listGlobalSearchTracks(db: MuzeroDB = defaultDb): Promise<
   noteDbRequery("globalSearchTracks");
   const startedAt = performance.now();
   const rows = await db.tracks.toArray();
+  const visible = await filterLibraryVisibleTracks(rows, db);
   let strippedLyrics = 0;
   let searchRows: Track[] | undefined;
-  for (let index = 0; index < rows.length; index += 1) {
-    const track = rows[index];
+  for (let index = 0; index < visible.length; index += 1) {
+    const track = visible[index];
     if (!track) continue;
     if (!track.brief?.lyrics) {
       searchRows?.push(track);
       continue;
     }
-    searchRows ??= rows.slice(0, index);
+    searchRows ??= visible.slice(0, index);
     strippedLyrics += 1;
     searchRows.push({
       ...track,
@@ -1560,12 +1562,23 @@ export async function listGlobalSearchTracks(db: MuzeroDB = defaultDb): Promise<
       },
     });
   }
-  const out = searchRows ?? rows;
+  const out = searchRows ?? visible;
   notePerfWork("db.globalSearchTracks", performance.now() - startedAt, {
     rows: out.length,
     strippedLyrics,
   });
   return out;
+}
+
+async function filterLibraryVisibleTracks(rows: Track[], db: MuzeroDB): Promise<Track[]> {
+  const hasStreamedRows = rows.some((track) => track.origin === "streamed");
+  if (!hasStreamedRows) return rows;
+  const sessions = await db.sessions.toArray();
+  const memberIds = new Set<string>();
+  for (const session of sessions) {
+    for (const id of session.trackIds) memberIds.add(id);
+  }
+  return rows.filter((track) => track.origin !== "streamed" || memberIds.has(track.id));
 }
 
 /** Full playback-stats table (entity listening time projections) — see PRD F-4. */

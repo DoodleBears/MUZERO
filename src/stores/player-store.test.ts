@@ -94,6 +94,7 @@ afterEach(async () => {
   vi.doUnmock("@/lib/media-metadata");
   vi.doUnmock("@/lib/video-poster-frame");
   vi.doUnmock("@/lib/example-track");
+  vi.doUnmock("@/streamsrc/registry");
   vi.doUnmock("@/workers/cover-client");
   vi.unstubAllGlobals();
   openedDb?.close();
@@ -1960,6 +1961,60 @@ describe("player-store context-aware play (playTrackInContext)", () => {
       expect(s.activeSessionId).toBeNull();
     });
     await expect(repos.getPlayQueue()).resolves.toMatchObject({ contextSetId: undefined });
+  });
+
+  it("plays an online playlist context while only adding the clicked song to the visible online cache", async () => {
+    const resolve = vi.fn(async (externalId: string) => ({
+      kind: "ok" as const,
+      stream: {
+        mediaUrl: `https://media.example.com/${externalId}.mp3`,
+        mime: "audio/mpeg",
+      },
+    }));
+    vi.doMock("@/streamsrc/registry", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/streamsrc/registry")>("@/streamsrc/registry");
+      return {
+        ...actual,
+        createStreamSource: () => ({ resolve }),
+      };
+    });
+    const { repos, usePlayerStore } = await loadRuntime();
+    await repos.saveSettings({
+      streamSources: { netease: { enabled: true, cookie: "MUSIC_U=abc" } },
+    });
+    const playlist = { id: "pl_1", name: "My Playlist", source: "netease", trackCount: 3 } as const;
+    const hits = [
+      { source: "netease", externalId: "song_a", title: "A" },
+      { source: "netease", externalId: "song_b", title: "B" },
+      { source: "netease", externalId: "song_c", title: "C" },
+    ] as const;
+
+    usePlayerStore.getState().init();
+    await usePlayerStore.getState().playOnlinePlaylist(playlist, [...hits], 1);
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queueSource).toEqual({ kind: "online-playlist", playlist });
+      expect(s.queue.map((track) => track.title)).toEqual(["A", "B", "C"]);
+      expect(s.queue[s.currentIndex]?.title).toBe("B");
+      expect(s.activeSessionId).toBeNull();
+    });
+    expect(resolve).toHaveBeenCalledWith("song_b", expect.objectContaining({ quality: undefined }));
+
+    const settings = await repos.getSettings();
+    const onlineSetId = settings.streamOnlineSetId;
+    if (!onlineSetId) throw new Error("expected online cache set");
+    const onlineSet = await repos.getSession(onlineSetId);
+    const selectedTrack = usePlayerStore.getState().queue[1];
+    expect(onlineSet?.trackIds).toEqual([selectedTrack.id]);
+    await expect(repos.listAllTracks()).resolves.toEqual([
+      expect.objectContaining({ id: selectedTrack.id, title: "B" }),
+    ]);
+    await waitFor(async () => {
+      const cached = await repos.getTrack(selectedTrack.id);
+      expect(cached?.blobId).toEqual(expect.any(String));
+    });
   });
 
   // --- Phase 4a: materialized shuffle + linear stepping (Part B) ---------------

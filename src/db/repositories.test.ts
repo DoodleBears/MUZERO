@@ -70,6 +70,7 @@ import {
   updateMemoryNote,
   upsertImportFolder,
 } from "./repositories";
+import type { Track } from "./types";
 
 // jsdom never settles `<img>` loads, so the real cover decode path
 // (extractCoverPalette → getCroppedBlob / extractImagePalette) hangs forever.
@@ -969,6 +970,61 @@ describe("listGlobalSearchTracks", () => {
     expect(rows.find((track) => track.id === "trk_with_lyrics")?.brief?.lyrics).toBe("");
     expect((await getTrack("trk_with_lyrics", db))?.brief?.lyrics).toBe("line one\nline two");
     expect(rows.find((track) => track.id === "trk_upload")?.title).toBe("Upload");
+  });
+});
+
+describe("listAllTracks library membership filtering", () => {
+  it("hides context-only streamed rows until they are added to a set", async () => {
+    const s = await createSession({ name: "online-cache", seedPrompt: "", config: {} }, db);
+    const now = Date.now();
+    const visible: Track = {
+      id: "trk_visible_member",
+      sessionId: s.id,
+      title: "Visible",
+      kind: "audio",
+      origin: "uploaded",
+      provider: "upload",
+      status: "ready",
+      durationSec: 180,
+      createdAt: now,
+      updatedAt: now,
+      playCount: 0,
+      liked: false,
+      tags: [],
+    };
+    const contextOnly: Track = {
+      id: "trk_context_only",
+      sessionId: s.id,
+      title: "Context Only",
+      kind: "audio",
+      origin: "streamed",
+      provider: "netease",
+      status: "ready",
+      durationSec: 180,
+      createdAt: now,
+      updatedAt: now,
+      playCount: 0,
+      liked: false,
+      tags: [],
+      streamSourceId: "netease",
+      streamExternalId: "song_context_only",
+    };
+    await db.tracks.bulkAdd([visible, contextOnly]);
+    await prependTrackIds(s.id, [visible.id], db);
+
+    await expect(listAllTracks(db)).resolves.toEqual([expect.objectContaining({ id: visible.id })]);
+    await expect(listGlobalSearchTracks(db)).resolves.toEqual([
+      expect.objectContaining({ id: visible.id }),
+    ]);
+
+    await prependTrackIds(s.id, [contextOnly.id], db);
+
+    await expect(listAllTracks(db)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: visible.id }),
+        expect.objectContaining({ id: contextOnly.id }),
+      ]),
+    );
   });
 });
 

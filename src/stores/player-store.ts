@@ -1671,13 +1671,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // The shared online set is only these rows' provenance / offline-cache home.
     const setId = await ensureOnlineSet();
     const tracks = await materializeHitsToTracks(setId, hits);
-    // Cache covers in the background so the queue renders art offline (best-effort).
-    void cacheStreamPlaylistTrackCovers({ sessionId: setId, hits });
     const idx = clampIndex(tracks.length, startIndex);
     if (idx < 0) return;
+    const selected = tracks[idx];
+    // Only the user's clicked/played song joins the visible online cache set. The
+    // remaining materialized rows are queue context only and stay out of Library
+    // surfaces until they are actually played/imported.
+    const session = await getSession(setId);
+    if (!session?.trackIds.includes(selected.id)) await prependTrackIds(setId, [selected.id]);
+    const selectedHit = hits[idx];
+    if (selectedHit) void cacheStreamPlaylistTrackCovers({ sessionId: setId, hits: [selectedHit] });
     // Stream URLs stay lazy — playTrackInContext → playIndex → ensureLoadedAndPlay
     // resolves the clicked track's stream on demand (others as playback advances).
-    await get().playTrackInContext(tracks[idx], {
+    await get().playTrackInContext(selected, {
       source: { kind: "online-playlist", playlist },
       tracks,
     });
