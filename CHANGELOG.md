@@ -12,6 +12,7 @@ The live-request channel now routes by keyword: 点歌 does a quick library sear
 
 ### Added
 - **memory** Viewers can rate and comment on the current song — Two new chat commands act on whatever is playing. `评分 5` casts a vote into the song's crowd rating — shown as a persistent 1–5 star chip at the top of Now Playing, where every voter counts once and the host can tap to rate too. `评论 …` leaves a signed memory on the track; comments float in the memory carousel by default, or add a timestamp like `评论 3:14 …` to pin one to that lyric moment. Both keywords are configurable, and ratings stay on your device.
+- **library** Online playlists now live in the Library — Logged-in streaming sources can sync their playlist catalog into the Library wall, with persisted source filters for local-only, online-only, or a specific platform. Online playlists sit under local sets in collapsible sections, use the same card grid style, and share the outer Library scroller so large catalogs stay smooth. Opening a 6,000-track playlist caches the track list until you explicitly refresh, and playing one song keeps the full online playlist context without importing the whole thing into your local library. _(desktop)_
 - **lyrics** Memories carousel over the lyrics — While you're reading the lyrics, this song's memories now surface as a strip across the top — the same gentle carousel as full-immersive mode, with timestamped ones appearing at their moment (tap the time to jump there). Toggle it under Settings → Visualizer ('Show memories over lyrics').
 
 ### Changed
