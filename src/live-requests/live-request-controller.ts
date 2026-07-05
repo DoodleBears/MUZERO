@@ -1,5 +1,12 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import { addMemory, getPlayQueue, getSettings, getTrack, setTrackRating } from "@/db/repositories";
+import {
+  addMemory,
+  getPlayQueue,
+  getSettings,
+  getTrack,
+  getTracksByIds,
+  setTrackRating,
+} from "@/db/repositories";
 import {
   type AudienceRequestIntakeSettings,
   DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
@@ -33,8 +40,10 @@ import {
   resolveRaterKey,
 } from "./live-request-annotation";
 import {
+  notifyAiDjRequestReceived,
   notifyAnnotationAdded,
   notifyAudienceRequestPlayed,
+  notifyAudienceRequestQueuePreview,
   notifyRatingAdded,
   notifyVideoRequestRejected,
 } from "./live-request-notification";
@@ -81,6 +90,8 @@ export interface LiveRequestControllerDeps {
   getCurrentTrackId?: () => string | undefined | Promise<string | undefined>;
   /** Notified after a matched track is played / queued (production: a toast). */
   onRequestPlayed?: (input: { track: Track; action: AudienceRequestPlaybackAction }) => void;
+  /** Notified when an AI DJ request is accepted into the AI queue. */
+  onAiDjRequestReceived?: AudienceRequestRuntimeDeps["onAiDjRequestReceived"];
   /** Override the rating writer (tests); defaults to the `setTrackRating` repo. */
   setTrackRating?: (trackId: string, raterKey: string, score: number) => Promise<void>;
   /** Notified after a 评分 vote lands (production: a toast). */
@@ -173,6 +184,7 @@ export function createLiveRequestController(
       playNow: deps.playNow,
       playNext: deps.playNext,
       onRequestPlayed: deps.onRequestPlayed,
+      onAiDjRequestReceived: deps.onAiDjRequestReceived,
       onVideoRequestRejected: deps.onVideoRequestRejected,
       getActiveQueueTrackIds: deps.getActiveQueueTrackIds,
       getCurrentTrackId: deps.getCurrentTrackId,
@@ -380,6 +392,16 @@ export function createLiveRequestController(
 
 let singleton: LiveRequestController | null = null;
 
+async function notifyRequestQueuePreviewFromDb(): Promise<void> {
+  const queue = await getPlayQueue(defaultDb);
+  const upcomingEntries =
+    queue.currentIndex >= 0 ? queue.entries.slice(queue.currentIndex + 1) : queue.entries;
+  const upcomingIds = upcomingEntries.map((entry) => entry.trackId);
+  if (upcomingIds.length === 0) return;
+  const tracks = await getTracksByIds(upcomingIds, defaultDb);
+  notifyAudienceRequestQueuePreview(tracks);
+}
+
 function ensureSingleton(): LiveRequestController {
   singleton ??= createLiveRequestController({
     playNow: async (track) => {
@@ -406,7 +428,12 @@ function ensureSingleton(): LiveRequestController {
       return s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined;
     },
     // Confirm the request landed with a top-left toast (title + artist · album).
-    onRequestPlayed: ({ track, action }) => notifyAudienceRequestPlayed(track, action),
+    onRequestPlayed: ({ track, action }) => {
+      notifyAudienceRequestPlayed(track, action);
+      void notifyRequestQueuePreviewFromDb().catch((error: unknown) => {
+        log.warn("liveRequests", "failed to show request queue preview", error);
+      });
+    },
     // Confirm a 评分 vote with the new star + updated crowd average · vote count.
     onRated: async ({ trackId, score }) => {
       const track = await getTrack(trackId, defaultDb);
@@ -417,6 +444,7 @@ function ensureSingleton(): LiveRequestController {
       const track = await getTrack(trackId, defaultDb);
       if (track) notifyAnnotationAdded(track, memory);
     },
+    onAiDjRequestReceived: ({ request }) => notifyAiDjRequestReceived(request),
     onVideoRequestRejected: notifyVideoRequestRejected,
   });
   return singleton;

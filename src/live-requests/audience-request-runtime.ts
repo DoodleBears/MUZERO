@@ -128,6 +128,7 @@ export interface AudienceRequestRuntimeDeps {
   ) => Promise<OnlineAudienceRequestFallbackResult | null>;
   canUseAiDj?: (settings: AppSettings) => boolean;
   aiDjQueue?: AudienceRequestAiDjQueue;
+  onAiDjRequestReceived?: (input: { request: NormalizedAudienceRequest }) => void;
   playNow?: (track: Track) => Promise<void>;
   /** Player-aware "play next" — anchors the FIFO insert to the live (store) cursor.
    *  Falls back to a DB-cursor-relative insert when not injected (e.g. unit tests). */
@@ -561,6 +562,7 @@ export function createAudienceRequestRuntime(
   }): AudienceRequestRuntimeItem {
     const { intake, item, request } = input;
     item.status = "queued";
+    deps.onAiDjRequestReceived?.({ request });
     try {
       const pending = aiDjQueue.enqueue({
         onProgress: (progress) => applyAiDjProgress(item, progress),

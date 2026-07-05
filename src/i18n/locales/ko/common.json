@@ -1581,6 +1581,8 @@
     "ratingDetail": "평균 {{average}} · {{count}} 표",
     "commentAdded": "{{title}}에 새 메모리",
     "commentAddedBy": "{{name}}님이 {{title}}에 댓글",
+    "aiDjReceived": "AI DJ 요청을 받았습니다",
+    "queuePreview": "신청곡 대기열: {{count}}곡 대기 중",
     "videoNotARef": "영상 요청에는 Bilibili 또는 YouTube 영상 ID/링크를 붙여 넣어 주세요",
     "videoUnsupportedSource": "영상 요청은 현재 Bilibili와 YouTube 링크를 지원합니다",
     "videoUnresolved": "이 영상을 확인할 수 없었습니다",

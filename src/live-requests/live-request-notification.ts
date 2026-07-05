@@ -2,7 +2,10 @@ import type { Memory, Track } from "@/db/types";
 import i18n from "@/i18n/i18n";
 import { trackAlbum, trackArtists } from "@/lib/track-display";
 import { notify } from "@/stores/notification-store";
-import type { AudienceRequestPlaybackAction } from "./audience-request-schema";
+import type {
+  AudienceRequestPlaybackAction,
+  NormalizedAudienceRequest,
+} from "./audience-request-schema";
 import type { VideoRequestRejectReason } from "./video-request";
 
 /** Which message key confirms the request, given how the track was routed.
@@ -16,6 +19,24 @@ const MESSAGE_KEY_BY_ACTION = {
   // safe default so the map stays exhaustive.
   "manual-review": "liveRequest.playedQueued",
 } as const satisfies Record<AudienceRequestPlaybackAction, string>;
+
+const REQUEST_QUEUE_PREVIEW_LIMIT = 10;
+
+export function formatAudienceRequestQueuePreview(
+  tracks: Array<Pick<Track, "title">>,
+  limit = REQUEST_QUEUE_PREVIEW_LIMIT,
+): { detail: string; remaining: number; total: number } | null {
+  if (tracks.length === 0) return null;
+  const shown = tracks.slice(0, limit);
+  const remaining = Math.max(0, tracks.length - shown.length);
+  const detail = [
+    shown.map((track, index) => `${index + 1}. ${track.title}`).join(" · "),
+    remaining > 0 ? `+${remaining}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return { detail, remaining, total: tracks.length };
+}
 
 /**
  * Top-left success toast confirming a live song request landed: leads with the
@@ -33,6 +54,15 @@ export function notifyAudienceRequestPlayed(
   const album = trackAlbum(track);
   const detail = [artists, album].filter(Boolean).join(" · ") || undefined;
   notify.success(i18n.t(MESSAGE_KEY_BY_ACTION[action], { title: track.title }), { detail });
+}
+
+export function notifyAudienceRequestQueuePreview(tracks: Track[]): void {
+  const preview = formatAudienceRequestQueuePreview(tracks);
+  if (!preview) return;
+  notify.info(i18n.t("liveRequest.queuePreview", { count: preview.total }), {
+    detail: preview.detail,
+    duration: 8000,
+  });
 }
 
 /**
@@ -64,6 +94,20 @@ export function notifyAnnotationAdded(track: Track, memory: Memory): void {
     ? i18n.t("liveRequest.commentAddedBy", { name: who, title: track.title })
     : i18n.t("liveRequest.commentAdded", { title: track.title });
   notify.success(message, { detail: memory.note });
+}
+
+/**
+ * Top-left toast confirming an AI DJ live request was accepted into the DJ queue.
+ * This fires on receipt/queueing, not after the model finishes, so the host gets
+ * immediate feedback that the audience request landed.
+ */
+export function notifyAiDjRequestReceived(
+  request: Pick<NormalizedAudienceRequest, "normalizedQuery">,
+): void {
+  notify.success(i18n.t("liveRequest.aiDjReceived"), {
+    detail: request.normalizedQuery,
+    duration: 8000,
+  });
 }
 
 export function notifyVideoRequestRejected(input: {

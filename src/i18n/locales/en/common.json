@@ -1604,6 +1604,8 @@
     "ratingDetail": "avg {{average}} · {{count}} votes",
     "commentAdded": "New memory on {{title}}",
     "commentAddedBy": "{{name}} commented on {{title}}",
+    "aiDjReceived": "AI DJ request received",
+    "queuePreview": "Request queue: {{count}} waiting",
     "videoNotARef": "Paste a Bilibili or YouTube video id/link for video requests",
     "videoUnsupportedSource": "Video requests support Bilibili and YouTube links for now",
     "videoUnresolved": "Could not resolve that video",

@@ -1582,6 +1582,8 @@
     "ratingDetail": "平均 {{average}} · {{count}} 票",
     "commentAdded": "{{title}} に新しいメモリー",
     "commentAddedBy": "{{name}} が {{title}} にコメント",
+    "aiDjReceived": "AI DJ リクエストを受け取りました",
+    "queuePreview": "リクエスト待ちキュー：{{count}} 曲",
     "videoNotARef": "動画リクエストには Bilibili または YouTube の動画 ID/リンクを貼ってください",
     "videoUnsupportedSource": "動画リクエストは現在 Bilibili と YouTube リンクに対応しています",
     "videoUnresolved": "この動画を解決できませんでした",

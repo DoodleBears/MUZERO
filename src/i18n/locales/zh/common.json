@@ -1582,6 +1582,8 @@
     "ratingDetail": "均分 {{average}} · {{count}} 票",
     "commentAdded": "《{{title}}》多了一条记忆",
     "commentAddedBy": "{{name}} 评论了《{{title}}》",
+    "aiDjReceived": "AI DJ 已收到请求",
+    "queuePreview": "点歌队列：{{count}} 首等待中",
     "videoNotARef": "点视频请粘贴 B站或 YouTube 的视频 id/链接",
     "videoUnsupportedSource": "点视频目前支持 B站和 YouTube 链接",
     "videoUnresolved": "没能解析这个视频",

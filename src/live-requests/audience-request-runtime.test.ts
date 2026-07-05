@@ -296,10 +296,12 @@ describe("AudienceRequestRuntime direct search route", () => {
         return { chatSessionId: "cht_live" };
       }),
     };
+    const onAiDjRequestReceived = vi.fn();
     const runtime = createAudienceRequestRuntime({
       aiDjQueue,
       canUseAiDj: () => true,
       db,
+      onAiDjRequestReceived,
     });
 
     const item = await runtime.handle(request("DJ 选一首暖场 city pop"));
@@ -313,6 +315,9 @@ describe("AudienceRequestRuntime direct search route", () => {
     );
     expect(item.status).toBe("queued");
     expect(item.chatSessionId).toBe("cht_live");
+    expect(onAiDjRequestReceived).toHaveBeenCalledWith({
+      request: expect.objectContaining({ normalizedQuery: "DJ 选一首暖场 city pop" }),
+    });
 
     done.resolve();
     await flushAsync();

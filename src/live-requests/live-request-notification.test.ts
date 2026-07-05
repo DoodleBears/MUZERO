@@ -1,14 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
 
-const { notifySuccess } = vi.hoisted(() => ({ notifySuccess: vi.fn() }));
+const { notifyInfo, notifySuccess } = vi.hoisted(() => ({
+  notifyInfo: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 
-vi.mock("@/stores/notification-store", () => ({ notify: { success: notifySuccess } }));
+vi.mock("@/stores/notification-store", () => ({
+  notify: { info: notifyInfo, success: notifySuccess },
+}));
 vi.mock("@/i18n/i18n", () => ({
   default: { t: (key: string, opts?: { title?: string }) => `${key}:${opts?.title ?? ""}` },
 }));
 
-import { notifyAudienceRequestPlayed } from "./live-request-notification";
+import {
+  formatAudienceRequestQueuePreview,
+  notifyAiDjRequestReceived,
+  notifyAudienceRequestPlayed,
+  notifyAudienceRequestQueuePreview,
+} from "./live-request-notification";
 
 function fakeTrack(over: Partial<Track> = {}): Track {
   return {
@@ -44,6 +54,56 @@ describe("notifyAudienceRequestPlayed", () => {
 
     expect(notifySuccess).toHaveBeenCalledWith("liveRequest.playedNext:晴天", {
       detail: undefined,
+    });
+  });
+});
+
+describe("notifyAudienceRequestQueuePreview", () => {
+  it("formats up to ten waiting tracks and appends a +N overflow marker", () => {
+    const tracks = Array.from({ length: 13 }, (_, index) =>
+      fakeTrack({ title: `Song ${index + 1}` }),
+    );
+
+    expect(formatAudienceRequestQueuePreview(tracks)).toEqual({
+      detail:
+        "1. Song 1 · 2. Song 2 · 3. Song 3 · 4. Song 4 · 5. Song 5 · 6. Song 6 · 7. Song 7 · 8. Song 8 · 9. Song 9 · 10. Song 10 · +3",
+      remaining: 3,
+      total: 13,
+    });
+  });
+
+  it("fires an 8s info toast for the current request queue", () => {
+    notifyInfo.mockClear();
+
+    notifyAudienceRequestQueuePreview([
+      fakeTrack({ title: "晴天" }),
+      fakeTrack({ title: "七里香" }),
+    ]);
+
+    expect(notifyInfo).toHaveBeenCalledWith("liveRequest.queuePreview:", {
+      detail: "1. 晴天 · 2. 七里香",
+      duration: 8000,
+    });
+  });
+
+  it("does not toast when there is no waiting queue", () => {
+    notifyInfo.mockClear();
+
+    notifyAudienceRequestQueuePreview([]);
+
+    expect(notifyInfo).not.toHaveBeenCalled();
+  });
+});
+
+describe("notifyAiDjRequestReceived", () => {
+  it("fires an 8s success toast with the request body as detail", () => {
+    notifySuccess.mockClear();
+
+    notifyAiDjRequestReceived({ normalizedQuery: "来一首暖场 city pop" });
+
+    expect(notifySuccess).toHaveBeenCalledWith("liveRequest.aiDjReceived:", {
+      detail: "来一首暖场 city pop",
+      duration: 8000,
     });
   });
 });
