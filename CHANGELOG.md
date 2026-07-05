@@ -2,11 +2,12 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
-## v2.1.0 — 2026-07-05 · Requests, ratings, and memories over lyrics
+## v2.1.0 — 2026-07-05 · Requests, smarter search, and memories over lyrics
 
-The live-request channel now routes by keyword: 点歌 does a quick library search — no more forcing every request through the AI DJ — while AI点歌 goes to the AI DJ, and each command's keyword is yours to set. Viewers can also react to the song that's playing: 评分 5 casts a vote into a crowd rating shown as a persistent 1–5 chip (each person counts once, the host can tap too), and 评论 leaves a signed memory on the track — pinned to a lyric moment when they type a timestamp like 3:14. And while you read the lyrics, this song's memories now carousel across the top, just like immersive mode.
+The live-request channel now routes by keyword: 点歌 does a quick library search — no more forcing every request through the AI DJ — while AI点歌 goes to the AI DJ, and video requests can plan, download, and join the queue. Global search also feels sharper: it opens with recent tracks, scores local results, and puts exact title, artist, and artist-prefix matches at the top. Viewers can react to the song that's playing too: 评分 5 casts a vote into a crowd rating, 评论 leaves a signed memory on the track, and those memories now carousel above the lyrics.
 
 ### Highlights
+- **streaming** Video requests can download, queue, and play next — Live requests are no longer audio-only. When a viewer asks for a video, MUZERO plans the request, reuses an existing local or streamed copy when it can, otherwise starts the download pipeline, shows request progress, and inserts the finished track through the same play-next queue as normal song requests. The new video-request command and quality behavior are configurable under Settings → Live requests. _(desktop)_
 - **dj** Song requests search first — the AI DJ only when you ask for it — The live-request channel is now a keyword router. `点歌 <name>` does a quick library search (with an online fallback) instead of forcing every request through the heavy AI DJ, and a separate keyword like `AI点歌` sends it to the AI DJ to curate or generate. Each command's trigger keyword is configurable under Settings → Live requests.
 
 ### Added
@@ -14,6 +15,8 @@ The live-request channel now routes by keyword: 点歌 does a quick library sear
 - **lyrics** Memories carousel over the lyrics — While you're reading the lyrics, this song's memories now surface as a strip across the top — the same gentle carousel as full-immersive mode, with timestamped ones appearing at their moment (tap the time to jump there). Toggle it under Settings → Visualizer ('Show memories over lyrics').
 
 ### Changed
+- **search** Global search finds the obvious answer first — Opening search now shows recent tracks instead of an empty pane, and local results carry relevance scores so the best matches can rise above the full grouped list. Exact title matches, exact artist matches, and artist-prefix matches are prioritized, so typing an artist name brings that artist's tracks to the top instead of burying them under loose text matches.
+- **library** Tap Library again to get back home — When you are deep inside a set, artist, album, system list, or online playlist, selecting the active Library/Search tab again now backs out to the root library wall with the normal transition. Switching away and back still preserves the detail you were viewing, so the shortcut only fires when you intentionally re-tap the active tab.
 - **dj** The DJ replies faster on big libraries — no more full rescan every turn — Every chat or voice turn used to rebuild the DJ's genre/tag palette by scanning your whole library. The palette is now cached and kept fresh incrementally: editing a track's tags patches just the changed tags, and adding or removing songs is detected by a cheap in-memory fingerprint — no database reads at all on a warm turn. On a 6,000-track library that means one scan on first use, then effectively instant (~0 ms) for every turn after.
 - **player** Hours-long live sessions stay lean on memory — A long live-request stream used to accumulate a little memory with every song — fetched covers, extracted palette colors, and per-request bookkeeping were all kept forever. Those session caches are now bounded (least-recently-used entries make room for new ones), dedupe/cooldown records expire with their decision windows, and skipping songs quickly now cancels the abandoned download instead of letting it finish in the background. Verified with an end-to-end long-run harness against a real 5,700-track library.
 
