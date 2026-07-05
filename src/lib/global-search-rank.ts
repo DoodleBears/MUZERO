@@ -1,6 +1,8 @@
 export type GlobalSearchBestMatchKind = "set" | "track" | "lyric" | "album" | "artist" | "online";
 
 export interface GlobalSearchBestMatchCandidate {
+  /** Higher means the candidate's primary label more directly equals the query. */
+  exactness?: number;
   key: string;
   kind: GlobalSearchBestMatchKind;
   order: number;
@@ -34,6 +36,7 @@ export function rankGlobalSearchBestMatches<T extends GlobalSearchBestMatchCandi
 
 function compareBestMatch(a: GlobalSearchBestMatchCandidate, b: GlobalSearchBestMatchCandidate) {
   return (
+    (b.exactness ?? 0) - (a.exactness ?? 0) ||
     adjustedScore(a) - adjustedScore(b) ||
     a.score - b.score ||
     (b.recency ?? 0) - (a.recency ?? 0) ||

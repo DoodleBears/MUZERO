@@ -59,8 +59,8 @@ import {
 import { rankGlobalSearchBestMatches } from "@/lib/global-search-rank";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
 import { type IndexableRow, parseSearchTokens, scoreRow } from "@/lib/search-core";
-import { NO_MATCH_SCORE } from "@/lib/search-transliterate";
-import { trackSubtitle } from "@/lib/track-display";
+import { NO_MATCH_SCORE, normalizeSearchText } from "@/lib/search-transliterate";
+import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
 import {
   findLyricSearchMatch,
   type LyricSearchMatch,
@@ -180,6 +180,7 @@ type ScoredSetResult = {
 };
 
 type BestMatchCandidate = {
+  exactness?: number;
   item: NavItem;
   key: string;
   kind: "set" | "track" | "lyric" | "album" | "artist";
@@ -187,6 +188,21 @@ type BestMatchCandidate = {
   recency?: number;
   score: number;
 };
+
+function exactLabelRank(
+  query: string,
+  labels: readonly (string | undefined)[],
+  rank: number,
+): number {
+  if (!query) return 0;
+  return labels.some((label) => label && normalizeSearchText(label) === query) ? rank : 0;
+}
+
+function trackExactLabelRank(query: string, track: Track): number {
+  if (!query) return 0;
+  if (exactLabelRank(query, [track.title, track.mediaMetadata?.title], 3) > 0) return 3;
+  return exactLabelRank(query, [...trackArtists(track), trackAlbum(track)], 1);
+}
 
 export function GlobalTrackSearch({
   open,
@@ -513,9 +529,11 @@ export function GlobalTrackSearch({
   const bestMatchItems = useMemo<NavItem[]>(() => {
     if (!deferredSearchText || onlineFirst) return [];
     const candidates: BestMatchCandidate[] = [];
+    const queryLabel = normalizeSearchText(deferredSearchText);
     let order = 0;
     for (const hit of setResultHits) {
       candidates.push({
+        exactness: exactLabelRank(queryLabel, [hit.session.name], 2),
         item: { type: "set", session: hit.session },
         key: `set:${hit.session.id}`,
         kind: "set",
@@ -526,6 +544,7 @@ export function GlobalTrackSearch({
     }
     for (const track of trackResults) {
       candidates.push({
+        exactness: trackExactLabelRank(queryLabel, track),
         item: { type: "track", track },
         key: `track:${track.id}`,
         kind: "track",
@@ -536,6 +555,7 @@ export function GlobalTrackSearch({
     }
     for (const result of lyricResults) {
       candidates.push({
+        exactness: trackExactLabelRank(queryLabel, result.track),
         item: { type: "lyric", ...result },
         key: `lyric:${result.track.id}`,
         kind: "lyric",
@@ -546,6 +566,7 @@ export function GlobalTrackSearch({
     }
     for (const entry of albumResults) {
       candidates.push({
+        exactness: exactLabelRank(queryLabel, [entry.name], 2),
         item: { type: "album", entry },
         key: `album:${entry.key}`,
         kind: "album",
@@ -555,6 +576,7 @@ export function GlobalTrackSearch({
     }
     for (const entry of artistResults) {
       candidates.push({
+        exactness: exactLabelRank(queryLabel, [entry.name], 2),
         item: { type: "artist", entry },
         key: `artist:${entry.key}`,
         kind: "artist",

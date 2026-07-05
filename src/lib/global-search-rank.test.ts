@@ -11,6 +11,24 @@ describe("rankGlobalSearchBestMatches", () => {
     expect(ranked.map((item) => item.key)).toEqual(["artist:exact", "track:buried"]);
   });
 
+  it("puts an exact artist entity before tracks whose artist field merely shares the exact score", () => {
+    const ranked = rankGlobalSearchBestMatches([
+      { exactness: 1, key: "track:song-by-supercell", kind: "track", order: 0, score: 0 },
+      { exactness: 2, key: "artist:supercell", kind: "artist", order: 1, score: 0 },
+    ]);
+
+    expect(ranked.map((item) => item.key)).toEqual(["artist:supercell", "track:song-by-supercell"]);
+  });
+
+  it("keeps an exact track-title match ahead of an exact artist entity", () => {
+    const ranked = rankGlobalSearchBestMatches([
+      { exactness: 3, key: "track:title-supercell", kind: "track", order: 0, score: 0 },
+      { exactness: 2, key: "artist:supercell", kind: "artist", order: 1, score: 0 },
+    ]);
+
+    expect(ranked.map((item) => item.key)).toEqual(["track:title-supercell", "artist:supercell"]);
+  });
+
   it("deduplicates by key, keeps the best duplicate, and honors the limit", () => {
     const ranked = rankGlobalSearchBestMatches(
       [
