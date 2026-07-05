@@ -1,6 +1,6 @@
 # PRD: MUZERO 点视频（弹幕点 MV / 视频请求）—— 关键词区分 + 来源 id 本地优先 + 时长上限 + 预设清晰度下载
 
-**Status:** In Progress
+**Status:** Completed（Automated；Electron 手测待跑）
 **Created:** 2026-07-05
 **Author:** DoodleBear
 **Module:** `src/live-requests/`（intake-command / runtime / controller）· `src/streamsrc/`（stream-link / download-action / streamed-track-repo）· `src/db/types.ts`（intake 命令 + 时长上限设置）· Settings（点歌/点视频命令表 + 清晰度）
