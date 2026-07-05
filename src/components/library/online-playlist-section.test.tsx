@@ -78,7 +78,31 @@ describe("OnlinePlaylistSection", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it("uses a bounded virtual scroller for large inline online playlist sections", async () => {
+  it("uses the provided wall scroller for large online playlist sections", () => {
+    const many = Array.from({ length: 80 }, (_, index) => ({
+      source: "netease" as const,
+      id: `n${index}`,
+      name: `Playlist ${index}`,
+      trackCount: index,
+    }));
+    const scrollElement = document.createElement("div");
+
+    render(
+      <OnlinePlaylistSection
+        playlists={many}
+        query=""
+        onOpen={vi.fn()}
+        onImport={vi.fn()}
+        onRefresh={vi.fn()}
+        view="grid"
+        scrollElement={scrollElement}
+      />,
+    );
+
+    expect(screen.queryByTestId("online-playlist-inline-virtual-scroll")).not.toBeInTheDocument();
+  });
+
+  it("does not create an inline scroller while waiting for the provided wall scroller", () => {
     const many = Array.from({ length: 80 }, (_, index) => ({
       source: "netease" as const,
       id: `n${index}`,
@@ -94,9 +118,10 @@ describe("OnlinePlaylistSection", () => {
         onImport={vi.fn()}
         onRefresh={vi.fn()}
         view="grid"
+        scrollElement={null}
       />,
     );
 
-    expect(await screen.findByTestId("online-playlist-inline-virtual-scroll")).toBeInTheDocument();
+    expect(screen.queryByTestId("online-playlist-inline-virtual-scroll")).not.toBeInTheDocument();
   });
 });

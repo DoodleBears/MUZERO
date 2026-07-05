@@ -2099,8 +2099,8 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
                     refreshing={onlineCatalog.syncing}
                     view={activeWallView}
                     showHeader={false}
-                    scrollElement={showLocalPlaylists ? null : wallScrollEl}
-                    lenisRef={showLocalPlaylists ? undefined : wallLenisRef}
+                    scrollElement={wallScrollEl}
+                    lenisRef={wallLenisRef}
                   />
                 </SetWallSection>
               ) : null}

@@ -22,7 +22,7 @@ export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
   refreshing = false,
   view,
   showHeader = true,
-  scrollElement = null,
+  scrollElement,
   lenisRef,
 }: {
   playlists: OnlinePlaylistCatalogEntry[];
@@ -39,7 +39,9 @@ export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
   const { t } = useTranslation();
   const visible = useMemo(() => filterOnlinePlaylists(playlists, query), [playlists, query]);
   const [inlineScrollElement, setInlineScrollElement] = useState<HTMLDivElement | null>(null);
-  const shouldVirtualizeInline = !scrollElement && visible.length > INLINE_VIRTUALIZE_MIN_ITEMS;
+  const hasExternalScroller = scrollElement !== undefined;
+  const shouldVirtualizeInline =
+    !hasExternalScroller && visible.length > INLINE_VIRTUALIZE_MIN_ITEMS;
 
   if (playlists.length === 0) return null;
 
@@ -64,23 +66,25 @@ export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
         <p className="rounded-xl px-2 py-6 text-center text-muted-foreground text-sm">
           {t("gallery.onlinePlaylistNoMatches")}
         </p>
-      ) : scrollElement ? (
-        <VirtualCardGrid
-          items={visible}
-          view={view}
-          getKey={onlinePlaylistKey}
-          scrollElement={scrollElement}
-          lenisRef={lenisRef}
-          className="pb-4"
-          renderCard={(playlist) => (
-            <OnlinePlaylistCard
-              playlist={playlist}
-              view={view}
-              onOpen={onOpen}
-              onImport={onImport}
-            />
-          )}
-        />
+      ) : hasExternalScroller ? (
+        scrollElement ? (
+          <VirtualCardGrid
+            items={visible}
+            view={view}
+            getKey={onlinePlaylistKey}
+            scrollElement={scrollElement}
+            lenisRef={lenisRef}
+            className="pb-4"
+            renderCard={(playlist) => (
+              <OnlinePlaylistCard
+                playlist={playlist}
+                view={view}
+                onOpen={onOpen}
+                onImport={onImport}
+              />
+            )}
+          />
+        ) : null
       ) : shouldVirtualizeInline ? (
         <div
           ref={setInlineScrollElement}
