@@ -559,6 +559,30 @@ Scrollbar requirement:
 
 ---
 
+## Follow-up: Tab Switch Performance Guardrails
+
+**Date:** 2026-07-05  
+**Status:** Completed
+
+**Problem:** 在线歌单进入 Library 后，切换 Gallery tabs 可能掉帧。排查发现三个叠加因素：
+- 本地和在线 playlists 同时显示时，online section 为避免多 `VirtualCardGrid` 共用同一 wall scroller 重叠，退回了非虚拟化渲染；在线歌单一多会一次挂载大量卡片和封面。
+- `listAllTracks` / `listGlobalSearchTracks` 仍从 `tracks.toArray()` 开始，即使 context-only streamed rows 已被 UI 过滤，历史打开过的 6000+ 在线歌单 rows 仍会在切 tab 时被全表读取。
+- 在线歌单播放上下文 rows 没有清理策略，用户连续打开不同大歌单后隐藏 rows 会累积，增加内存和 IndexedDB 读取压力。
+
+**Implementation Notes:**
+- `OnlinePlaylistSection` 在没有外部 virtual scroller 且列表较大时，改用内部有界虚拟滚动容器，保持本地+在线 sections 分离，同时避免一次性挂载所有在线歌单卡片。
+- `listAllTracks` / `listGlobalSearchTracks` 改为从所有 `DjSession.trackIds` membership 收集可见 track ids，再 `bulkGet`；不再先全表读取 `tracks` 后过滤 context-only streamed rows。
+- `playOnlinePlaylist` 在进入新的在线歌单播放前调用 streamed repo 清理，删除专用 online cache set 里未加入任何 set membership 的旧 streamed context rows 和对应 media blobs。
+- 保持显式导入 / 同步路径不变：导入的大歌单仍会作为本地 set membership 出现在 Library。
+
+**Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\library\online-playlist-section.test.tsx`
+- `node_modules\.bin\vitest.CMD run src\db\repositories.test.ts -t "listAllTracks library membership filtering|listGlobalSearchTracks"`
+- `node_modules\.bin\vitest.CMD run src\streamsrc\streamed-track-repo.test.ts -t "materializeHitsToTracks"`
+- `node_modules\.bin\vitest.CMD run src\stores\player-store.test.ts -t "online playlist"`
+
+---
+
 ## 7. Out of Scope
 
 - Importing every synced playlist automatically as `DjSession`.
@@ -642,3 +666,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Added collapsible sets-wall sections for smart/local/online playlists and prevented local+online grid overlap by avoiding multiple ancestor-scroller virtual grids in the same wall. |
 | 2026-07-05 | Codex | Cached online playlist detail tracks with TanStack Query so reopening a large online playlist does not refetch unless the user explicitly refreshes; daily recommendations keep reroll/afresh behavior. |
 | 2026-07-05 | Codex | Completed played-online-track visibility follow-up: online playlist playback keeps full context but only the clicked/played track joins visible Library membership and playback media cache; context-only streamed rows are filtered from Library/global search. |
+| 2026-07-05 | Codex | Added tab-switch performance guardrails: large inline online playlist sections are virtualized, Library/global search reads membership ids instead of scanning all track rows, and stale online context-only streamed rows are pruned before opening another online playlist context. |

@@ -1527,10 +1527,9 @@ export async function getTracksByIds(ids: string[], db: MuzeroDB = defaultDb): P
 export async function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
   noteDbRequery("listAllTracks");
   const startedAt = performance.now();
-  const rows = await db.tracks.toArray();
-  const visible = await filterLibraryVisibleTracks(rows, db);
-  notePerfWork("db.listAllTracks", performance.now() - startedAt, { rows: visible.length });
-  return visible;
+  const rows = await listLibraryMemberTracks(db);
+  notePerfWork("db.listAllTracks", performance.now() - startedAt, { rows: rows.length });
+  return rows;
 }
 
 /**
@@ -1541,18 +1540,17 @@ export async function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> 
 export async function listGlobalSearchTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
   noteDbRequery("globalSearchTracks");
   const startedAt = performance.now();
-  const rows = await db.tracks.toArray();
-  const visible = await filterLibraryVisibleTracks(rows, db);
+  const rows = await listLibraryMemberTracks(db);
   let strippedLyrics = 0;
   let searchRows: Track[] | undefined;
-  for (let index = 0; index < visible.length; index += 1) {
-    const track = visible[index];
+  for (let index = 0; index < rows.length; index += 1) {
+    const track = rows[index];
     if (!track) continue;
     if (!track.brief?.lyrics) {
       searchRows?.push(track);
       continue;
     }
-    searchRows ??= visible.slice(0, index);
+    searchRows ??= rows.slice(0, index);
     strippedLyrics += 1;
     searchRows.push({
       ...track,
@@ -1562,7 +1560,7 @@ export async function listGlobalSearchTracks(db: MuzeroDB = defaultDb): Promise<
       },
     });
   }
-  const out = searchRows ?? visible;
+  const out = searchRows ?? rows;
   notePerfWork("db.globalSearchTracks", performance.now() - startedAt, {
     rows: out.length,
     strippedLyrics,
@@ -1570,15 +1568,20 @@ export async function listGlobalSearchTracks(db: MuzeroDB = defaultDb): Promise<
   return out;
 }
 
-async function filterLibraryVisibleTracks(rows: Track[], db: MuzeroDB): Promise<Track[]> {
-  const hasStreamedRows = rows.some((track) => track.origin === "streamed");
-  if (!hasStreamedRows) return rows;
+async function listLibraryMemberTracks(db: MuzeroDB): Promise<Track[]> {
   const sessions = await db.sessions.toArray();
-  const memberIds = new Set<string>();
+  const memberIds: string[] = [];
+  const seen = new Set<string>();
   for (const session of sessions) {
-    for (const id of session.trackIds) memberIds.add(id);
+    for (const id of session.trackIds) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      memberIds.push(id);
+    }
   }
-  return rows.filter((track) => track.origin !== "streamed" || memberIds.has(track.id));
+  if (memberIds.length === 0) return [];
+  const rows = await db.tracks.bulkGet(memberIds);
+  return rows.filter((track): track is Track => Boolean(track));
 }
 
 /** Full playback-stats table (entity listening time projections) — see PRD F-4. */

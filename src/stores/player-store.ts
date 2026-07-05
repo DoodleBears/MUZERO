@@ -144,6 +144,7 @@ import {
   createStreamedTrack,
   hitToStreamedInput,
   materializeHitsToTracks,
+  pruneUnmemberedStreamedTracks,
 } from "@/streamsrc/streamed-track-repo";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getOrCreateLocalDevice } from "@/sync/device-repo";
@@ -1670,6 +1671,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // in hit order) — the queue is the playlist itself, not the shared online pool.
     // The shared online set is only these rows' provenance / offline-cache home.
     const setId = await ensureOnlineSet();
+    await pruneUnmemberedStreamedTracks(setId);
     const tracks = await materializeHitsToTracks(setId, hits);
     const idx = clampIndex(tracks.length, startIndex);
     if (idx < 0) return;

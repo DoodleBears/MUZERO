@@ -235,6 +235,29 @@ export async function materializeHitsToTracks(
   return resolveHitsToTracks(sessionId, hits, db);
 }
 
+/**
+ * Remove streamed rows that were only materialized as a transient online-playlist
+ * queue context and never became set members. This keeps opening large online
+ * playlists from leaving thousands of hidden rows behind forever.
+ */
+export async function pruneUnmemberedStreamedTracks(
+  sessionId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<number> {
+  const session = await db.sessions.get(sessionId);
+  if (!session) return 0;
+  const members = new Set(session.trackIds);
+  const rows = await db.tracks.where("sessionId").equals(sessionId).toArray();
+  const doomed = rows.filter((track) => track.origin === "streamed" && !members.has(track.id));
+  if (doomed.length === 0) return 0;
+  const ids = doomed.map((track) => track.id);
+  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
+    await db.mediaBlobs.where("trackId").anyOf(ids).delete();
+    await db.tracks.bulkDelete(ids);
+  });
+  return doomed.length;
+}
+
 // ---------------------------------------------------- offline cache (Phase 5) ----
 // Streamed tracks resolve a short-lived URL per play. Optionally we download those
 // bytes into `mediaBlobs` (role "media") and set `Track.blobId` so the player's

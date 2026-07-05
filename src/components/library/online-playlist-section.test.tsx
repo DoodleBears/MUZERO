@@ -77,4 +77,26 @@ describe("OnlinePlaylistSection", () => {
     expect(onImport).toHaveBeenCalledWith(playlists[0]);
     expect(onOpen).not.toHaveBeenCalled();
   });
+
+  it("uses a bounded virtual scroller for large inline online playlist sections", async () => {
+    const many = Array.from({ length: 80 }, (_, index) => ({
+      source: "netease" as const,
+      id: `n${index}`,
+      name: `Playlist ${index}`,
+      trackCount: index,
+    }));
+
+    render(
+      <OnlinePlaylistSection
+        playlists={many}
+        query=""
+        onOpen={vi.fn()}
+        onImport={vi.fn()}
+        onRefresh={vi.fn()}
+        view="grid"
+      />,
+    );
+
+    expect(await screen.findByTestId("online-playlist-inline-virtual-scroll")).toBeInTheDocument();
+  });
 });

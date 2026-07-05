@@ -13,6 +13,7 @@ import {
   hitToStreamedInput,
   isStreamedTrackCached,
   materializeHitsToTracks,
+  pruneUnmemberedStreamedTracks,
   summarizeStreamedCache,
 } from "./streamed-track-repo";
 
@@ -459,6 +460,24 @@ describe("materializeHitsToTracks", () => {
     const second = await materializeHitsToTracks(set.id, [a, b], db);
     expect(second.map((t) => t.id)).toEqual(first.map((t) => t.id));
     expect(await db.tracks.count()).toBe(2);
+  });
+
+  it("prunes old context-only rows without deleting visible streamed members", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const [member, orphan] = await materializeHitsToTracks(set.id, [a, b], db);
+    await db.sessions.update(set.id, { trackIds: [member.id] });
+    await cacheStreamedTrackBlob(
+      member.id,
+      new Blob(["cached"], { type: "audio/mpeg" }),
+      "audio/mpeg",
+      db,
+    );
+
+    await expect(pruneUnmemberedStreamedTracks(set.id, db)).resolves.toBe(1);
+
+    await expect(db.tracks.get(member.id)).resolves.toBeTruthy();
+    await expect(db.tracks.get(orphan.id)).resolves.toBeUndefined();
+    await expect(db.mediaBlobs.where("trackId").equals(member.id).count()).resolves.toBe(1);
   });
 });
 

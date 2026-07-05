@@ -927,10 +927,11 @@ describe("createUploadedTrack", () => {
 
 describe("listGlobalSearchTracks", () => {
   it("strips generated lyrics from the search snapshot without mutating the DB row", async () => {
+    const session = await createSession({ seedPrompt: "", config: {} }, db);
     await db.tracks.bulkAdd([
       {
         id: "trk_with_lyrics",
-        sessionId: "ses_search",
+        sessionId: session.id,
         title: "Lyric Song",
         kind: "audio",
         origin: "generated",
@@ -950,7 +951,7 @@ describe("listGlobalSearchTracks", () => {
       },
       {
         id: "trk_upload",
-        sessionId: "ses_search",
+        sessionId: session.id,
         title: "Upload",
         kind: "audio",
         origin: "uploaded",
@@ -963,6 +964,7 @@ describe("listGlobalSearchTracks", () => {
         tags: [],
       },
     ]);
+    await prependTrackIds(session.id, ["trk_with_lyrics", "trk_upload"], db);
 
     const rows = await listGlobalSearchTracks(db);
 

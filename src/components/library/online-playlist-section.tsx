@@ -1,7 +1,7 @@
 import type Lenis from "lenis";
 import { ListMusic, RefreshCw } from "lucide-react";
 import type { RefObject } from "react";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
@@ -11,6 +11,7 @@ import { filterOnlinePlaylists, STREAM_SOURCE_DISPLAY_NAMES } from "@/streamsrc/
 import { VirtualCardGrid } from "./virtual-card-grid";
 
 type OnlinePlaylistView = "grid" | "list";
+const INLINE_VIRTUALIZE_MIN_ITEMS = 40;
 
 export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
   playlists,
@@ -37,6 +38,8 @@ export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
 }) {
   const { t } = useTranslation();
   const visible = useMemo(() => filterOnlinePlaylists(playlists, query), [playlists, query]);
+  const [inlineScrollElement, setInlineScrollElement] = useState<HTMLDivElement | null>(null);
+  const shouldVirtualizeInline = !scrollElement && visible.length > INLINE_VIRTUALIZE_MIN_ITEMS;
 
   if (playlists.length === 0) return null;
 
@@ -78,6 +81,30 @@ export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
             />
           )}
         />
+      ) : shouldVirtualizeInline ? (
+        <div
+          ref={setInlineScrollElement}
+          data-testid="online-playlist-inline-virtual-scroll"
+          className="thin-transparent-scrollbar max-h-[min(58vh,620px)] overflow-y-auto pr-1"
+        >
+          {inlineScrollElement ? (
+            <VirtualCardGrid
+              items={visible}
+              view={view}
+              getKey={onlinePlaylistKey}
+              scrollElement={inlineScrollElement}
+              className="pb-4"
+              renderCard={(playlist) => (
+                <OnlinePlaylistCard
+                  playlist={playlist}
+                  view={view}
+                  onOpen={onOpen}
+                  onImport={onImport}
+                />
+              )}
+            />
+          ) : null}
+        </div>
       ) : (
         <div
           className={cn(
