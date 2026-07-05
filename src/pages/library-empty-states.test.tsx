@@ -58,6 +58,7 @@ vi.mock("dexie-react-hooks", () => ({
 }));
 
 vi.mock("@/hooks/use-app-data", () => ({
+  useSessions: () => [],
   useSettings: () => ({
     coverCropped: true,
     nowPlayingRightRailCollapsed: false,

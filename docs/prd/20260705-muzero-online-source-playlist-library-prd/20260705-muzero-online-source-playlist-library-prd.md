@@ -571,7 +571,7 @@ Scrollbar requirement:
 
 **Implementation Notes:**
 - Library sets wall 中的 `OnlinePlaylistSection` 统一使用外层 wall scroller 的 `VirtualCardGrid`，避免本地/在线 sections 之间产生嵌套滚动；没有外层 scroller 的孤立渲染场景才保留内部 fallback。
-- `listAllTracks` / `listGlobalSearchTracks` 改为从所有 `DjSession.trackIds` membership 收集可见 track ids，再 `bulkGet`；不再先全表读取 `tracks` 后过滤 context-only streamed rows。
+- `listAllTracks` / `listGlobalSearchTracks` 仅对 `origin: "streamed"` 的 context-only rows 施加 membership 可见性过滤；本地 uploaded/generated 散曲保持可见，避免 DJ tree / 直播点歌 / 全局搜索误判为空。
 - `playOnlinePlaylist` 在进入新的在线歌单播放前调用 streamed repo 清理，删除专用 online cache set 里未加入任何 set membership 的旧 streamed context rows 和对应 media blobs。
 - 保持显式导入 / 同步路径不变：导入的大歌单仍会作为本地 set membership 出现在 Library。
 
@@ -580,6 +580,7 @@ Scrollbar requirement:
 - `node_modules\.bin\vitest.CMD run src\db\repositories.test.ts -t "listAllTracks library membership filtering|listGlobalSearchTracks"`
 - `node_modules\.bin\vitest.CMD run src\streamsrc\streamed-track-repo.test.ts -t "materializeHitsToTracks"`
 - `node_modules\.bin\vitest.CMD run src\stores\player-store.test.ts -t "online playlist"`
+- `node_modules\.bin\vitest.CMD run src\chat\dj-chat-library-tree.test.ts src\chat\dj-chat-phase4.test.ts src\live-requests\live-request-controller.play-routing.test.ts src\live-requests\audience-request-runtime.test.ts src\db\repositories.test.ts src\pages\library-empty-states.test.tsx`
 
 ---
 
@@ -668,3 +669,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Completed played-online-track visibility follow-up: online playlist playback keeps full context but only the clicked/played track joins visible Library membership and playback media cache; context-only streamed rows are filtered from Library/global search. |
 | 2026-07-05 | Codex | Added tab-switch performance guardrails: large inline online playlist sections are virtualized, Library/global search reads membership ids instead of scanning all track rows, and stale online context-only streamed rows are pruned before opening another online playlist context. |
 | 2026-07-05 | Codex | Removed nested online playlist scrolling in the Library wall by routing online playlist virtualization through the shared outer wall scroller even when local playlists are visible. |
+| 2026-07-05 | Codex | Fixed pre-push regression coverage: Library/global search now hides only unassigned streamed context rows while keeping local uploaded/generated loose tracks visible for DJ tree, live requests, and empty-library states. |

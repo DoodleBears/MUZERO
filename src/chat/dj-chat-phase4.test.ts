@@ -248,11 +248,13 @@ describe("DJ chat phase 4 local-ref contract", () => {
     expect(new Set(generatedRefs)).toHaveLength(1);
     expect(tree.nodes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: "group", trackCount: 1 }),
+        expect.objectContaining({ kind: "group", trackCount: 0 }),
         expect.objectContaining({ kind: "track", mediaKind: "video", origin: "uploaded" }),
         expect.objectContaining({ kind: "track", origin: "generated" }),
-        expect.objectContaining({ kind: "track", origin: "streamed" }),
       ]),
+    );
+    expect(tree.nodes).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "track", origin: "streamed" })]),
     );
     expect(JSON.stringify(tree)).not.toMatch(/trk_|ses_/);
   });

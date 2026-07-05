@@ -1527,7 +1527,7 @@ export async function getTracksByIds(ids: string[], db: MuzeroDB = defaultDb): P
 export async function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
   noteDbRequery("listAllTracks");
   const startedAt = performance.now();
-  const rows = await listLibraryMemberTracks(db);
+  const rows = await listLibraryVisibleTracks(db);
   notePerfWork("db.listAllTracks", performance.now() - startedAt, { rows: rows.length });
   return rows;
 }
@@ -1540,7 +1540,7 @@ export async function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> 
 export async function listGlobalSearchTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
   noteDbRequery("globalSearchTracks");
   const startedAt = performance.now();
-  const rows = await listLibraryMemberTracks(db);
+  const rows = await listLibraryVisibleTracks(db);
   let strippedLyrics = 0;
   let searchRows: Track[] | undefined;
   for (let index = 0; index < rows.length; index += 1) {
@@ -1568,20 +1568,17 @@ export async function listGlobalSearchTracks(db: MuzeroDB = defaultDb): Promise<
   return out;
 }
 
-async function listLibraryMemberTracks(db: MuzeroDB): Promise<Track[]> {
+async function listLibraryVisibleTracks(db: MuzeroDB): Promise<Track[]> {
   const sessions = await db.sessions.toArray();
-  const memberIds: string[] = [];
   const seen = new Set<string>();
   for (const session of sessions) {
     for (const id of session.trackIds) {
       if (seen.has(id)) continue;
       seen.add(id);
-      memberIds.push(id);
     }
   }
-  if (memberIds.length === 0) return [];
-  const rows = await db.tracks.bulkGet(memberIds);
-  return rows.filter((track): track is Track => Boolean(track));
+  const rows = await db.tracks.toArray();
+  return rows.filter((track) => track.origin !== "streamed" || seen.has(track.id));
 }
 
 /** Full playback-stats table (entity listening time projections) — see PRD F-4. */
