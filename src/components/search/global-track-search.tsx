@@ -57,7 +57,8 @@ import {
   type SearchFilter,
 } from "@/lib/global-search-filter";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
-import { freeTextMatches, type IndexableRow } from "@/lib/search-core";
+import { type IndexableRow, parseSearchTokens, scoreRow } from "@/lib/search-core";
+import { NO_MATCH_SCORE } from "@/lib/search-transliterate";
 import { trackSubtitle } from "@/lib/track-display";
 import {
   findLyricSearchMatch,
@@ -171,6 +172,11 @@ type NavItem =
   | { type: "album"; entry: AlbumEntry }
   | { type: "artist"; entry: ArtistEntry }
   | { type: "online"; hit: StreamSearchHit };
+
+type ScoredSetResult = {
+  score: number;
+  session: DjSession;
+};
 
 export function GlobalTrackSearch({
   open,
@@ -371,16 +377,27 @@ export function GlobalTrackSearch({
   // Sets — name-only, transliteration-aware. The full gallery can search inside
   // set tracks; global ⌘F keeps this result type crisp so `@set` means playlists.
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
-  const setResults = useMemo(() => {
+  const setResultHits = useMemo<ScoredSetResult[]>(() => {
     if (!open || !showSets) return [];
     const sorted = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
-    const base = deferredSearchText
-      ? sorted.filter((session) => freeTextMatches(deferredSearchText, [session.name]))
+    const hits = deferredSearchText
+      ? sorted
+          .map((session, index) => ({
+            index,
+            score: scoreRow(
+              { album: [], artist: [], free: [session.name], id: session.id, tags: [] },
+              parseSearchTokens(deferredSearchText),
+            ),
+            session,
+          }))
+          .filter((hit) => hit.score < NO_MATCH_SCORE)
+          .sort((a, b) => a.score - b.score || a.index - b.index)
       : filter?.kind === "set"
-        ? sorted
+        ? sorted.map((session) => ({ score: 0, session }))
         : [];
-    return base.slice(0, MAX_SET_RESULTS);
+    return hits.slice(0, MAX_SET_RESULTS).map(({ score, session }) => ({ score, session }));
   }, [open, showSets, sessions, deferredSearchText, filter, transliterationReady]);
+  const setResults = useMemo(() => setResultHits.map((hit) => hit.session), [setResultHits]);
   const setCoverTrackIds = useMemo(
     () =>
       setResults

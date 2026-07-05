@@ -2,7 +2,7 @@ import type { Memory, Track, TrackPlaybackStats } from "@/db/types";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
 import { buildAlbumIndex, buildArtistIndex } from "@/lib/library-index";
 import { queryRows } from "@/lib/search-core";
-import { searchEntityFacetsLimited, trackToRow } from "@/lib/track-search";
+import { searchEntityFacetsLimitedScored, trackToRow } from "@/lib/track-search";
 
 export interface GlobalSearchLocalInput {
   includeAlbums: boolean;
@@ -23,10 +23,28 @@ export interface GlobalSearchLocalInput {
 }
 
 export interface GlobalSearchLocalResults {
+  albumHits?: ScoredAlbumResult[];
   albums: AlbumEntry[];
+  artistHits?: ScoredArtistResult[];
   artists: ArtistEntry[];
   coverTrackIds: string[];
+  trackHits?: ScoredResultRef[];
   trackIds: string[];
+}
+
+export interface ScoredResultRef {
+  id: string;
+  score: number;
+}
+
+export interface ScoredAlbumResult {
+  entry: AlbumEntry;
+  score: number;
+}
+
+export interface ScoredArtistResult {
+  entry: ArtistEntry;
+  score: number;
 }
 
 export function buildGlobalSearchLocalResults(
@@ -51,34 +69,51 @@ export function buildGlobalSearchLocalResults(
   const memoryNotes = input.includeTracks
     ? memoryNotesByTrack(memories)
     : new Map<string, string[]>();
-  const trackIds = input.includeTracks
+  const trackHits = input.includeTracks
     ? query
       ? queryRows(
           readyTracks.map((track) => trackToRow(track, memoryNotes.get(track.id) ?? [])),
           query,
         )
           .slice(0, resultLimit)
-          .map((hit) => hit.id)
-      : readyTracks.slice(0, resultLimit).map((track) => track.id)
+          .map((hit) => ({ id: hit.id, score: hit.score }))
+      : readyTracks.slice(0, resultLimit).map((track) => ({ id: track.id, score: 0 }))
     : [];
+  const trackIds = trackHits.map((hit) => hit.id);
 
   const artistIndex = input.includeArtists ? buildArtistIndex(tracks) : [];
   const albumIndex = input.includeAlbums ? buildAlbumIndex(tracks) : [];
   const facets = query
-    ? searchEntityFacetsLimited(artistIndex, albumIndex, query, resultLimit)
+    ? searchEntityFacetsLimitedScored(artistIndex, albumIndex, query, resultLimit)
     : { albums: [], artists: [] };
   const albums = input.includeAlbums
-    ? (query ? facets.albums : albumIndex.filter((entry) => !entry.bucket)).slice(0, resultLimit)
+    ? (query
+        ? facets.albums.map((hit) => hit.entry)
+        : albumIndex.filter((entry) => !entry.bucket)
+      ).slice(0, resultLimit)
     : [];
   const artists = input.includeArtists
-    ? (query ? facets.artists : artistIndex.filter((entry) => !entry.bucket)).slice(0, resultLimit)
+    ? (query
+        ? facets.artists.map((hit) => hit.entry)
+        : artistIndex.filter((entry) => !entry.bucket)
+      ).slice(0, resultLimit)
+    : [];
+  const albumHits = input.includeAlbums
+    ? query
+      ? facets.albums
+      : albums.map((entry) => ({ entry, score: 0 }))
+    : [];
+  const artistHits = input.includeArtists
+    ? query
+      ? facets.artists
+      : artists.map((entry) => ({ entry, score: 0 }))
     : [];
   const coverTrackIds = uniqueDefined([
     ...albums.map((entry) => entry.coverTrackId),
     ...artists.map((entry) => entry.coverTrackId),
   ]);
 
-  return { albums, artists, coverTrackIds, trackIds };
+  return { albumHits, albums, artistHits, artists, coverTrackIds, trackHits, trackIds };
 }
 
 function lastPlayedByTrack(stats: readonly TrackPlaybackStats[]): Map<string, number> {

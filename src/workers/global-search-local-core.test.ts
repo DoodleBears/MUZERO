@@ -32,8 +32,12 @@ describe("buildGlobalSearchLocalResults", () => {
 
     expect(results.trackIds).toContain("trk_memory");
     expect(results.trackIds).toContain("trk_album");
+    expect(results.trackHits?.map((hit) => hit.id)).toEqual(results.trackIds);
+    expect(results.trackHits?.every((hit) => Number.isFinite(hit.score))).toBe(true);
     expect(results.albums.map((entry) => entry.name)).toContain("Blue Love");
+    expect(results.albumHits?.map((hit) => hit.entry.name)).toContain("Blue Love");
     expect(results.artists.map((entry) => entry.name)).toContain("Love Aki");
+    expect(results.artistHits?.map((hit) => hit.entry.name)).toContain("Love Aki");
     expect(results.coverTrackIds).toEqual(["trk_album"]);
   });
 
@@ -121,6 +125,28 @@ describe("buildGlobalSearchLocalResults", () => {
       "trk_updated",
       "trk_created_new",
     ]);
+  });
+
+  it("scores exact artist entities ahead of weaker buried track title matches", () => {
+    const tracks = [
+      makeTrack("trk_artist", "Blue", 1, { artists: ["Deidian"] }),
+      makeTrack("trk_buried", "A Long Deidian Memory", 2, { artists: ["Someone Else"] }),
+    ];
+
+    const results = buildGlobalSearchLocalResults(tracks, [], {
+      includeAlbums: false,
+      includeArtists: true,
+      includeTracks: true,
+      query: "deidian",
+      resultLimit: 8,
+    });
+
+    const artistHit = results.artistHits?.find((hit) => hit.entry.name === "Deidian");
+    const buriedTrackHit = results.trackHits?.find((hit) => hit.id === "trk_buried");
+
+    expect(artistHit).toBeDefined();
+    expect(buriedTrackHit).toBeDefined();
+    expect(artistHit?.score).toBeLessThan(buriedTrackHit?.score ?? Number.POSITIVE_INFINITY);
   });
 });
 

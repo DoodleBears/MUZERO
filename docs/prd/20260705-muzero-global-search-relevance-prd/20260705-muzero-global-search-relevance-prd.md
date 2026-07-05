@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 空查询最近歌曲：Ctrl+F 打开即显示最近播放/更新的 ready tracks | Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 搜索结果携带分数：tracks / artists / albums / sets 统一可排序 | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 搜索结果携带分数：tracks / artists / albums / sets 统一可排序 | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 最佳匹配混排区：让高置信歌手/专辑不被固定分组埋住 | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
@@ -359,18 +359,18 @@ Tie breakers:
 
 **Tasks:**
 
-- [ ] Extend track worker path to preserve `queryRows()` scores before mapping back to ids.
-- [ ] Add scored artist / album facet helper, or extend `searchEntityFacetsLimited()` to optionally return scores.
-- [ ] Add set scoring in `global-track-search.tsx` using `scoreRow()` or a small local helper over `session.name`.
-- [ ] Preserve old arrays for grouped rendering.
-- [ ] Add tests where exact artist match scores better than a buried song metadata match.
+- [x] Extend track worker path to preserve `queryRows()` scores before mapping back to ids.
+- [x] Add scored artist / album facet helper, or extend `searchEntityFacetsLimited()` to optionally return scores.
+- [x] Add set scoring in `global-track-search.tsx` using `scoreRow()` or a small local helper over `session.name`.
+- [x] Preserve old arrays for grouped rendering.
+- [x] Add tests where exact artist match scores better than a buried song metadata match.
 
 ### Phase 2 Checklist
 
-- [ ] Song results keep existing internal ranking.
-- [ ] Artist / album results are ordered by relevance, not only index order.
-- [ ] Existing `artist:` and `album:` scoped tokens still work.
-- [ ] Transliteration tests continue to pass.
+- [x] Song results keep existing internal ranking.
+- [x] Artist / album results are ordered by relevance, not only index order.
+- [x] Existing `artist:` and `album:` scoped tokens still work.
+- [x] Transliteration tests continue to pass.
 
 ### Phase 3: Best Matches Mixed Section
 
@@ -448,3 +448,4 @@ Tie breakers:
 | 2026-07-05 | Codex | Initial draft: relevance mixed ranking + empty-query recent songs |
 | 2026-07-05 | Codex | Resolved open questions; changed empty query ordering to prioritize `lastPlayedAt` |
 | 2026-07-05 | Codex | Completed Phase 1: empty Ctrl+F now requests recent activity songs |
+| 2026-07-05 | Codex | Completed Phase 2: local track/artist/album results now carry relevance scores |

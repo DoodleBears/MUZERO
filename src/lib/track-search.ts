@@ -249,6 +249,16 @@ export interface EntityFacets {
   albums: AlbumEntry[];
 }
 
+export interface ScoredFacetHit<E> {
+  entry: E;
+  score: number;
+}
+
+export interface ScoredEntityFacets {
+  artists: ScoredFacetHit<ArtistEntry>[];
+  albums: ScoredFacetHit<AlbumEntry>[];
+}
+
 /** Every pre-transliterated query token matches the field variant set. */
 function matchesAllTokenVariants(
   fieldVariants: readonly string[],
@@ -327,25 +337,37 @@ export function searchEntityFacetsLimited(
   query: string,
   limit: number,
 ): EntityFacets {
+  const scored = searchEntityFacetsLimitedScored(artists, albums, query, limit);
+  return {
+    albums: scored.albums.map((hit) => hit.entry),
+    artists: scored.artists.map((hit) => hit.entry),
+  };
+}
+
+export function searchEntityFacetsLimitedScored(
+  artists: readonly ArtistEntry[],
+  albums: readonly AlbumEntry[],
+  query: string,
+  limit: number,
+): ScoredEntityFacets {
   const { free, artist, album }: SearchTokens = parseSearchTokens(query);
   const max = Math.max(0, limit);
   if (max === 0) return { artists: [], albums: [] };
   const artistTokenVariants = [...free, ...artist].map((token) => searchVariants(token));
   const albumTokenVariants = [...free, ...album].map((token) => searchVariants(token));
-  const artistHits: ArtistEntry[] = [];
-  const albumHits: AlbumEntry[] = [];
+  const artistHits: Array<ScoredFacetHit<ArtistEntry> & { index: number }> = [];
+  const albumHits: Array<ScoredFacetHit<AlbumEntry> & { index: number }> = [];
 
   if (artistTokenVariants.length > 0) {
-    for (const entry of artists) {
+    for (const [index, entry] of artists.entries()) {
       if (entry.bucket) continue;
       if (matchesAllTokenVariants(searchVariants(entry.name), artistTokenVariants)) {
-        artistHits.push(entry);
-        if (artistHits.length >= max) break;
+        artistHits.push({ entry, index, score: entityScore("artist", entry, query) });
       }
     }
   }
   if (albumTokenVariants.length > 0) {
-    for (const entry of albums) {
+    for (const [index, entry] of albums.entries()) {
       if (entry.bucket) continue;
       if (
         matchesAllTokenVariants(
@@ -353,13 +375,38 @@ export function searchEntityFacetsLimited(
           albumTokenVariants,
         )
       ) {
-        albumHits.push(entry);
-        if (albumHits.length >= max) break;
+        albumHits.push({ entry, index, score: entityScore("album", entry, query) });
       }
     }
   }
 
-  return { artists: artistHits, albums: albumHits };
+  return {
+    albums: albumHits
+      .sort((a, b) => a.score - b.score || a.index - b.index)
+      .slice(0, max)
+      .map(({ entry, score }) => ({ entry, score })),
+    artists: artistHits
+      .sort((a, b) => a.score - b.score || a.index - b.index)
+      .slice(0, max)
+      .map(({ entry, score }) => ({ entry, score })),
+  };
+}
+
+function entityScore(kind: "album" | "artist", entry: AlbumEntry | ArtistEntry, query: string) {
+  const label =
+    kind === "album"
+      ? `${entry.name} ${"artistName" in entry ? (entry.artistName ?? "") : ""}`
+      : entry.name;
+  return scoreRow(
+    {
+      album: kind === "album" ? [label] : [],
+      artist: kind === "artist" ? [label] : [],
+      free: [label],
+      id: entry.key,
+      tags: [],
+    },
+    parseSearchTokens(query),
+  );
 }
 
 /**
