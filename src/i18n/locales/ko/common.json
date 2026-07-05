@@ -1376,6 +1376,11 @@
     "searchTracks": "전체 곡 검색 — 핀인 / 로마자…",
     "filterAll": "전체",
     "filterLiked": "좋아요",
+    "filterRating": "평점",
+    "filterRatingHint": "군중 평균 평점이 선택한 별점 범위에 드는 곡만 표시",
+    "ratingMin": "최소",
+    "ratingMax": "최대",
+    "ratingClear": "지우기",
     "sortRecent": "최근",
     "origin": {
       "ai": "AI",
@@ -1593,7 +1598,8 @@
     "aria": "이 곡 평가",
     "setStar": "{{score}}점 평가",
     "summary": "{{average}} · {{count}} 표",
-    "none": "평가 없음"
+    "clear": "내 평가 지우기",
+    "rate": "평가"
   },
   "errorPage": {
     "kicker": "크래시 리포트",
@@ -1642,7 +1648,14 @@
     "deletePermanently": "영구 삭제",
     "removedFromSet_other": "{{count}}곡을 세트에서 제거했습니다",
     "deleted_other": "{{count}}곡을 삭제했습니다",
-    "addedToSet_other": "{{count}}곡을 “{{name}}”에 추가했습니다"
+    "addedToSet_other": "{{count}}곡을 “{{name}}”에 추가했습니다",
+    "like": "좋아요",
+    "liked_other": "{{count}}곡을 좋아요 했습니다",
+    "unlike": "좋아요 해제",
+    "unliked_other": "{{count}}곡의 좋아요를 해제했습니다",
+    "rate": "평가",
+    "rated_other": "{{count}}곡을 {{score}}★ 평가했습니다",
+    "ratingCleared_other": "{{count}}곡의 평가를 지웠습니다"
   },
   "reorder": {
     "dragHandle": "드래그하여 순서 변경",

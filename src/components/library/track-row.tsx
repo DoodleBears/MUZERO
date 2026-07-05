@@ -1,4 +1,4 @@
-import { Heart, Loader2, Play, TriangleAlert, Video } from "lucide-react";
+import { Heart, Loader2, Play, Star, TriangleAlert, Video, X } from "lucide-react";
 import {
   Fragment,
   type KeyboardEvent,
@@ -13,6 +13,7 @@ import {
   ManagedTrackAddToSetPopover,
   TrackAddToSetPopover,
 } from "@/components/library/track-add-to-set";
+import { RatingStars } from "@/components/player/rating-stars";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import { CoverImage } from "@/components/ui/cover-image";
@@ -27,10 +28,12 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { clearTrackRating, setTrackRating } from "@/db/repositories";
 import type { DjSession, Track } from "@/db/types";
 import { useCoverDerivativeUrlWithCropSetting } from "@/hooks/use-media";
 import { recordUserAction } from "@/lib/logger";
 import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
+import { formatRatingValue, resolveTrackRating } from "@/lib/track-rating";
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { useIsStreamDownloading } from "@/stores/stream-cache-store";
@@ -160,6 +163,85 @@ function TrackThumb({
   );
 }
 
+/** At-a-glance crowd rating: one star + the average (≤1 decimal), next to the
+ *  liked heart. Unrated tracks render nothing (no 0-star noise on every row). */
+function TrackRatingBadge({ track }: { track: Track }) {
+  const rating = resolveTrackRating(track);
+  if (!rating) return null;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-secondary/70 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground"
+      data-testid="track-rating-badge"
+    >
+      <Star className="size-3 fill-primary text-primary" aria-hidden="true" />
+      {formatRatingValue(rating.average)}
+    </span>
+  );
+}
+
+/**
+ * Hover-toolbar star button + popover for setting THIS device's own rating on a track
+ * (the "self" vote — the same rater the Now-Playing chip writes). The star fills when a
+ * self vote exists; the popover offers the 1–5 selector plus a clear-my-vote button.
+ * Reads the vote straight off `track` (live rows re-render on edit).
+ */
+function RowRatingPopover({
+  track,
+  onOpenChange,
+}: {
+  track: Track;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const selfVote = track.ratingsByRater?.self;
+  const rateLabel = t("rating.rate", { defaultValue: "Rate" });
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        onOpenChange(next);
+      }}
+    >
+      <PopoverTrigger
+        type="button"
+        className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        aria-label={rateLabel}
+      >
+        <Star
+          className={cn("size-4", selfVote !== undefined && "fill-primary text-primary")}
+          aria-hidden="true"
+        />
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2" side="left" sideOffset={10}>
+        <PopoverTitle className="sr-only">{rateLabel}</PopoverTitle>
+        <PopoverDescription className="sr-only">
+          {t("rating.aria", { defaultValue: "Rate this song" })}
+        </PopoverDescription>
+        <div className="flex items-center gap-1.5">
+          <RatingStars
+            value={selfVote ?? 0}
+            onSelect={(score) => void setTrackRating(track.id, "self", score)}
+            label={t("rating.aria", { defaultValue: "Rate this song" })}
+          />
+          {selfVote !== undefined && (
+            <button
+              type="button"
+              aria-label={t("rating.clear", { defaultValue: "Clear my rating" })}
+              title={t("rating.clear", { defaultValue: "Clear my rating" })}
+              onClick={() => void clearTrackRating(track.id, "self")}
+              className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function TrackTags({ tags }: { tags: string[] }) {
   if (tags.length === 0) return null;
 
@@ -211,7 +293,8 @@ export const TrackRow = memo(function TrackRow({
   // doesn't flash it. Matches the smooth entity grids, which carry no per-card popovers.
   const [showActions, setShowActions] = useState(false);
   const [addToSetOpen, setAddToSetOpen] = useState(false);
-  const showActionToolbar = showActions || addToSetOpen;
+  const [ratingOpen, setRatingOpen] = useState(false);
+  const showActionToolbar = showActions || addToSetOpen || ratingOpen;
 
   // Master-detail activation: a single click / tap (and keyboard row nav) SELECTS the
   // row, revealing it in the inspector WITHOUT interrupting playback; PLAY is its own
@@ -365,6 +448,7 @@ export const TrackRow = memo(function TrackRow({
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-3">
         <TrackTags tags={track.tags} />
+        <TrackRatingBadge track={track} />
         {/* Persistent at-a-glance "liked" hint, left of the duration (the hover
             toolbar carries the actual toggle). */}
         {liked && <Heart className="size-3.5 shrink-0 text-primary" aria-hidden="true" />}
@@ -391,6 +475,13 @@ export const TrackRow = memo(function TrackRow({
               button's inherited muted color instead of fighting it on one element. */}
             <HeartIcon size={16} className={cn(liked && "text-primary [&_svg]:fill-primary")} />
           </button>
+          <RowRatingPopover
+            track={track}
+            onOpenChange={(open) => {
+              setRatingOpen(open);
+              if (open) setShowActions(true);
+            }}
+          />
           <button
             type="button"
             onClick={onDelete}

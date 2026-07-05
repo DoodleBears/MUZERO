@@ -1,6 +1,8 @@
 import { memo, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type BatchAction, BatchActionBar } from "@/components/library/batch-action-bar";
+import { BatchLikeMenu } from "@/components/library/batch-like-menu";
+import { BatchRatingMenu } from "@/components/library/batch-rating-menu";
 import { ReorderableTrackList } from "@/components/library/reorderable-track-list";
 import { TrackListMenu } from "@/components/library/track-list-menu";
 import { trackIndexFromEventTarget } from "@/components/library/track-row-target";
@@ -86,6 +88,10 @@ export const TrackListSection = memo(function TrackListSection({
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
   const anchorIndex = anchorTrackId ? tracks.findIndex((track) => track.id === anchorTrackId) : -1;
   const sel = useTrackSelection(trackIds);
+  // Materialize the selection Set to an array ONCE per selection change — the batch
+  // bar hands it to several children, and spreading `sel.ids` inline would re-copy it
+  // (and churn their props) on every render, which bites on large "select all" sets.
+  const selectedIds = useMemo(() => [...sel.ids], [sel.ids]);
   // Track ids awaiting a permanent-delete confirmation (null = dialog closed).
   const [pendingPermanent, setPendingPermanent] = useState<string[] | null>(null);
   // A single row's trash inside a SET asks the user to choose: remove from THIS set
@@ -169,12 +175,12 @@ export const TrackListSection = memo(function TrackListSection({
 
   const batchActions: BatchAction[] = setId
     ? [
-        { label: t("select.removeFromSet"), onClick: () => removeFromSetThenExit([...sel.ids]) },
+        { label: t("select.removeFromSet"), onClick: () => removeFromSetThenExit(selectedIds) },
         {
           label: t("select.deletePermanently"),
           variant: "destructive",
           icon: <DeleteIcon size={16} />,
-          onClick: () => setPendingPermanent([...sel.ids]),
+          onClick: () => setPendingPermanent(selectedIds),
         },
       ]
     : [
@@ -182,7 +188,7 @@ export const TrackListSection = memo(function TrackListSection({
           label: t("select.deletePermanently"),
           variant: "destructive",
           icon: <DeleteIcon size={16} />,
-          onClick: () => setPendingPermanent([...sel.ids]),
+          onClick: () => setPendingPermanent(selectedIds),
         },
       ];
 
@@ -268,7 +274,13 @@ export const TrackListSection = memo(function TrackListSection({
           onToggleAll={sel.toggleAll}
           onCancel={sel.exit}
           actions={batchActions}
-          extra={<AddToSetMenu trackIds={[...sel.ids]} excludeSetId={setId} onAdded={sel.exit} />}
+          extra={
+            <>
+              <BatchLikeMenu trackIds={selectedIds} />
+              <BatchRatingMenu trackIds={selectedIds} />
+              <AddToSetMenu trackIds={selectedIds} excludeSetId={setId} onAdded={sel.exit} />
+            </>
+          }
           disabled={dragActive}
         />
       ) : null}

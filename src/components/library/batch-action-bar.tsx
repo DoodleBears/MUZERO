@@ -43,7 +43,7 @@ export function BatchActionBar({
   return (
     <div
       className={cn(
-        "-translate-x-1/2 fixed bottom-[calc(var(--spacing-chrome-bottom)+0.5rem)] left-1/2 z-40 flex w-[min(calc(100vw-2rem),38rem)] items-center gap-3 rounded-xl border border-border bg-popover/95 px-3 py-2 shadow-lg backdrop-blur",
+        "-translate-x-1/2 fixed bottom-[calc(var(--spacing-chrome-bottom)+0.5rem)] left-1/2 z-40 flex w-[min(calc(100vw-2rem),46rem)] flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-popover/95 px-3 py-2 shadow-lg backdrop-blur",
         disabled && "pointer-events-none opacity-60",
       )}
     >

@@ -27,6 +27,7 @@ import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { EntityDetailView } from "@/components/library/entity-detail";
 import { EntityCard, EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
 import { HoverScrollbar } from "@/components/library/hover-scrollbar";
+import { RatingFilterChip } from "@/components/library/rating-filter-chip";
 import { FilterChip, SortChip } from "@/components/library/sort-chip";
 import {
   type SystemPlaylistCardItem,
@@ -127,10 +128,13 @@ import {
 } from "@/lib/system-playlists";
 import {
   filterLikedTracks,
+  filterTracksByRating,
+  type RatingRange,
   sortTracks,
   TRACK_SORT_DEFAULT_DIR,
   type TrackSort,
 } from "@/lib/track-gallery";
+import { resolveTrackRating } from "@/lib/track-rating";
 import {
   buildFacetCandidates,
   type EntityFacets,
@@ -360,6 +364,8 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
     savedTrackSortDir(TRACK_SORT_DEFAULT_DIR[savedTrackSort()]),
   );
   const [likedOnly, setLikedOnly] = useState(false);
+  // 全部歌曲 rating filter: inclusive star window over the crowd average; null = off.
+  const [ratingRange, setRatingRange] = useState<RatingRange | null>(null);
   // 专辑 / 歌手 ordering — one shared sort across both entity walls.
   const [entitySort, setEntitySort] = useState<EntitySort>(savedEntitySort);
   const [entitySortDir, setEntitySortDir] = useState<SortDir>(() =>
@@ -1016,7 +1022,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   const shownTracks = useMemo(() => {
     if (!needsTrackWall) return EMPTY_TRACKS;
     const sorted = sortTracks(
-      filterLikedTracks(allTracks, likedOnly, likedIds),
+      filterTracksByRating(filterLikedTracks(allTracks, likedOnly, likedIds), ratingRange),
       trackSort,
       trackSortDir,
       lastPlayedByTrack,
@@ -1025,6 +1031,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   }, [
     allTracks,
     likedOnly,
+    ratingRange,
     likedIds,
     trackSort,
     trackSortDir,
@@ -1045,6 +1052,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
       trackSort === "name" &&
       trackQuery.trim() === "" &&
       !likedOnly &&
+      !ratingRange &&
       shownTracks.length > ALPHABET_INDEX_MIN_TRACKS,
     transliterationReady,
   );
@@ -1058,7 +1066,8 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
         : [],
     [remoteTracks, trackQuery, transliterationReady, needsTrackWall],
   );
-  const isEmptyTrackLibrary = allTracks.length === 0 && trackQuery.trim() === "" && !likedOnly;
+  const isEmptyTrackLibrary =
+    allTracks.length === 0 && trackQuery.trim() === "" && !likedOnly && !ratingRange;
   const query =
     mode === "sets"
       ? setQuery
@@ -1497,6 +1506,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
             <Heart className={cn("size-3.5", likedOnly && "fill-current")} />
             {t("gallery.filterLiked")}
           </FilterChip>
+          <RatingFilterChip value={ratingRange} onChange={setRatingRange} />
         </div>
         {(facetArtistItems.length > 0 || facetAlbumItems.length > 0) && (
           <div className="flex flex-col gap-3">
@@ -1534,7 +1544,16 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
         )}
       </>
     ),
-    [trackSort, trackSortDir, likedOnly, facetArtistItems, facetAlbumItems, trackById, t],
+    [
+      trackSort,
+      trackSortDir,
+      likedOnly,
+      ratingRange,
+      facetArtistItems,
+      facetAlbumItems,
+      trackById,
+      t,
+    ],
   );
   const viewLibraryTrack = useCallback(
     (track: Track) => transitionState(() => setSelectedLibraryTrackId(track.id)),
@@ -1926,9 +1945,15 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
                 isEmptyTrackLibrary ? (
                   <LibraryImportEmptyState className="mt-10" actions="direct" />
                 ) : (
-                  <p className="mt-12 text-center text-sm text-muted-foreground">
-                    {t("gallery.tracksEmpty")}
-                  </p>
+                  <div className="flex flex-col gap-4">
+                    {/* Keep the filter chips mounted when THEY emptied the list —
+                        otherwise an over-tight 红心/评分 filter would unmount its
+                        own toggle and strand the user in the empty state. */}
+                    {(likedOnly || ratingRange !== null) && trackListHeader}
+                    <p className="mt-12 text-center text-sm text-muted-foreground">
+                      {t("gallery.tracksEmpty")}
+                    </p>
+                  </div>
                 )
               ) : (
                 <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
@@ -2166,6 +2191,10 @@ function SetDetailView({
   // playlist, rather than on the set wall.
   const [likedOnly, setLikedOnly] = useState(false);
   const likedIds = useLikedTrackIds();
+  // 评分 range filter over the crowd average — same reasoning as 红心: it lives on
+  // songs, so it filters inside the playlist. Chip appears only once the set has
+  // at least one rated track (mirrors the likedCount gate).
+  const [ratingRange, setRatingRange] = useState<RatingRange | null>(null);
   // In-set search: collapsed to an icon until opened (see CollapsibleSearch), then
   // filters this set's tracks through the same scorer as the gallery.
   const [query, setQuery] = useState("");
@@ -2206,18 +2235,26 @@ function SetDetailView({
     () => tracks.filter((tr) => likedIds.has(tr.id)).length,
     [tracks, likedIds],
   );
+  const hasRatedTracks = useMemo(
+    () => tracks.some((tr) => resolveTrackRating(tr) !== null),
+    [tracks],
+  );
   // Lazily load + observe the transliteration dictionaries so pinyin/kana/romaji
   // matches "snap in" once ready (parity with the gallery's 全部歌曲 search).
   const transliterationReady = useTransliterationReady();
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownTracks = useMemo(() => {
-    const filtered = filterLikedTracks(tracks, likedOnly, likedIds);
+    const filtered = filterTracksByRating(
+      filterLikedTracks(tracks, likedOnly, likedIds),
+      ratingRange,
+    );
     const ordered = sort ? sortTracks(filtered, sort, sortDir, lastPlayed) : filtered;
     // Empty query returns `ordered` untouched, so the curated/sorted order shows through.
     return searchTracks(ordered, query, memoryNotes);
   }, [
     likedOnly,
     likedIds,
+    ratingRange,
     tracks,
     sort,
     sortDir,
@@ -2227,13 +2264,14 @@ function SetDetailView({
     transliterationReady,
   ]);
   // Drag-to-reorder is only meaningful when the TRUE curated order is showing — a
-  // column sort, liked filter, or search query makes drop positions ambiguous
+  // column sort, liked/rating filter, or search query makes drop positions ambiguous
   // (drag-reorder PRD §5.2). `tracks` then equals `shownTracks` in rank order.
-  const isManualOrder = !sort && !likedOnly && query.trim() === "";
+  const isManualOrder = !sort && !likedOnly && ratingRange === null && query.trim() === "";
   const alphabetLetterOf = useTrackAlphabetLetterOf(
     sort === "name" &&
       query.trim() === "" &&
       !likedOnly &&
+      !ratingRange &&
       shownTracks.length > DETAIL_ALPHABET_MIN_TRACKS,
     transliterationReady,
   );
@@ -2275,6 +2313,12 @@ function SetDetailView({
   useEffect(() => {
     if (likedOnly && likedCount === 0) setLikedOnly(false);
   }, [likedOnly, likedCount]);
+
+  // Same for the rating filter: if the set's last rated track loses its votes,
+  // clear the range so the (now unmounted) chip can't strand a hidden filter.
+  useEffect(() => {
+    if (ratingRange && !hasRatedTracks) setRatingRange(null);
+  }, [ratingRange, hasRatedTracks]);
 
   // Initialize the editable fields once the set loads (and only on identity
   // change, so later updates / typing don't reset the inputs).
@@ -2490,15 +2534,16 @@ function SetDetailView({
             >
               {t("gallery.sortDuration")}
             </SortChip>
-            {likedCount > 0 && (
-              <>
-                <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
-                <FilterChip active={likedOnly} onClick={() => setLikedOnly((v) => !v)}>
-                  <Heart className={cn("size-3.5", likedOnly && "fill-current")} />
-                  {t("gallery.filterLiked")}
-                </FilterChip>
-              </>
+            {(likedCount > 0 || hasRatedTracks) && (
+              <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
             )}
+            {likedCount > 0 && (
+              <FilterChip active={likedOnly} onClick={() => setLikedOnly((v) => !v)}>
+                <Heart className={cn("size-3.5", likedOnly && "fill-current")} />
+                {t("gallery.filterLiked")}
+              </FilterChip>
+            )}
+            {hasRatedTracks && <RatingFilterChip value={ratingRange} onChange={setRatingRange} />}
           </div>
           <TrackListSection
             setId={setId}

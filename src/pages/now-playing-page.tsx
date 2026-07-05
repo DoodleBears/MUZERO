@@ -200,7 +200,7 @@ function NowPlayingPageActive({
                   onTap={isNarrow ? toggleLyricsVisible : undefined}
                 />
                 {current && <TrackInfoCard track={current} />}
-                <div className="flex justify-center">
+                <div className="flex justify-start">
                   <TrackRatingChip />
                 </div>
               </div>

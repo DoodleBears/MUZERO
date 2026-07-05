@@ -1377,6 +1377,11 @@
     "searchTracks": "すべての曲を検索 — ローマ字 / かな…",
     "filterAll": "すべて",
     "filterLiked": "お気に入り",
+    "filterRating": "評価",
+    "filterRatingHint": "みんなの平均評価が選んだ星の範囲内の曲だけを表示",
+    "ratingMin": "最小",
+    "ratingMax": "最大",
+    "ratingClear": "クリア",
     "sortRecent": "最近",
     "origin": {
       "ai": "AI",
@@ -1594,7 +1599,8 @@
     "aria": "この曲を評価",
     "setStar": "{{score}} 点で評価",
     "summary": "{{average}} · {{count}} 票",
-    "none": "未評価"
+    "clear": "自分の評価を消す",
+    "rate": "評価"
   },
   "errorPage": {
     "kicker": "クラッシュレポート",
@@ -1643,7 +1649,14 @@
     "deletePermanently": "完全に削除",
     "removedFromSet_other": "{{count}} 曲をセットから削除しました",
     "deleted_other": "{{count}} 曲を削除しました",
-    "addedToSet_other": "{{count}} 曲を「{{name}}」に追加しました"
+    "addedToSet_other": "{{count}} 曲を「{{name}}」に追加しました",
+    "like": "お気に入り",
+    "liked_other": "{{count}} 曲をお気に入りに追加しました",
+    "unlike": "お気に入り解除",
+    "unliked_other": "{{count}} 曲のお気に入りを解除しました",
+    "rate": "評価",
+    "rated_other": "{{count}} 曲を {{score}}★ で評価しました",
+    "ratingCleared_other": "{{count}} 曲の評価を消しました"
   },
   "reorder": {
     "dragHandle": "ドラッグして並べ替え",

@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import type { SortDir } from "@/lib/set-gallery";
 import { cn } from "@/lib/utils";
 
-const chipClass =
+/** Shared pill styling so non-button filter triggers (e.g. the rating-range
+ *  popover chip) read identically to SortChip/FilterChip. */
+export const chipClass =
   "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors";
-const activeClass = "border-primary bg-accent/60 text-foreground";
-const idleClass = "border-border text-muted-foreground hover:bg-accent/50";
+export const chipActiveClass = "border-primary bg-accent/60 text-foreground";
+export const chipIdleClass = "border-border text-muted-foreground hover:bg-accent/50";
 
 /**
  * A single-select sort chip. When active it shows a direction caret (↑ asc / ↓
@@ -30,7 +32,7 @@ export function SortChip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={cn(chipClass, active ? activeClass : idleClass)}
+      className={cn(chipClass, active ? chipActiveClass : chipIdleClass)}
     >
       {children}
       {active &&
@@ -54,7 +56,7 @@ export function FilterChip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={cn(chipClass, active ? activeClass : idleClass)}
+      className={cn(chipClass, active ? chipActiveClass : chipIdleClass)}
     >
       {children}
     </button>

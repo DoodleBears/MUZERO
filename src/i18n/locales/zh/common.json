@@ -1377,6 +1377,11 @@
     "searchTracks": "搜索全部歌曲 —— 拼音 / 罗马音…",
     "filterAll": "全部",
     "filterLiked": "红心",
+    "filterRating": "评分",
+    "filterRatingHint": "只显示众评均分落在所选星级范围内的歌曲",
+    "ratingMin": "最低",
+    "ratingMax": "最高",
+    "ratingClear": "清除",
     "sortRecent": "最近",
     "origin": {
       "ai": "AI",
@@ -1594,7 +1599,8 @@
     "aria": "给这首歌打分",
     "setStar": "打 {{score}} 分",
     "summary": "{{average}} · {{count}} 票",
-    "none": "未评分"
+    "clear": "清除我的评分",
+    "rate": "评分"
   },
   "errorPage": {
     "kicker": "崩溃报告",
@@ -1643,7 +1649,14 @@
     "deletePermanently": "永久删除",
     "removedFromSet_other": "已从歌单移出 {{count}} 首",
     "deleted_other": "已删除 {{count}} 首",
-    "addedToSet_other": "已添加 {{count}} 首到「{{name}}」"
+    "addedToSet_other": "已添加 {{count}} 首到「{{name}}」",
+    "like": "红心",
+    "liked_other": "已红心 {{count}} 首",
+    "unlike": "取消红心",
+    "unliked_other": "已取消 {{count}} 首红心",
+    "rate": "评分",
+    "rated_other": "已给 {{count}} 首打 {{score}}★",
+    "ratingCleared_other": "已清除 {{count}} 首的评分"
   },
   "reorder": {
     "dragHandle": "拖拽调整顺序",

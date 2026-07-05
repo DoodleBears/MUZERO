@@ -13,6 +13,8 @@ import type { EntityStat } from "@/lib/library-stats";
 import type { SortDir } from "@/lib/set-gallery";
 import {
   filterLikedTracks,
+  filterTracksByRating,
+  type RatingRange,
   sortTracks,
   TRACK_SORT_DEFAULT_DIR,
   type TrackSort,
@@ -23,6 +25,7 @@ import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { CollapsibleSearch } from "./collapsible-search";
 import { EntityCoverButton } from "./entity-cover-button";
+import { RatingFilterChip } from "./rating-filter-chip";
 import { FilterChip, SortChip } from "./sort-chip";
 import { TrackListSection } from "./track-list-section";
 import { DETAIL_ALPHABET_MIN_TRACKS, useTrackAlphabetLetterOf } from "./use-track-alphabet";
@@ -88,6 +91,8 @@ export function EntityDetailView({
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [likedOnly, setLikedOnly] = useState(false);
   const likedIds = useLikedTrackIds();
+  // 评分 range filter over the crowd average (parity with 全部歌曲 / set detail).
+  const [ratingRange, setRatingRange] = useState<RatingRange | null>(null);
   // In-set search, collapsed to an icon until opened (see CollapsibleSearch).
   const [query, setQuery] = useState("");
   // Re-run the search once the transliteration dictionaries load (gallery parity).
@@ -108,13 +113,17 @@ export function EntityDetailView({
   // then searched. Empty query returns the order untouched.
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownTracks = useMemo(() => {
-    const filtered = filterLikedTracks(tracks, likedOnly, likedIds);
+    const filtered = filterTracksByRating(
+      filterLikedTracks(tracks, likedOnly, likedIds),
+      ratingRange,
+    );
     const ordered = sort ? sortTracks(filtered, sort, sortDir, lastPlayed) : filtered;
     return searchTracks(ordered, query, memoryNotes);
   }, [
     tracks,
     likedOnly,
     likedIds,
+    ratingRange,
     sort,
     sortDir,
     lastPlayed,
@@ -127,6 +136,7 @@ export function EntityDetailView({
     sort === "name" &&
       query.trim() === "" &&
       !likedOnly &&
+      !ratingRange &&
       shownTracks.length > DETAIL_ALPHABET_MIN_TRACKS,
     transliterationReady,
   );
@@ -269,6 +279,7 @@ export function EntityDetailView({
               <Heart className={cn("size-3.5", likedOnly && "fill-current")} />
               {t("gallery.filterLiked")}
             </FilterChip>
+            <RatingFilterChip value={ratingRange} onChange={setRatingRange} />
           </div>
 
           <TrackListSection
