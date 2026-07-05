@@ -1615,6 +1615,22 @@ export async function isTrackLiked(id: string, db: MuzeroDB = defaultDb): Promis
   return (await db.trackLikes.get(id)) != null;
 }
 
+/** Bulk version of {@link setTrackLiked}: like/unlike many tracks at once (the batch
+ *  heart in select mode). Likes share one `likedAt` so they sort together. */
+export async function setTracksLiked(
+  ids: string[],
+  liked: boolean,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  if (ids.length === 0) return;
+  if (liked) {
+    const likedAt = Date.now();
+    await db.trackLikes.bulkPut(ids.map((trackId) => ({ trackId, likedAt })));
+  } else {
+    await db.trackLikes.bulkDelete(ids);
+  }
+}
+
 /** The set of all liked track ids (for `system:liked` + the liked-only filter). */
 export async function likedTrackIdSet(db: MuzeroDB = defaultDb): Promise<Set<string>> {
   const rows = await db.trackLikes.toArray();
@@ -2461,16 +2477,76 @@ export async function setTrackRating(
   await db.tracks
     .where("id")
     .equals(trackId)
-    .modify((track: Track) => {
-      const next: Record<string, number> = { ...(track.ratingsByRater ?? {}) };
-      next[raterKey] = clamped;
-      const keys = Object.keys(next);
-      if (keys.length > RATING_RATER_CAP) {
-        for (const key of keys.slice(0, keys.length - RATING_RATER_CAP)) delete next[key];
-      }
-      track.ratingsByRater = next;
-      track.updatedAt = Date.now();
-    });
+    .modify((track: Track) => applyRaterVote(track, raterKey, clamped));
+}
+
+/** In-place mutation shared by the single- and bulk-rating writers: record one
+ *  rater's clamped vote, dedupe, cap to {@link RATING_RATER_CAP}, bump the clock. */
+function applyRaterVote(track: Track, raterKey: string, clamped: number): void {
+  const next: Record<string, number> = { ...(track.ratingsByRater ?? {}) };
+  next[raterKey] = clamped;
+  const keys = Object.keys(next);
+  if (keys.length > RATING_RATER_CAP) {
+    for (const key of keys.slice(0, keys.length - RATING_RATER_CAP)) delete next[key];
+  }
+  track.ratingsByRater = next;
+  track.updatedAt = Date.now();
+}
+
+/** In-place removal shared by the single- and bulk clearers: drop one rater's vote,
+ *  dropping the whole map when it was the last one so the track reads as unrated. */
+function removeRaterVote(track: Track, raterKey: string): void {
+  if (!track.ratingsByRater || !(raterKey in track.ratingsByRater)) return;
+  const next = { ...track.ratingsByRater };
+  delete next[raterKey];
+  track.ratingsByRater = Object.keys(next).length > 0 ? next : undefined;
+  track.updatedAt = Date.now();
+}
+
+/** Bulk version of {@link setTrackRating}: record one rater's rating (1–5) across
+ *  many tracks at once (the batch star in select mode). Per-track dedup + cap apply. */
+export async function setTracksRating(
+  trackIds: string[],
+  raterKey: string,
+  score: number,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  if (trackIds.length === 0) return;
+  const clamped = Math.min(5, Math.max(1, Math.round(score)));
+  await db.tracks
+    .where("id")
+    .anyOf(trackIds)
+    .modify((track: Track) => applyRaterVote(track, raterKey, clamped));
+}
+
+/** Bulk version of {@link clearTrackRating}: remove one rater's vote across many
+ *  tracks at once (the batch star's clear action in select mode). */
+export async function clearTracksRating(
+  trackIds: string[],
+  raterKey: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  if (trackIds.length === 0) return;
+  await db.tracks
+    .where("id")
+    .anyOf(trackIds)
+    .modify((track: Track) => removeRaterVote(track, raterKey));
+}
+
+/**
+ * Remove one rater's vote from `Track.ratingsByRater` (e.g. the host clearing their
+ * own "self" vote from the rating chip). Other raters' votes are untouched; clearing
+ * the last vote drops the map entirely so the track reads as unrated.
+ */
+export async function clearTrackRating(
+  trackId: string,
+  raterKey: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.tracks
+    .where("id")
+    .equals(trackId)
+    .modify((track: Track) => removeRaterVote(track, raterKey));
 }
 
 /** Delete a memory and its photo blob (if any). */

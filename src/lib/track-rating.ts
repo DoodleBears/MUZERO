@@ -6,6 +6,13 @@ import type { Track } from "@/db/types";
  * `self` + each audience key) counts once, so the average + count reflect distinct
  * voters. Returns null when there are no votes (chip shows the empty state).
  */
+/** Compact display form of a rating average: at most one decimal, no trailing
+ *  ".0" (4 → "4", 4.5 → "4.5"). Shared by the row badge and any future chips. */
+export function formatRatingValue(average: number): string {
+  const rounded = Math.round(average * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 export function resolveTrackRating(
   track: Pick<Track, "ratingsByRater">,
 ): { average: number; count: number } | null {

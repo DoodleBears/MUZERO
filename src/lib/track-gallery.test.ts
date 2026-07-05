@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Track } from "@/db/types";
 import {
   filterLikedTracks,
+  filterTracksByRating,
   sortTracks,
   TRACK_SORT_DEFAULT_DIR,
   type TrackSort,
@@ -106,5 +107,43 @@ describe("filterLikedTracks", () => {
 
   it("passes everything through when off", () => {
     expect(ids(filterLikedTracks(tracks, false, likedIds))).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("filterTracksByRating", () => {
+  const tracks = [
+    makeTrack({ id: "five", ratingsByRater: { self: 5 } }),
+    makeTrack({ id: "mid", ratingsByRater: { self: 3, "bili:1": 4 } }), // avg 3.5
+    makeTrack({ id: "low", ratingsByRater: { self: 1 } }),
+    makeTrack({ id: "unrated" }),
+    makeTrack({ id: "empty-votes", ratingsByRater: {} }),
+  ];
+
+  it("passes everything through when the range is null", () => {
+    expect(ids(filterTracksByRating(tracks, null))).toEqual([
+      "five",
+      "mid",
+      "low",
+      "unrated",
+      "empty-votes",
+    ]);
+  });
+
+  it("keeps only tracks whose average falls inside the inclusive window", () => {
+    expect(ids(filterTracksByRating(tracks, { min: 3, max: 5 }))).toEqual(["five", "mid"]);
+    expect(ids(filterTracksByRating(tracks, { min: 1, max: 3 }))).toEqual(["low"]);
+  });
+
+  it("matches the bounds inclusively (a 3.5 average passes max 3.5 and min 3.5)", () => {
+    expect(ids(filterTracksByRating(tracks, { min: 3.5, max: 3.5 }))).toEqual(["mid"]);
+  });
+
+  it("drops unrated tracks whenever a range is active", () => {
+    expect(ids(filterTracksByRating(tracks, { min: 1, max: 5 }))).toEqual(["five", "mid", "low"]);
+  });
+
+  it("filters on the crowd AVERAGE, not any single vote", () => {
+    // mid averages 3.5 — a 4–5 window excludes it even though one rater voted 4.
+    expect(ids(filterTracksByRating(tracks, { min: 4, max: 5 }))).toEqual(["five"]);
   });
 });

@@ -16,6 +16,7 @@
 import type { Track } from "@/db/types";
 import { transliterateSortKey } from "@/lib/search-transliterate";
 import type { SortDir } from "@/lib/set-gallery";
+import { resolveTrackRating } from "@/lib/track-rating";
 
 export type { SortDir } from "@/lib/set-gallery";
 
@@ -92,4 +93,24 @@ export function filterLikedTracks(
   likedIds: ReadonlySet<string>,
 ): Track[] {
   return likedOnly ? tracks.filter((track) => likedIds.has(track.id)) : tracks;
+}
+
+/** Inclusive 1–5 star window for the rating filter; `null` = filter off. */
+export interface RatingRange {
+  min: number;
+  max: number;
+}
+
+/**
+ * Keep tracks whose crowd-rating average (see {@link resolveTrackRating}) falls
+ * inside the inclusive `range`. Unrated tracks never match an active range —
+ * a rating filter means "show me songs people scored like this", so no-votes
+ * rows drop out rather than pretending to be 0-star. `null` passes through.
+ */
+export function filterTracksByRating(tracks: Track[], range: RatingRange | null): Track[] {
+  if (!range) return tracks;
+  return tracks.filter((track) => {
+    const rating = resolveTrackRating(track);
+    return rating !== null && rating.average >= range.min && rating.average <= range.max;
+  });
 }

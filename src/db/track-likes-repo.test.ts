@@ -1,7 +1,7 @@
 import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "./muzero-db";
-import { isTrackLiked, likedTrackIdSet, setTrackLiked } from "./repositories";
+import { isTrackLiked, likedTrackIdSet, setTrackLiked, setTracksLiked } from "./repositories";
 import { likeRowsFromLegacyTracks } from "./track-likes";
 import type { Track } from "./types";
 
@@ -54,6 +54,22 @@ describe("track likes side table (Axis A — liked off catalog)", () => {
 
   it("isTrackLiked is false for an absent / unliked track", async () => {
     expect(await isTrackLiked("missing", db)).toBe(false);
+  });
+
+  it("setTracksLiked likes many tracks at once", async () => {
+    await seedTrack("a");
+    await seedTrack("b");
+    await seedTrack("c");
+    await setTracksLiked(["a", "c"], true, db);
+    expect(await likedTrackIdSet(db)).toEqual(new Set(["a", "c"]));
+  });
+
+  it("setTracksLiked with liked=false unlikes many tracks at once", async () => {
+    await seedTrack("a");
+    await seedTrack("b");
+    await setTracksLiked(["a", "b"], true, db);
+    await setTracksLiked(["a", "b"], false, db);
+    expect(await likedTrackIdSet(db)).toEqual(new Set());
   });
 });
 
