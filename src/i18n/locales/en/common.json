@@ -1425,6 +1425,11 @@
     "onlinePlaylistCount_one": "{{count}} playlist",
     "onlinePlaylistCount_other": "{{count}} playlists",
     "allOnlineSources": "All sources",
+    "sourceFilter": {
+      "all": "All",
+      "local": "Local",
+      "online": "Online"
+    },
     "refreshOnlinePlaylists": "Refresh",
     "onlinePlaylistNoMatches": "No online playlists match your filters.",
     "cloudSourceUnknown": "Cloud source",

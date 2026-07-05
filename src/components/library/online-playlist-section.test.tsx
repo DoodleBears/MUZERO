@@ -10,14 +10,12 @@ const playlists: OnlinePlaylistCatalogEntry[] = [
 ];
 
 describe("OnlinePlaylistSection", () => {
-  it("renders source chips and opens a playlist", () => {
+  it("renders online playlists and opens a playlist", () => {
     const onOpen = vi.fn();
     render(
       <OnlinePlaylistSection
         playlists={playlists}
         query=""
-        sourceFilter="all"
-        onSourceFilterChange={vi.fn()}
         onOpen={onOpen}
         onImport={vi.fn()}
         onRefresh={vi.fn()}
@@ -25,20 +23,17 @@ describe("OnlinePlaylistSection", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /网易云/i })).toBeInTheDocument();
     expect(screen.getByText("只熊喜欢的音乐")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "只熊喜欢的音乐" }));
     expect(onOpen).toHaveBeenCalledWith(playlists[0]);
   });
 
-  it("filters by selected source and text query", () => {
+  it("filters by text query", () => {
     const { rerender } = render(
       <OnlinePlaylistSection
         playlists={playlists}
-        query=""
-        sourceFilter="bili"
-        onSourceFilterChange={vi.fn()}
+        query="动画"
         onOpen={vi.fn()}
         onImport={vi.fn()}
         onRefresh={vi.fn()}
@@ -53,8 +48,6 @@ describe("OnlinePlaylistSection", () => {
       <OnlinePlaylistSection
         playlists={playlists}
         query="喜欢"
-        sourceFilter="all"
-        onSourceFilterChange={vi.fn()}
         onOpen={vi.fn()}
         onImport={vi.fn()}
         onRefresh={vi.fn()}
@@ -73,8 +66,6 @@ describe("OnlinePlaylistSection", () => {
       <OnlinePlaylistSection
         playlists={playlists}
         query=""
-        sourceFilter="all"
-        onSourceFilterChange={vi.fn()}
         onOpen={onOpen}
         onImport={onImport}
         onRefresh={vi.fn()}
@@ -85,24 +76,5 @@ describe("OnlinePlaylistSection", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "streamSources.import" })[0]);
     expect(onImport).toHaveBeenCalledWith(playlists[0]);
     expect(onOpen).not.toHaveBeenCalled();
-  });
-
-  it("exposes source filter chips", () => {
-    const onSourceFilterChange = vi.fn();
-    render(
-      <OnlinePlaylistSection
-        playlists={playlists}
-        query=""
-        sourceFilter="all"
-        onSourceFilterChange={onSourceFilterChange}
-        onOpen={vi.fn()}
-        onImport={vi.fn()}
-        onRefresh={vi.fn()}
-        view="grid"
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Bilibili" }));
-    expect(onSourceFilterChange).toHaveBeenCalledWith("bili");
   });
 });

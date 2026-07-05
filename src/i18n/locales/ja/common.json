@@ -1404,6 +1404,11 @@
     "onlinePlaylists": "オンラインプレイリスト",
     "onlinePlaylistCount_other": "{{count}} 件のプレイリスト",
     "allOnlineSources": "すべてのソース",
+    "sourceFilter": {
+      "all": "すべて",
+      "local": "ローカル",
+      "online": "オンライン"
+    },
     "refreshOnlinePlaylists": "更新",
     "onlinePlaylistNoMatches": "条件に一致するオンラインプレイリストはありません。",
     "cloudSourceUnknown": "クラウドソース",

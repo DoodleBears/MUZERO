@@ -27,10 +27,7 @@ import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { EntityDetailView } from "@/components/library/entity-detail";
 import { EntityCard, EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
 import { HoverScrollbar } from "@/components/library/hover-scrollbar";
-import {
-  OnlinePlaylistSection,
-  type OnlinePlaylistSourceFilter,
-} from "@/components/library/online-playlist-section";
+import { OnlinePlaylistSection } from "@/components/library/online-playlist-section";
 import { RatingFilterChip } from "@/components/library/rating-filter-chip";
 import { FilterChip, SortChip } from "@/components/library/sort-chip";
 import {
@@ -81,7 +78,14 @@ import {
   setTrackCover,
   updateSession,
 } from "@/db/repositories";
-import type { CropRect, DjSession, PlaybackEvent, SetOrigin, Track } from "@/db/types";
+import type {
+  CropRect,
+  DjSession,
+  PlaybackEvent,
+  SetOrigin,
+  StreamSourceId,
+  Track,
+} from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import { useCoverMetadataBackfill, useGridCoverUrl, useTrackCoverUrl } from "@/hooks/use-media";
@@ -159,6 +163,7 @@ import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useIsSetBulkDownloading } from "@/stores/stream-cache-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
+import { filterOnlinePlaylists, STREAM_SOURCE_DISPLAY_NAMES } from "@/streamsrc/playlist-catalog";
 import type { StreamPlaylist } from "@/streamsrc/provider";
 import { isTrackCacheableToDevice } from "@/streamsrc/source-detect";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
@@ -213,8 +218,11 @@ const TRACK_SORT_KEY = "muzero-gallery-track-sort";
 const TRACK_SORT_DIR_KEY = "muzero-gallery-track-sort-dir";
 const SET_SORT_KEY = "muzero-gallery-set-sort";
 const SET_SORT_DIR_KEY = "muzero-gallery-set-sort-dir";
+const SET_SOURCE_FILTER_KEY = "muzero-gallery-set-source-filter";
 const ENTITY_SORT_KEY = "muzero-gallery-entity-sort";
 const ENTITY_SORT_DIR_KEY = "muzero-gallery-entity-sort-dir";
+type SetSourceFilter = "all" | "local" | "online" | StreamSourceId;
+const STREAM_SOURCE_FILTERS = Object.keys(STREAM_SOURCE_DISPLAY_NAMES) as StreamSourceId[];
 
 function savedSortDir(key: string, fallback: SortDir): SortDir {
   if (typeof localStorage === "undefined") return fallback;
@@ -291,6 +299,22 @@ function savedSetSort(): SetSort {
   return saved && saved in SET_SORT_DEFAULT_DIR ? (saved as SetSort) : "recent";
 }
 
+function isStreamSourceId(value: string): value is StreamSourceId {
+  return value in STREAM_SOURCE_DISPLAY_NAMES;
+}
+
+function savedSetSourceFilter(): SetSourceFilter {
+  if (typeof localStorage === "undefined") return "all";
+  const saved = localStorage.getItem(SET_SOURCE_FILTER_KEY);
+  if (
+    saved &&
+    (saved === "all" || saved === "local" || saved === "online" || isStreamSourceId(saved))
+  ) {
+    return saved;
+  }
+  return "all";
+}
+
 function savedEntitySort(): EntitySort {
   if (typeof localStorage === "undefined") return "name";
   const saved = localStorage.getItem(ENTITY_SORT_KEY);
@@ -357,7 +381,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   // Settings streaming section — hidden on web / when no source is configured.
   const streamingSupported = hasStreamingSources();
   const [setQuery, setSetQuery] = useState("");
-  const [onlineSourceFilter, setOnlineSourceFilter] = useState<OnlinePlaylistSourceFilter>("all");
+  const [setSourceFilter, setSetSourceFilter] = useState<SetSourceFilter>(savedSetSourceFilter);
   const [onlineImportTarget, setOnlineImportTarget] = useState<StreamPlaylist | null>(null);
   const [trackQuery, setTrackQuery] = useState("");
   const [albumQuery, setAlbumQuery] = useState("");
@@ -557,6 +581,24 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
       !selectedSetId &&
       !selectedSystemPlaylistId &&
       !selectedOnlinePlaylist,
+  );
+  const showLocalPlaylists = setSourceFilter === "all" || setSourceFilter === "local";
+  const showOnlinePlaylists =
+    setSourceFilter === "all" || setSourceFilter === "online" || isStreamSourceId(setSourceFilter);
+  const onlineSourceOptions = useMemo(() => {
+    const available = new Set(onlineCatalog.playlists.map((playlist) => playlist.source));
+    return STREAM_SOURCE_FILTERS.filter(
+      (source) => available.has(source) || setSourceFilter === source,
+    );
+  }, [onlineCatalog.playlists, setSourceFilter]);
+  const onlineSourceFilteredPlaylists = useMemo(() => {
+    if (!showOnlinePlaylists) return [];
+    if (setSourceFilter === "all" || setSourceFilter === "online") return onlineCatalog.playlists;
+    return onlineCatalog.playlists.filter((playlist) => playlist.source === setSourceFilter);
+  }, [onlineCatalog.playlists, setSourceFilter, showOnlinePlaylists]);
+  const visibleOnlinePlaylists = useMemo(
+    () => filterOnlinePlaylists(onlineSourceFilteredPlaylists, setQuery),
+    [onlineSourceFilteredPlaylists, setQuery],
   );
 
   // Songs that live ONLY in the set being deleted — shown in the "+ songs" option.
@@ -959,20 +1001,29 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shown = useMemo(() => {
-    if (!needsSetWall) return items;
+    if (!needsSetWall || !showLocalPlaylists) return [];
     const byOrigin =
       originFilter === "all"
         ? items
         : items.filter((it) => resolveSetOrigin(it.session) === originFilter);
     return sortSets(filterSets(byOrigin, setQuery), sort, sortDir);
-  }, [items, setQuery, sort, sortDir, transliterationReady, needsSetWall, originFilter]);
+  }, [
+    items,
+    setQuery,
+    sort,
+    sortDir,
+    transliterationReady,
+    needsSetWall,
+    originFilter,
+    showLocalPlaylists,
+  ]);
   // Only the sets home shows the system-playlist cards, yet these derive a
   // recency/most-played sort over the WHOLE library (twice). Gate to the sets tab so
   // sitting on tracks/artists/albums while music plays doesn't re-sort 6k tracks per
   // heartbeat for cards that aren't on screen; the stats inputs are deferred too.
   const systemPlaylistRows = useMemo(
     () =>
-      needsSetWall
+      needsSetWall && showLocalPlaylists
         ? {
             "system:liked": deriveHeartedPlaylist(allTracks, likedIds).map(trackToSystemPlayable),
             "system:recent": deriveRecentlyPlayedPlaylist(allTracks, {
@@ -991,6 +1042,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
         : EMPTY_SYSTEM_PLAYLIST_ROWS,
     [
       needsSetWall,
+      showLocalPlaylists,
       allTracks,
       deferredPlaybackEvents,
       deferredPlaybackStats,
@@ -1000,7 +1052,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   );
   const systemPlaylistItems = useMemo<SystemPlaylistCardItem[]>(
     () =>
-      needsSetWall
+      needsSetWall && showLocalPlaylists
         ? SYSTEM_PLAYLISTS.map((playlist) => ({
             count: systemPlaylistRows[playlist.id].length,
             coverTrack: pickSystemPlaylistCoverTrack(systemPlaylistRows[playlist.id]),
@@ -1011,7 +1063,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
             subtitle: t("gallery.count", { count: systemPlaylistRows[playlist.id].length }),
           }))
         : [],
-    [systemPlaylistRows, t, needsSetWall],
+    [systemPlaylistRows, t, needsSetWall, showLocalPlaylists],
   );
   // Stable key accessors for the virtualized walls (kept stable so the grid's
   // memoized scroll/focus callbacks don't churn every render).
@@ -1022,15 +1074,23 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   const galleryKeys = useMemo<string[]>(() => {
     if (mode === "sets") {
       return [
-        ...systemPlaylistItems.map((item) => item.id),
-        ...onlineCatalog.playlists.map((playlist) => `online:${playlist.source}:${playlist.id}`),
+        ...(showLocalPlaylists ? systemPlaylistItems.map((item) => item.id) : []),
+        ...visibleOnlinePlaylists.map((playlist) => `online:${playlist.source}:${playlist.id}`),
         ...shown.map((item) => item.session.id),
       ];
     }
     if (mode === "albums") return albumItems.map((item) => item.key);
     if (mode === "artists") return artistItems.map((item) => item.key);
     return [];
-  }, [mode, shown, albumItems, artistItems, systemPlaylistItems, onlineCatalog.playlists]);
+  }, [
+    mode,
+    shown,
+    albumItems,
+    artistItems,
+    systemPlaylistItems,
+    visibleOnlinePlaylists,
+    showLocalPlaylists,
+  ]);
   const galleryKeysRef = useRef(galleryKeys);
   galleryKeysRef.current = galleryKeys;
   // Pre-sort + liked-filter, then search: with no query the chosen order shows
@@ -1188,6 +1248,11 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
       localStorage.setItem(SET_SORT_KEY, next);
       localStorage.setItem(SET_SORT_DIR_KEY, dir);
     }
+  }
+
+  function onSetSourceFilterClick(next: SetSourceFilter) {
+    setSetSourceFilter(next);
+    if (typeof localStorage !== "undefined") localStorage.setItem(SET_SOURCE_FILTER_KEY, next);
   }
 
   function onTrackSortClick(next: TrackSort) {
@@ -1846,77 +1911,121 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
                   {t("gallery.sortSize")}
                 </SortChip>
                 <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-                {SET_ORIGINS.map((o) => (
+                <FilterChip
+                  active={setSourceFilter === "all"}
+                  onClick={() => onSetSourceFilterClick("all")}
+                >
+                  {t("gallery.sourceFilter.all")}
+                </FilterChip>
+                <FilterChip
+                  active={setSourceFilter === "local"}
+                  onClick={() => onSetSourceFilterClick("local")}
+                >
+                  {t("gallery.sourceFilter.local")}
+                </FilterChip>
+                <FilterChip
+                  active={setSourceFilter === "online"}
+                  onClick={() => onSetSourceFilterClick("online")}
+                >
+                  {t("gallery.sourceFilter.online")}
+                </FilterChip>
+                {onlineSourceOptions.map((source) => (
                   <FilterChip
-                    key={o}
-                    active={originFilter === o}
-                    onClick={() => setOriginFilter((cur) => (cur === o ? "all" : o))}
+                    key={source}
+                    active={setSourceFilter === source}
+                    onClick={() => onSetSourceFilterClick(source)}
                   >
-                    {t(`gallery.origin.${o}` as const)}
+                    {STREAM_SOURCE_DISPLAY_NAMES[source]}
                   </FilterChip>
                 ))}
+                {showLocalPlaylists ? (
+                  <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+                ) : null}
+                {showLocalPlaylists
+                  ? SET_ORIGINS.map((o) => (
+                      <FilterChip
+                        key={o}
+                        active={originFilter === o}
+                        onClick={() => setOriginFilter((cur) => (cur === o ? "all" : o))}
+                      >
+                        {t(`gallery.origin.${o}` as const)}
+                      </FilterChip>
+                    ))
+                  : null}
               </div>
 
-              <div className="px-3">
-                <RenderTraceBoundary id="search:sets:system-cards" active={searchTabActive}>
-                  <SystemPlaylistCards
-                    items={systemPlaylistItems}
-                    view={activeWallView}
-                    onOpen={openSystemPlaylist}
-                    onPlay={playSystemSet}
-                  />
-                </RenderTraceBoundary>
-              </div>
+              {showLocalPlaylists ? (
+                <div className="px-3">
+                  <RenderTraceBoundary id="search:sets:system-cards" active={searchTabActive}>
+                    <SystemPlaylistCards
+                      items={systemPlaylistItems}
+                      view={activeWallView}
+                      onOpen={openSystemPlaylist}
+                      onPlay={playSystemSet}
+                    />
+                  </RenderTraceBoundary>
+                </div>
+              ) : null}
 
-              <OnlinePlaylistSection
-                playlists={onlineCatalog.playlists}
-                query={setQuery}
-                sourceFilter={onlineSourceFilter}
-                onSourceFilterChange={setOnlineSourceFilter}
-                onOpen={setSelectedOnlinePlaylist}
-                onImport={setOnlineImportTarget}
-                onRefresh={() => void onlineCatalog.refreshAll()}
-                refreshing={onlineCatalog.syncing}
-                view={activeWallView}
-                scrollElement={wallScrollEl}
-                lenisRef={wallLenisRef}
-              />
+              {showOnlinePlaylists ? (
+                <OnlinePlaylistSection
+                  playlists={onlineSourceFilteredPlaylists}
+                  query={setQuery}
+                  onOpen={setSelectedOnlinePlaylist}
+                  onImport={setOnlineImportTarget}
+                  onRefresh={() => void onlineCatalog.refreshAll()}
+                  refreshing={onlineCatalog.syncing}
+                  view={activeWallView}
+                  scrollElement={wallScrollEl}
+                  lenisRef={wallLenisRef}
+                />
+              ) : null}
+              {showOnlinePlaylists &&
+              !showLocalPlaylists &&
+              onlineSourceFilteredPlaylists.length === 0 ? (
+                <p className="mt-12 text-center text-muted-foreground text-sm">
+                  {t("gallery.onlinePlaylistNoMatches")}
+                </p>
+              ) : null}
 
               {/* Right-click anywhere on the wall (incl. empty space) to start a new set. */}
-              <ContextMenu>
-                <ContextMenuTrigger className="block min-h-[40vh] px-3">
-                  {shown.length === 0 ? (
-                    sessions.length === 0 && setQuery.trim() === "" ? (
-                      <LibraryImportEmptyState className="mt-6" actions="direct" />
+              {showLocalPlaylists ? (
+                <ContextMenu>
+                  <ContextMenuTrigger className="block min-h-[40vh] px-3">
+                    {shown.length === 0 ? (
+                      visibleOnlinePlaylists.length > 0 ? null : sessions.length === 0 &&
+                        setQuery.trim() === "" ? (
+                        <LibraryImportEmptyState className="mt-6" actions="direct" />
+                      ) : (
+                        <p className="mt-12 text-center text-sm text-muted-foreground">
+                          {t("gallery.empty")}
+                        </p>
+                      )
                     ) : (
-                      <p className="mt-12 text-center text-sm text-muted-foreground">
-                        {t("gallery.empty")}
-                      </p>
-                    )
-                  ) : (
-                    <RenderTraceBoundary id="search:sets:grid" active={searchTabActive}>
-                      <VirtualCardGrid
-                        gridRef={galleryRef}
-                        items={shown}
-                        view={activeWallView}
-                        getKey={getSetKey}
-                        className={wallAlphabet ? "pr-6" : undefined}
-                        scrollElement={wallScrollEl}
-                        lenisRef={wallLenisRef}
-                        restoreScrollTop={wallScrollTops.current.sets}
-                        initialFocusKey={returnFocusKeyRef.current}
-                        onInitialFocusHandled={handleSetInitialFocusHandled}
-                        renderCard={renderSetCard}
-                      />
-                    </RenderTraceBoundary>
-                  )}
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem onClick={() => void createNewSet()}>
-                    <Plus /> {t("gallery.newSet")}
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
+                      <RenderTraceBoundary id="search:sets:grid" active={searchTabActive}>
+                        <VirtualCardGrid
+                          gridRef={galleryRef}
+                          items={shown}
+                          view={activeWallView}
+                          getKey={getSetKey}
+                          className={wallAlphabet ? "pr-6" : undefined}
+                          scrollElement={wallScrollEl}
+                          lenisRef={wallLenisRef}
+                          restoreScrollTop={wallScrollTops.current.sets}
+                          initialFocusKey={returnFocusKeyRef.current}
+                          onInitialFocusHandled={handleSetInitialFocusHandled}
+                          renderCard={renderSetCard}
+                        />
+                      </RenderTraceBoundary>
+                    )}
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onClick={() => void createNewSet()}>
+                      <Plus /> {t("gallery.newSet")}
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              ) : null}
             </>
           )}
           {deletingSet ? (

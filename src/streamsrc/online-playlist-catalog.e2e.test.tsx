@@ -60,8 +60,6 @@ describe("online playlist catalog E2E harness", () => {
       <OnlinePlaylistSection
         playlists={catalogRows}
         query="喜欢"
-        sourceFilter="all"
-        onSourceFilterChange={vi.fn()}
         onOpen={openFromLibrary}
         onImport={importFromLibrary}
         onRefresh={vi.fn()}

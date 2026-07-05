@@ -468,6 +468,31 @@ Scrollbar requirement:
 
 ---
 
+## Follow-up: Unified Sets Source Filter
+
+**Date:** 2026-07-05  
+**Status:** Completed
+
+**Product Adjustment:** The Library sets wall source filter is a wall-level preference, not an online-section-only filter. Users can choose:
+- all playlists: local sets, local system playlists, and online playlists.
+- local only: local sets and local system playlists.
+- online only: all online playlists.
+- one online platform: only playlists from that source, such as NetEase, Bilibili, or QQ Music.
+
+**Implementation Notes:**
+- Added a persisted sets-wall source filter preference (`all` / `local` / `online` / specific `StreamSourceId`) using the same local UI preference pattern as gallery mode, view, and sort.
+- Moved source filtering into the sets wall toolbar so it controls local/system/online playlist visibility together.
+- Kept origin chips visible only when local playlists are part of the current source filter.
+- Reworked online playlist cards to match the existing set gallery style: square cover-first grid cards, list cards with 48px cover, same hover/focus affordances, and source chip as metadata.
+- Updated roving gallery key order so keyboard navigation only includes cards visible under the current source/text filters.
+
+**Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\library\online-playlist-section.test.tsx src\components\library\system-playlist-cards.test.tsx src\streamsrc\online-playlist-catalog.e2e.test.tsx src\components\settings\stream-sources-settings.test.tsx src\streamsrc\playlist-catalog.test.ts`
+- `node_modules\.bin\biome.CMD check src\pages\search-page.tsx src\components\library\online-playlist-section.tsx src\components\library\online-playlist-section.test.tsx src\streamsrc\online-playlist-catalog.e2e.test.tsx src\i18n\locales\en\common.json src\i18n\locales\zh\common.json src\i18n\locales\ja\common.json src\i18n\locales\ko\common.json`
+- `node_modules\.bin\tsc.CMD --noEmit --pretty false`
+
+---
+
 ## 7. Out of Scope
 
 - Importing every synced playlist automatically as `DjSession`.
@@ -525,7 +550,7 @@ Scrollbar requirement:
 3. Library 中点击在线歌单可打开详情并在线播放，不要求先导入。
 4. Library 中仍提供导入入口，复用现有 `PlaylistImportDialog`。
 5. Library 在线歌单卡片显示平台来源 chip。
-6. Library sets wall 顶部/toolbar 可按在线来源平台过滤，并与文字搜索组合生效。
+6. Library sets wall 顶部/toolbar 的来源 filter 可选择全部、本地、全部在线或特定在线平台，并与文字搜索组合生效。
 7. Settings 在线音源下的歌单列表有最大高度，不再撑满整页。
 8. Settings 歌单列表支持文字过滤，歌单多时可快速定位。
 9. Settings 滚动条为 thin 且 track/background 透明。
@@ -546,3 +571,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Completed Phase 3: Settings online-source playlists now read the shared catalog, refresh per source, filter by text/source aliases, and render in a bounded thin-transparent-scrollbar container while preserving open/import/sync controls. |
 | 2026-07-05 | Codex | Completed Phase 4 and set PRD status to Completed: added local E2E-style harness and final targeted verification for catalog sync, Library display/filter/open/import, Settings bounded filter list, i18n coverage, Biome, and typecheck. |
 | 2026-07-05 | Codex | Fixed NetEase refresh-storm regression: failed catalog refreshes now record `attemptedAt` and are auto-retried only after the stale window, while manual refresh still forces retry. |
+| 2026-07-05 | Codex | Completed source-filter follow-up: sets wall filter now persists and supports all/local/online/specific-platform modes; online playlist cards now match the existing local set gallery grid/list style. |
