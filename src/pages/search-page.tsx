@@ -1075,8 +1075,8 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
     if (mode === "sets") {
       return [
         ...(showLocalPlaylists ? systemPlaylistItems.map((item) => item.id) : []),
-        ...visibleOnlinePlaylists.map((playlist) => `online:${playlist.source}:${playlist.id}`),
         ...shown.map((item) => item.session.id),
+        ...visibleOnlinePlaylists.map((playlist) => `online:${playlist.source}:${playlist.id}`),
       ];
     }
     if (mode === "albums") return albumItems.map((item) => item.key);
@@ -1967,27 +1967,6 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
                 </div>
               ) : null}
 
-              {showOnlinePlaylists ? (
-                <OnlinePlaylistSection
-                  playlists={onlineSourceFilteredPlaylists}
-                  query={setQuery}
-                  onOpen={setSelectedOnlinePlaylist}
-                  onImport={setOnlineImportTarget}
-                  onRefresh={() => void onlineCatalog.refreshAll()}
-                  refreshing={onlineCatalog.syncing}
-                  view={activeWallView}
-                  scrollElement={wallScrollEl}
-                  lenisRef={wallLenisRef}
-                />
-              ) : null}
-              {showOnlinePlaylists &&
-              !showLocalPlaylists &&
-              onlineSourceFilteredPlaylists.length === 0 ? (
-                <p className="mt-12 text-center text-muted-foreground text-sm">
-                  {t("gallery.onlinePlaylistNoMatches")}
-                </p>
-              ) : null}
-
               {/* Right-click anywhere on the wall (incl. empty space) to start a new set. */}
               {showLocalPlaylists ? (
                 <ContextMenu>
@@ -2025,6 +2004,27 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
+              ) : null}
+
+              {showOnlinePlaylists ? (
+                <OnlinePlaylistSection
+                  playlists={onlineSourceFilteredPlaylists}
+                  query={setQuery}
+                  onOpen={setSelectedOnlinePlaylist}
+                  onImport={setOnlineImportTarget}
+                  onRefresh={() => void onlineCatalog.refreshAll()}
+                  refreshing={onlineCatalog.syncing}
+                  view={activeWallView}
+                  scrollElement={wallScrollEl}
+                  lenisRef={wallLenisRef}
+                />
+              ) : null}
+              {showOnlinePlaylists &&
+              !showLocalPlaylists &&
+              onlineSourceFilteredPlaylists.length === 0 ? (
+                <p className="mt-12 text-center text-muted-foreground text-sm">
+                  {t("gallery.onlinePlaylistNoMatches")}
+                </p>
               ) : null}
             </>
           )}

@@ -482,6 +482,7 @@ Scrollbar requirement:
 **Implementation Notes:**
 - Added a persisted sets-wall source filter preference (`all` / `local` / `online` / specific `StreamSourceId`) using the same local UI preference pattern as gallery mode, view, and sort.
 - Moved source filtering into the sets wall toolbar so it controls local/system/online playlist visibility together.
+- In `all` mode, preserved the wall hierarchy as system playlists first, local playlists in the middle, and online playlists below local content.
 - Kept origin chips visible only when local playlists are part of the current source filter.
 - Reworked online playlist cards to match the existing set gallery style: square cover-first grid cards, list cards with 48px cover, same hover/focus affordances, and source chip as metadata.
 - Updated roving gallery key order so keyboard navigation only includes cards visible under the current source/text filters.
@@ -572,3 +573,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Completed Phase 4 and set PRD status to Completed: added local E2E-style harness and final targeted verification for catalog sync, Library display/filter/open/import, Settings bounded filter list, i18n coverage, Biome, and typecheck. |
 | 2026-07-05 | Codex | Fixed NetEase refresh-storm regression: failed catalog refreshes now record `attemptedAt` and are auto-retried only after the stale window, while manual refresh still forces retry. |
 | 2026-07-05 | Codex | Completed source-filter follow-up: sets wall filter now persists and supports all/local/online/specific-platform modes; online playlist cards now match the existing local set gallery grid/list style. |
+| 2026-07-05 | Codex | Adjusted all-source wall ordering so local playlists remain the primary middle section and online playlists render underneath them, with roving keyboard order matching the visible layout. |
