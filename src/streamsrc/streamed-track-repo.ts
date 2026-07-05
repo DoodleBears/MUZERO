@@ -70,6 +70,19 @@ export async function findStreamedTrack(
     .first();
 }
 
+/** Find a downloaded streamed video anywhere in the library by stable source ref. */
+export async function findLocalDownloadedVideo(
+  sourceId: StreamSourceId,
+  externalId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<Track | undefined> {
+  return db.tracks
+    .where("[streamSourceId+streamExternalId]")
+    .equals([sourceId, externalId])
+    .filter((t) => t.origin === "streamed" && t.kind === "video" && Boolean(t.blobId))
+    .first();
+}
+
 /** Membership key for streamed-track dedupe within a session. */
 const streamedTrackKey = (sourceId: string, externalId: string) => `${sourceId}:${externalId}`;
 

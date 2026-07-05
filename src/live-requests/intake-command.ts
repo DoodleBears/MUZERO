@@ -114,6 +114,7 @@ export function resolveCommands(intake: {
         ? intake.commandPrefixes
         : defaultSongPrefixes,
     routeMode: intake.routeMode ?? "library-search",
+    mediaKind: "audio",
   };
   return [songSearch, ...DEFAULT_INTAKE_COMMANDS.filter((c) => c.id !== "song-search")];
 }

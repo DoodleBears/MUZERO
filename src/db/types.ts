@@ -713,6 +713,8 @@ export interface AudienceRequestIntakeSettings {
   requesterCooldownSec: number;
   maxRequestsPerMinute: number;
   requireApprovalForPlayNow: boolean;
+  /** 点视频请求最大视频时长（秒）。Undefined = 480（8 分钟）。 */
+  maxVideoRequestDurationSec?: number;
   /** Configured intake sources. Defaults to a single auto-mapping "default" source. */
   sources?: AudienceRequestSource[];
   /**
@@ -754,6 +756,8 @@ export interface IntakeCommand {
   prefixes: string[];
   /** `request` only: the route this command forces (overrides source/global routeMode). */
   routeMode?: AudienceRequestRouteMode;
+  /** `request` only: fulfill as audio search (default) or as a downloaded video request. */
+  mediaKind?: "audio" | "video";
   /** `request` only: optional per-command playback action override. */
   playbackAction?: AudienceRequestPlaybackAction;
   /** Default true; set false to disable a command without deleting it. */
@@ -769,6 +773,12 @@ export const DEFAULT_INTAKE_COMMANDS: IntakeCommand[] = [
     routeMode: "library-search",
   },
   { id: "ai-dj", intent: "request", prefixes: ["AI点歌", "DJ", "生成", "ai:"], routeMode: "ai-dj" },
+  {
+    id: "video-request",
+    intent: "request",
+    mediaKind: "video",
+    prefixes: ["点视频", "!mv", "video:"],
+  },
   { id: "comment", intent: "comment", prefixes: ["评论", "comment:", "留言"] },
   { id: "rating", intent: "rating", prefixes: ["评分", "rate:", "打分"] },
 ];
@@ -789,6 +799,7 @@ export const DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS: AudienceRequestIntakeSett
   dedupeWindowSec: 30,
   requesterCooldownSec: 10,
   maxRequestsPerMinute: 30,
+  maxVideoRequestDurationSec: 480,
   // No manual approval in the live-request flow (PRD Q4) — a confident match plays
   // straight away. "testing" mode is the pre-launch gate, not per-request review.
   requireApprovalForPlayNow: false,

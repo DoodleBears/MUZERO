@@ -81,6 +81,19 @@ describe("parseBareStreamId", () => {
     expect(parseBareStreamId("av170001")).toEqual({ source: "bili", kind: "song", id: "av170001" });
   });
 
+  it("preserves a Bilibili part cid suffix on bare ids", () => {
+    expect(parseBareStreamId("BV1HLz9BJEgi#998877")).toEqual({
+      source: "bili",
+      kind: "song",
+      id: "BV1HLz9BJEgi#998877",
+    });
+    expect(parseBareStreamId("av170001#998877")).toEqual({
+      source: "bili",
+      kind: "song",
+      id: "av170001#998877",
+    });
+  });
+
   it("recognizes a bare 11-char YouTube id (BV is 12 chars → no collision)", () => {
     expect(parseBareStreamId("0EbmNplrNqE")).toEqual({
       source: "youtube",

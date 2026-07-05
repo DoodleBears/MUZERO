@@ -20,6 +20,14 @@ describe("matchIntakeCommand — default command table", () => {
     expect(m?.body).toBe("来点citypop");
   });
 
+  it("routes 点视频 to the video request command", () => {
+    const m = matchIntakeCommand("点视频 BV1HLz9BJEgi", cmds);
+    expect(m?.command.id).toBe("video-request");
+    expect(m?.command.intent).toBe("request");
+    expect(m?.command.mediaKind).toBe("video");
+    expect(m?.body).toBe("BV1HLz9BJEgi");
+  });
+
   it("classifies a comment with no timestamp as floating", () => {
     const m = matchIntakeCommand("评论 这段副歌绝了", cmds);
     expect(m?.command.intent).toBe("comment");
@@ -110,7 +118,14 @@ describe("resolveCommands — legacy migration", () => {
     const song = cmds.find((c) => c.id === "song-search");
     expect(song?.prefixes).toEqual(["点歌", "!sr"]);
     expect(song?.routeMode).toBe("hybrid");
-    expect(cmds.map((c) => c.id)).toEqual(["song-search", "ai-dj", "comment", "rating"]);
+    expect(cmds.map((c) => c.id)).toEqual([
+      "song-search",
+      "ai-dj",
+      "video-request",
+      "comment",
+      "rating",
+    ]);
+    expect(cmds.find((c) => c.id === "video-request")?.mediaKind).toBe("video");
   });
 
   it("falls back to default prefixes + library-search when legacy is empty", () => {

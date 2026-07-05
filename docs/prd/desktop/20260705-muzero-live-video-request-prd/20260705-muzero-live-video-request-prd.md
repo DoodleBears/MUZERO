@@ -1,6 +1,6 @@
 # PRD: MUZERO 点视频（弹幕点 MV / 视频请求）—— 关键词区分 + 来源 id 本地优先 + 时长上限 + 预设清晰度下载
 
-**Status:** Draft
+**Status:** In Progress
 **Created:** 2026-07-05
 **Author:** DoodleBear
 **Module:** `src/live-requests/`（intake-command / runtime / controller）· `src/streamsrc/`（stream-link / download-action / streamed-track-repo）· `src/db/types.ts`（intake 命令 + 时长上限设置）· Settings（点歌/点视频命令表 + 清晰度）
@@ -17,7 +17,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 数据模型 + 命令模型：`点视频` intake 命令（`mediaKind:"video"`）+ 时长上限设置 + 库级 by-id 查找（纯函数） | 🔲 Pending | [Phase 1](#phase-1数据--命令模型纯函数) |
+| 1 | 数据模型 + 命令模型：`点视频` intake 命令（`mediaKind:"video"`）+ 时长上限设置 + 库级 by-id 查找（纯函数） | ✅ Completed | [Phase 1](#phase-1数据--命令模型纯函数) |
 | 2 | 请求 fulfillment：id 定向解析 → 本地优先 → 时长闸门 → 预设清晰度下载 → 入队播放（注入式 orchestrator） | 🔲 Pending | [Phase 2](#phase-2请求-fulfillment-orchestrator) |
 | 3 | 控制器接线 + 通知 + 播放时序（download-then-enqueue / 队列化，抗 OOM） | 🔲 Pending | [Phase 3](#phase-3控制器接线--通知--播放时序) |
 | 4 | Settings UI（点视频命令表 + 时长上限 + 清晰度）+ i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4](#phase-4settings-ui--i18n) |
@@ -407,20 +407,20 @@ components/settings/
 **Goal:** 命令模型认识「点视频」、请求规划能产出 verdict、库级 by-id 查找就位——全纯函数，不下载、不播放。
 
 **Tasks:**
-- [ ] `IntakeCommand.mediaKind?` + `DEFAULT_INTAKE_COMMANDS` 追加 `video-request` + `resolveCommands` legacy 合成并入该条（附加字段）。
-- [ ] `IntakeCommandMatch` 透传整个 `command`（controller 需读 `mediaKind`）；`matchIntakeCommand` 逻辑**不变**（回归既有测试）。
-- [ ] `AudienceRequestIntakeSettings.maxVideoRequestDurationSec?` + `DEFAULT_...` 给 480。
-- [ ] **Q4 索引**：`muzero-db.ts` `version(33)` tracks 加复合索引 `[streamSourceId+streamExternalId]`（保留 v32 全部既有索引串；无 upgrade 回调）。
-- [ ] **Q3 解析**：`normalizeVideoRequestBody`（`bvid 空格 cid` → `bvid#cid`，纯）+ `parseBareStreamId` 扩为保留 `#cid` 后缀（不再丢弃）；`resolvePartRef`（注入 `fetchFirstCid`，无 cid→P1）。穷举单测。
-- [ ] `video-request.ts`：`withinRequestDurationLimit` + `planVideoRequest`（纯 + 注入，7 分支 + 时长边界 + 分P补全 + blob-gate 穷举单测）。
-- [ ] `streamed-track-repo.ts`：`findLocalDownloadedVideo(source, externalId)`（走 v33 复合索引；**仅 `kind:"video" && blobId` 齐全算命中**，Q6）。`fake-indexeddb` 单测：命中有 blob / 有引用无 blob（不命中）/ 未命中 / 精确 cid 区分 P1≠P3。
+- [x] `IntakeCommand.mediaKind?` + `DEFAULT_INTAKE_COMMANDS` 追加 `video-request` + `resolveCommands` legacy 合成并入该条（附加字段）。
+- [x] `IntakeCommandMatch` 透传整个 `command`（controller 需读 `mediaKind`）；`matchIntakeCommand` 逻辑**不变**（回归既有测试）。
+- [x] `AudienceRequestIntakeSettings.maxVideoRequestDurationSec?` + `DEFAULT_...` 给 480。
+- [x] **Q4 索引**：`muzero-db.ts` `version(33)` tracks 加复合索引 `[streamSourceId+streamExternalId]`（保留 v32 全部既有索引串；无 upgrade 回调）。
+- [x] **Q3 解析**：`normalizeVideoRequestBody`（`bvid 空格 cid` → `bvid#cid`，纯）+ `parseBareStreamId` 扩为保留 `#cid` 后缀（不再丢弃）；`resolvePartRef`（注入 `fetchFirstCid`，无 cid→P1）。穷举单测。
+- [x] `video-request.ts`：`withinRequestDurationLimit` + `planVideoRequest`（纯 + 注入，7 分支 + 时长边界 + 分P补全 + blob-gate 穷举单测）。
+- [x] `streamed-track-repo.ts`：`findLocalDownloadedVideo(source, externalId)`（走 v33 复合索引；**仅 `kind:"video" && blobId` 齐全算命中**，Q6）。`fake-indexeddb` 单测：命中有 blob / 有引用无 blob（不命中）/ 未命中 / 精确 cid 区分 P1≠P3。
 
 #### Phase 1 Checklist
-- [ ] `matchIntakeCommand("点视频 BV1xx", resolveCommands(...))` 命中 `video-request`、body="BV1xx"；既有点歌/评分/评论命中无回归。
-- [ ] `normalizeVideoRequestBody` + `parseBareStreamId`：`BV..#cid` / `BV.. cid` / 裸 `BV..` / YT id / 链接 各解析正确。
-- [ ] `planVideoRequest` 对 {裸 BV(补P1) / BV#cid / YouTube 链接 / netease id(拒) / 纯文字(拒) / 超长(拒) / 未知时长(放行) / 本地有blob(play-local) / 本地仅引用无blob(继续下载)} 各返回正确 verdict。
-- [ ] `findLocalDownloadedVideo` 跨 session 命中且走复合索引；无 blob 不算命中；P1 与 P3 精确区分。
-- [ ] 全项目 `tsc` 绿；v33 索引迁移在 `fake-indexeddb` 下不报错、既有 tracks 索引查询无回归；全量 Vitest 无回归。
+- [x] `matchIntakeCommand("点视频 BV1xx", resolveCommands(...))` 命中 `video-request`、body="BV1xx"；既有点歌/评分/评论命中无回归。
+- [x] `normalizeVideoRequestBody` + `parseBareStreamId`：`BV..#cid` / `BV.. cid` / 裸 `BV..` / YT id / 链接 各解析正确。
+- [x] `planVideoRequest` 对 {裸 BV(补P1) / BV#cid / YouTube 链接 / netease id(拒) / 纯文字(拒) / 超长(拒) / 未知时长(放行) / 本地有blob(play-local) / 本地仅引用无blob(继续下载)} 各返回正确 verdict。
+- [x] `findLocalDownloadedVideo` 跨 session 命中且走复合索引；无 blob 不算命中；P1 与 P3 精确区分。
+- [x] 全项目 `tsc` 绿；v33 索引迁移在 `fake-indexeddb` 下不报错、既有 tracks 索引查询无回归。验证：`pnpm vitest run src/live-requests/intake-command.test.ts src/live-requests/video-request.test.ts src/streamsrc/stream-link.test.ts src/streamsrc/streamed-track-repo.test.ts`、`pnpm biome check ...`、`pnpm typecheck` 均通过。
 
 ### Phase 2: 请求 fulfillment orchestrator + 分P 命名修复
 
@@ -535,6 +535,7 @@ components/settings/
 |------|--------|---------|
 | 2026-07-05 | DoodleBear | Initial draft：点视频（弹幕视频请求）——`IntakeCommand.mediaKind:"video"` 新命令（可配前缀）+ id 定向解析（`parseBareStreamId`）+ 库级 by-id 本地优先（`findLocalDownloadedVideo`）+ 时长上限（默认 480s）+ 预设清晰度下载（复用 `downloadStreamedHit`/`defaultVideoQuality` prefer-match-else-degrade）。定位为 20260620（视频下载）× 20260625（弹幕点歌路由）的接线层，几乎零新栈 |
 | 2026-07-05 | DoodleBear | Open Questions 全 7 项拍板并回写正文：**Q1** 只认 id/链接（不搜歌名）；**Q2** 复用 `streamDownloadsSetId`（不新增 set）；**Q3** 支持分P（`bvid#cid` / `bvid 空格 cid`，未给→默认 P1；本地精确 cid 匹配；**下载命名改为「视频标题 - 分P名」**，修 `enqueuePartsForDownload` 的 `title:part.title` bug，对所有分P下载路径统一生效）；**Q4** 按长期性能 Best Practice 加复合索引 `[streamSourceId+streamExternalId]`（Dexie v32→v33，纯 additive 无 upgrade）；**Q5** 先下载再播放（含 play-now，不做 stream-first）；**Q6** 本地命中须有 `blobId`（仅在线引用无 blob→仍下载持久化）；**Q7** 未知时长放行。新增 §4.1a（分P解析）/§4.3a（分P命名修复），Phase 1/2 任务与 checklist 相应扩充 |
+| 2026-07-05 | Codex | Phase 1 ✅：TDD 完成 `mediaKind:"video"` 默认命令与 legacy 回填、`maxVideoRequestDurationSec` 默认 480、Dexie v33 `[streamSourceId+streamExternalId]` 复合索引、`normalizeVideoRequestBody` / `resolvePartRef` / `planVideoRequest` 纯规划器、`findLocalDownloadedVideo` 库级 blob-gated 查询。验证：目标 Vitest 90 tests、Biome、TypeScript typecheck 通过 |
 
 ---
 

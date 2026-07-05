@@ -8,6 +8,7 @@ import {
   cacheStreamedTrackBlob,
   clearStreamedCache,
   createStreamedTrack,
+  findLocalDownloadedVideo,
   findStreamedTrack,
   hitToStreamedInput,
   isStreamedTrackCached,
@@ -106,6 +107,79 @@ describe("findStreamedTrack", () => {
     const found = await findStreamedTrack("ses_1", "bili", "BV1xx411c7mD#998877", db);
     expect(found?.id).toBe(created.id);
     expect(await findStreamedTrack("ses_1", "bili", "nope", db)).toBeUndefined();
+  });
+});
+
+describe("findLocalDownloadedVideo", () => {
+  const videoHit: StreamSearchHit = {
+    ...hit,
+    externalId: "BV1xx411c7mD#1001",
+    title: "MV",
+  };
+
+  it("finds a downloaded streamed video across sessions by source + externalId", async () => {
+    const track = await createStreamedTrack(
+      { ...hitToStreamedInput("ses_1", videoHit), kind: "video" },
+      db,
+    );
+    await cacheStreamedTrackBlob(
+      track.id,
+      new Blob(["video"], { type: "video/mp4" }),
+      "video/mp4",
+      db,
+    );
+
+    const found = await findLocalDownloadedVideo("bili", "BV1xx411c7mD#1001", db);
+
+    expect(found?.id).toBe(track.id);
+  });
+
+  it("does not treat an online-only streamed video reference as a local download", async () => {
+    await createStreamedTrack({ ...hitToStreamedInput("ses_1", videoHit), kind: "video" }, db);
+
+    await expect(
+      findLocalDownloadedVideo("bili", "BV1xx411c7mD#1001", db),
+    ).resolves.toBeUndefined();
+  });
+
+  it("requires video kind and exact part id", async () => {
+    const p1 = await createStreamedTrack(
+      { ...hitToStreamedInput("ses_1", videoHit), kind: "video" },
+      db,
+    );
+    const p3 = await createStreamedTrack(
+      {
+        ...hitToStreamedInput("ses_2", { ...videoHit, externalId: "BV1xx411c7mD#3003" }),
+        kind: "video",
+      },
+      db,
+    );
+    const audio = await createStreamedTrack(
+      hitToStreamedInput("ses_3", { ...videoHit, externalId: "BV1xx411c7mD#4004" }),
+      db,
+    );
+    await cacheStreamedTrackBlob(p1.id, new Blob(["p1"], { type: "video/mp4" }), "video/mp4", db);
+    await cacheStreamedTrackBlob(p3.id, new Blob(["p3"], { type: "video/mp4" }), "video/mp4", db);
+    await cacheStreamedTrackBlob(
+      audio.id,
+      new Blob(["audio"], { type: "audio/mpeg" }),
+      "audio/mpeg",
+      db,
+    );
+
+    expect((await findLocalDownloadedVideo("bili", "BV1xx411c7mD#1001", db))?.id).toBe(p1.id);
+    expect((await findLocalDownloadedVideo("bili", "BV1xx411c7mD#3003", db))?.id).toBe(p3.id);
+    await expect(
+      findLocalDownloadedVideo("bili", "BV1xx411c7mD#4004", db),
+    ).resolves.toBeUndefined();
+  });
+
+  it("uses the compound source/external-id index", async () => {
+    const whereSpy = vi.spyOn(db.tracks, "where");
+    await findLocalDownloadedVideo("bili", "BV1xx411c7mD#1001", db);
+
+    expect(whereSpy).toHaveBeenCalledWith("[streamSourceId+streamExternalId]");
+    whereSpy.mockRestore();
   });
 });
 

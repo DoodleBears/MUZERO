@@ -468,6 +468,13 @@ export class MuzeroDB extends Dexie {
       enrichments: "id, &trackId",
     });
 
+    // v33 — hot-path lookup for live video requests: find a downloaded streamed video
+    // by its stable source ref across the whole library. Pure additive index; rows with
+    // missing source refs simply do not participate.
+    this.version(33).stores({
+      tracks: "id, sessionId, sourcePath, [streamSourceId+streamExternalId]",
+    });
+
     // Library-palette change signal (see `libraryMutationRevision`). creating/deleting ONLY —
     // a plain `tracks.update` (tag edit, background metadata hydration) must never bump it, or
     // the palette cache would be busted by high-churn background writes. Enrichment writes DO

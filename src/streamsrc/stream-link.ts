@@ -37,8 +37,8 @@ export function parseStreamLink(text: string): StreamLinkRef | null {
   return null;
 }
 
-const BV_RE = /^BV[0-9A-Za-z]{8,}$/;
-const AV_RE = /^av\d+$/i;
+const BV_RE = /^BV[0-9A-Za-z]{8,}(?:#\d+)?$/;
+const AV_RE = /^av\d+(?:#\d+)?$/i;
 // A YouTube video id is exactly 11 url-safe chars. Heuristic: a bare 11-char token is
 // treated as a YT id (the user asked for raw-id input) — BV ids are 12 chars so they're
 // checked first and never collide.
