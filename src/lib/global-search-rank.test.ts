@@ -1,0 +1,29 @@
+import { describe, expect, it } from "vitest";
+import { rankGlobalSearchBestMatches } from "./global-search-rank";
+
+describe("rankGlobalSearchBestMatches", () => {
+  it("lets a strong artist match beat a weaker track match despite type bias", () => {
+    const ranked = rankGlobalSearchBestMatches([
+      { key: "track:buried", kind: "track", order: 0, score: 12 },
+      { key: "artist:exact", kind: "artist", order: 1, score: 0 },
+    ]);
+
+    expect(ranked.map((item) => item.key)).toEqual(["artist:exact", "track:buried"]);
+  });
+
+  it("deduplicates by key, keeps the best duplicate, and honors the limit", () => {
+    const ranked = rankGlobalSearchBestMatches(
+      [
+        { key: "track:a", kind: "track", order: 0, score: 9 },
+        { key: "track:a", kind: "track", order: 1, score: 1 },
+        { key: "album:b", kind: "album", order: 2, score: 0 },
+      ],
+      2,
+    );
+
+    expect(ranked).toEqual([
+      { key: "track:a", kind: "track", order: 1, score: 1 },
+      { key: "album:b", kind: "album", order: 2, score: 0 },
+    ]);
+  });
+});

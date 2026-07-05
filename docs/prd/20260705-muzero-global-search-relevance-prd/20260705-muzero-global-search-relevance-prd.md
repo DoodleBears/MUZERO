@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 空查询最近歌曲：Ctrl+F 打开即显示最近播放/更新的 ready tracks | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 搜索结果携带分数：tracks / artists / albums / sets 统一可排序 | Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 最佳匹配混排区：让高置信歌手/专辑不被固定分组埋住 | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 最佳匹配混排区：让高置信歌手/专辑不被固定分组埋住 | Completed | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -378,20 +378,20 @@ Tie breakers:
 
 **Tasks:**
 
-- [ ] Build `bestMatchItems` from scored sets, tracks, lyrics, albums, and artists.
-- [ ] Sort by adjusted score and tie breakers.
-- [ ] Render a `Best Matches` section above grouped local sections for non-empty query.
-- [ ] Integrate `bestMatchItems` into keyboard navigation order.
-- [ ] Keep pasted-link / playlist `onlineFirst` behavior unchanged.
-- [ ] Add component or core tests for visual/nav order where artist should appear before lower-quality song matches.
+- [x] Build `bestMatchItems` from scored sets, tracks, lyrics, albums, and artists.
+- [x] Sort by adjusted score and tie breakers.
+- [x] Render a `Best Matches` section above grouped local sections for non-empty query.
+- [x] Integrate `bestMatchItems` into keyboard navigation order.
+- [x] Keep pasted-link / playlist `onlineFirst` behavior unchanged.
+- [x] Add component or core tests for visual/nav order where artist should appear before lower-quality song matches.
 
 ### Phase 3 Checklist
 
-- [ ] Querying an exact artist name surfaces that artist in the first 5 rows.
-- [ ] Querying an exact song title surfaces the song before weaker artist/album matches.
-- [ ] Querying an exact album name surfaces the album near top without hiding song results.
-- [ ] Down-arrow navigation follows visual order, including Best Matches.
-- [ ] No duplicate keyboard indices.
+- [x] Querying an exact artist name surfaces that artist in the first 5 rows.
+- [x] Querying an exact song title surfaces the song before weaker artist/album matches.
+- [x] Querying an exact album name surfaces the album near top without hiding song results.
+- [x] Down-arrow navigation follows visual order, including Best Matches.
+- [x] No duplicate keyboard indices.
 
 ---
 
@@ -449,3 +449,4 @@ Tie breakers:
 | 2026-07-05 | Codex | Resolved open questions; changed empty query ordering to prioritize `lastPlayedAt` |
 | 2026-07-05 | Codex | Completed Phase 1: empty Ctrl+F now requests recent activity songs |
 | 2026-07-05 | Codex | Completed Phase 2: local track/artist/album results now carry relevance scores |
+| 2026-07-05 | Codex | Completed Phase 3: Best Matches section ranks scored local results and exposes dev snapshot count |

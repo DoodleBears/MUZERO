@@ -93,6 +93,7 @@
     "title": "Search",
     "placeholder": "Search songs, lyrics, sets — try @online, @local, @video, @audio…",
     "empty": "No matches.",
+    "bestMatches": "Best matches",
     "songs": "Songs",
     "filterHint": "Filter",
     "clearFilter": "Clear filter",

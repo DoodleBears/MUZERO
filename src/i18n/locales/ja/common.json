@@ -87,6 +87,7 @@
     "title": "検索",
     "placeholder": "曲・歌詞・セットを検索 — @online / @local / @video / @audio…",
     "empty": "一致するものがありません。",
+    "bestMatches": "ベストマッチ",
     "songs": "曲",
     "filterHint": "絞り込み",
     "clearFilter": "フィルターを解除",

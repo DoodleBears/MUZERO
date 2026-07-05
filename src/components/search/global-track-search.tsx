@@ -56,6 +56,7 @@ import {
   resolveFilterScope,
   type SearchFilter,
 } from "@/lib/global-search-filter";
+import { rankGlobalSearchBestMatches } from "@/lib/global-search-rank";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
 import { type IndexableRow, parseSearchTokens, scoreRow } from "@/lib/search-core";
 import { NO_MATCH_SCORE } from "@/lib/search-transliterate";
@@ -176,6 +177,15 @@ type NavItem =
 type ScoredSetResult = {
   score: number;
   session: DjSession;
+};
+
+type BestMatchCandidate = {
+  item: NavItem;
+  key: string;
+  kind: "set" | "track" | "lyric" | "album" | "artist";
+  order: number;
+  recency?: number;
+  score: number;
 };
 
 export function GlobalTrackSearch({
@@ -479,11 +489,99 @@ export function GlobalTrackSearch({
   // so the obvious "this is the thing you pasted" sits on top and Enter acts on it. A normal
   // text query keeps local matches first, online last.
   const onlineFirst = Boolean(link || playlistLink);
+  const trackScoreById = useMemo(
+    () => new Map((localResults.trackHits ?? []).map((hit) => [hit.id, hit.score])),
+    [localResults.trackHits],
+  );
+  const albumScoreByKey = useMemo(
+    () => new Map((localResults.albumHits ?? []).map((hit) => [hit.entry.key, hit.score])),
+    [localResults.albumHits],
+  );
+  const artistScoreByKey = useMemo(
+    () => new Map((localResults.artistHits ?? []).map((hit) => [hit.entry.key, hit.score])),
+    [localResults.artistHits],
+  );
+  const lyricScoreByTrackId = useMemo(
+    () =>
+      new Map(
+        rankedLyricHits
+          .filter((hit) => hit.id.startsWith(LYRIC_HIT_PREFIX))
+          .map((hit) => [hit.id.slice(LYRIC_HIT_PREFIX.length), hit.score]),
+      ),
+    [rankedLyricHits],
+  );
+  const bestMatchItems = useMemo<NavItem[]>(() => {
+    if (!deferredSearchText || onlineFirst) return [];
+    const candidates: BestMatchCandidate[] = [];
+    let order = 0;
+    for (const hit of setResultHits) {
+      candidates.push({
+        item: { type: "set", session: hit.session },
+        key: `set:${hit.session.id}`,
+        kind: "set",
+        order: order++,
+        recency: hit.session.updatedAt,
+        score: hit.score,
+      });
+    }
+    for (const track of trackResults) {
+      candidates.push({
+        item: { type: "track", track },
+        key: `track:${track.id}`,
+        kind: "track",
+        order: order++,
+        recency: track.updatedAt ?? track.createdAt,
+        score: trackScoreById.get(track.id) ?? order,
+      });
+    }
+    for (const result of lyricResults) {
+      candidates.push({
+        item: { type: "lyric", ...result },
+        key: `lyric:${result.track.id}`,
+        kind: "lyric",
+        order: order++,
+        recency: result.track.updatedAt ?? result.track.createdAt,
+        score: lyricScoreByTrackId.get(result.track.id) ?? order,
+      });
+    }
+    for (const entry of albumResults) {
+      candidates.push({
+        item: { type: "album", entry },
+        key: `album:${entry.key}`,
+        kind: "album",
+        order: order++,
+        score: albumScoreByKey.get(entry.key) ?? order,
+      });
+    }
+    for (const entry of artistResults) {
+      candidates.push({
+        item: { type: "artist", entry },
+        key: `artist:${entry.key}`,
+        kind: "artist",
+        order: order++,
+        score: artistScoreByKey.get(entry.key) ?? order,
+      });
+    }
+    return rankGlobalSearchBestMatches(candidates).map((candidate) => candidate.item);
+  }, [
+    albumResults,
+    albumScoreByKey,
+    artistResults,
+    artistScoreByKey,
+    deferredSearchText,
+    lyricResults,
+    lyricScoreByTrackId,
+    onlineFirst,
+    setResultHits,
+    trackResults,
+    trackScoreById,
+  ]);
 
   // Flat, ordered nav list across the visible sections (the playlist-link card has its own
   // button, so it sits outside keyboard nav). Order mirrors the visual section order below.
   const navItems = useMemo<NavItem[]>(() => {
     const local: NavItem[] = [
+      ...bestMatchItems,
       ...setResults.map((session) => ({ type: "set", session }) as const),
       ...trackResults.map((track) => ({ type: "track", track }) as const),
       ...lyricResults.map((result) => ({ type: "lyric", ...result }) as const),
@@ -494,6 +592,7 @@ export function GlobalTrackSearch({
     return onlineFirst ? [...online, ...local] : [...local, ...online];
   }, [
     setResults,
+    bestMatchItems,
     trackResults,
     lyricResults,
     albumResults,
@@ -504,7 +603,8 @@ export function GlobalTrackSearch({
 
   // Nav-index base for each section, shifted by the online block when it leads.
   const localBase = onlineFirst ? onlineHits.length : 0;
-  const setStart = localBase;
+  const bestStart = localBase;
+  const setStart = bestStart + bestMatchItems.length;
   const trackStart = setStart + setResults.length;
   const lyricStart = trackStart + trackResults.length;
   const albumStart = lyricStart + lyricResults.length;
@@ -532,6 +632,7 @@ export function GlobalTrackSearch({
         lyrics: lyricResults.length,
         albums: albumResults.length,
         artists: artistResults.length,
+        bestMatches: bestMatchItems.length,
         online: onlineHits.length,
       },
       songKinds: trackResults.map((track) => track.kind),
@@ -813,6 +914,98 @@ export function GlobalTrackSearch({
         <RenderTraceBoundary id="global-search:results" active={open}>
           <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox" ref={listRef}>
             {onlineFirst && onlineSection}
+            {bestMatchItems.length > 0 && (
+              <RenderTraceBoundary id="global-search:best-matches" active={open}>
+                <div>
+                  <SectionHeader>{t("globalSearch.bestMatches")}</SectionHeader>
+                  {bestMatchItems.map((item, i) => {
+                    const index = bestStart + i;
+                    switch (item.type) {
+                      case "set":
+                        return (
+                          <GlobalSetRow
+                            key={`best-set-${item.session.id}`}
+                            session={item.session}
+                            coverTrack={
+                              item.session.trackIds[0]
+                                ? setCoverTrackById.get(item.session.trackIds[0])
+                                : undefined
+                            }
+                            index={index}
+                            selected={selectedIndex === index}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onActivate={() => void activate(item, false)}
+                          />
+                        );
+                      case "track":
+                        return (
+                          <GlobalTrackSearchRow
+                            key={`best-track-${item.track.id}`}
+                            track={item.track}
+                            index={index}
+                            selected={selectedIndex === index}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onPlay={() => void activate(item, false)}
+                            onPlayNext={() => void activate(item, true)}
+                          />
+                        );
+                      case "lyric":
+                        return (
+                          <GlobalLyricSearchRow
+                            key={`best-lyric-${item.track.id}`}
+                            track={item.track}
+                            match={item.match}
+                            index={index}
+                            selected={selectedIndex === index}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onPlay={() => void activate(item, false)}
+                            onPlayNext={() => void activate(item, true)}
+                          />
+                        );
+                      case "album":
+                        return (
+                          <GlobalEntityRow
+                            key={`best-album-${item.entry.key}`}
+                            kind="album"
+                            index={index}
+                            selected={selectedIndex === index}
+                            label={albumDisplayLabel(item.entry, t)}
+                            sublabel={albumArtistDisplayLabel(item.entry, t)}
+                            coverTrack={
+                              item.entry.coverTrackId
+                                ? entityCoverTrackById.get(item.entry.coverTrackId)
+                                : undefined
+                            }
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onActivate={() => void activate(item, false)}
+                          />
+                        );
+                      case "artist":
+                        return (
+                          <GlobalEntityRow
+                            key={`best-artist-${item.entry.key}`}
+                            kind="artist"
+                            index={index}
+                            selected={selectedIndex === index}
+                            label={artistDisplayLabel(item.entry, t)}
+                            sublabel={t("gallery.count", { count: item.entry.trackIds.length })}
+                            coverTrack={
+                              item.entry.coverTrackId
+                                ? entityCoverTrackById.get(item.entry.coverTrackId)
+                                : undefined
+                            }
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onActivate={() => void activate(item, false)}
+                          />
+                        );
+                      case "online":
+                        return null;
+                    }
+                    return null;
+                  })}
+                </div>
+              </RenderTraceBoundary>
+            )}
             {setResults.length > 0 && (
               <RenderTraceBoundary id="global-search:sets" active={open}>
                 <div>
