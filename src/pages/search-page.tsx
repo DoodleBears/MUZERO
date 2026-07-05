@@ -27,6 +27,10 @@ import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { EntityDetailView } from "@/components/library/entity-detail";
 import { EntityCard, EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
 import { HoverScrollbar } from "@/components/library/hover-scrollbar";
+import {
+  OnlinePlaylistSection,
+  type OnlinePlaylistSourceFilter,
+} from "@/components/library/online-playlist-section";
 import { RatingFilterChip } from "@/components/library/rating-filter-chip";
 import { FilterChip, SortChip } from "@/components/library/sort-chip";
 import {
@@ -43,6 +47,7 @@ import {
   VirtualCardGrid,
   type VirtualCardGridHandle,
 } from "@/components/library/virtual-card-grid";
+import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
@@ -80,6 +85,7 @@ import type { CropRect, DjSession, PlaybackEvent, SetOrigin, Track } from "@/db/
 import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import { useCoverMetadataBackfill, useGridCoverUrl, useTrackCoverUrl } from "@/hooks/use-media";
+import { useOnlinePlaylistCatalog } from "@/hooks/use-online-playlist-catalog";
 import { usePausedLiveQuery } from "@/hooks/use-paused-live-query";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
@@ -351,6 +357,8 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   // Settings streaming section — hidden on web / when no source is configured.
   const streamingSupported = hasStreamingSources();
   const [setQuery, setSetQuery] = useState("");
+  const [onlineSourceFilter, setOnlineSourceFilter] = useState<OnlinePlaylistSourceFilter>("all");
+  const [onlineImportTarget, setOnlineImportTarget] = useState<StreamPlaylist | null>(null);
   const [trackQuery, setTrackQuery] = useState("");
   const [albumQuery, setAlbumQuery] = useState("");
   const [artistQuery, setArtistQuery] = useState("");
@@ -542,6 +550,14 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   const setUploadTarget = useUploadTargetStore((s) => s.setTarget);
   const setCoverTarget = useCoverTargetStore((s) => s.setCoverTarget);
   const activeWallView = isGalleryWallMode(mode) ? viewByMode[mode] : "list";
+  const onlineCatalog = useOnlinePlaylistCatalog(
+    streamingSupported &&
+      searchTabActive &&
+      mode === "sets" &&
+      !selectedSetId &&
+      !selectedSystemPlaylistId &&
+      !selectedOnlinePlaylist,
+  );
 
   // Songs that live ONLY in the set being deleted — shown in the "+ songs" option.
   const deletingExclusiveCount = useMemo(() => {
@@ -1007,13 +1023,14 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
     if (mode === "sets") {
       return [
         ...systemPlaylistItems.map((item) => item.id),
+        ...onlineCatalog.playlists.map((playlist) => `online:${playlist.source}:${playlist.id}`),
         ...shown.map((item) => item.session.id),
       ];
     }
     if (mode === "albums") return albumItems.map((item) => item.key);
     if (mode === "artists") return artistItems.map((item) => item.key);
     return [];
-  }, [mode, shown, albumItems, artistItems, systemPlaylistItems]);
+  }, [mode, shown, albumItems, artistItems, systemPlaylistItems, onlineCatalog.playlists]);
   const galleryKeysRef = useRef(galleryKeys);
   galleryKeysRef.current = galleryKeys;
   // Pre-sort + liked-filter, then search: with no query the chosen order shows
@@ -1851,6 +1868,20 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
                 </RenderTraceBoundary>
               </div>
 
+              <OnlinePlaylistSection
+                playlists={onlineCatalog.playlists}
+                query={setQuery}
+                sourceFilter={onlineSourceFilter}
+                onSourceFilterChange={setOnlineSourceFilter}
+                onOpen={setSelectedOnlinePlaylist}
+                onImport={setOnlineImportTarget}
+                onRefresh={() => void onlineCatalog.refreshAll()}
+                refreshing={onlineCatalog.syncing}
+                view={activeWallView}
+                scrollElement={wallScrollEl}
+                lenisRef={wallLenisRef}
+              />
+
               {/* Right-click anywhere on the wall (incl. empty space) to start a new set. */}
               <ContextMenu>
                 <ContextMenuTrigger className="block min-h-[40vh] px-3">
@@ -2095,6 +2126,10 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
           {mode === "downloads" && <DownloadCenter />}
         </div>
       </RenderTraceBoundary>
+      <PlaylistImportDialog
+        playlist={onlineImportTarget}
+        onClose={() => setOnlineImportTarget(null)}
+      />
     </div>
   );
 }

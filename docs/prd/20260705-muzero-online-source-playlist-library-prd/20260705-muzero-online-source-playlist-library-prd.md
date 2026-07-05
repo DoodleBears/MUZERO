@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 本地在线歌单目录缓存 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Library 展示同步歌单并自动刷新 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Library 展示同步歌单并自动刷新 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings 歌单列表限高 + filter | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | i18n / 测试 / 视觉收尾 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -352,26 +352,36 @@ Scrollbar requirement:
 **Goal:** Library sets wall 显示在线歌单，打开 Library 自动同步一次，用户可直接在线播放。
 
 **Tasks:**
-- [ ] Add `useOnlinePlaylistCatalog` hook with stale-window auto-sync.
-- [ ] Add online playlist section/cards in sets wall.
-- [ ] Wire card click to `openOnlinePlaylist`.
-- [ ] Wire import action to `PlaylistImportDialog`.
-- [ ] Include online playlists in sets search/filter behavior.
-- [ ] Add source identity chips on online playlist cards.
-- [ ] Add source filter chips in the sets wall toolbar for available online platforms.
-- [ ] Add manual refresh button and stale/error copy.
+- [x] Add `useOnlinePlaylistCatalog` hook with stale-window auto-sync.
+- [x] Add online playlist section/cards in sets wall.
+- [x] Wire card click to `openOnlinePlaylist`.
+- [x] Wire import action to `PlaylistImportDialog`.
+- [x] Include online playlists in sets search/filter behavior.
+- [x] Add source identity chips on online playlist cards.
+- [x] Add source filter chips in the sets wall toolbar for available online platforms.
+- [x] Add manual refresh button and stale/error copy.
 
 ### Phase 2 Checklist
 
-- [ ] Opening Library triggers metadata-only sync, not track-detail fetch.
-- [ ] Auto-sync uses a 15-minute stale window; manual refresh always forces refresh.
-- [ ] Previously synced playlists render immediately before refresh completes.
-- [ ] Clicking a playlist opens `OnlinePlaylistDetail`.
-- [ ] Playing from detail works without importing a local set.
-- [ ] Search filters local sets and online playlists.
-- [ ] Source chips identify each online playlist's platform.
-- [ ] Source filter chips filter online playlists by platform and compose with the text query.
-- [ ] Large catalogs do not render unbounded DOM; cards reuse existing `VirtualCardGrid` / current gallery virtualization architecture where needed.
+- [x] Opening Library triggers metadata-only sync, not track-detail fetch.
+- [x] Auto-sync uses a 15-minute stale window; manual refresh always forces refresh.
+- [x] Previously synced playlists render immediately before refresh completes.
+- [x] Clicking a playlist opens `OnlinePlaylistDetail`.
+- [x] Playing from detail works without importing a local set.
+- [x] Search filters local sets and online playlists.
+- [x] Source chips identify each online playlist's platform.
+- [x] Source filter chips filter online playlists by platform and compose with the text query.
+- [x] Large catalogs do not render unbounded DOM; cards reuse existing `VirtualCardGrid` / current gallery virtualization architecture where needed.
+
+**Phase 2 Verification:**
+- `node_modules\.bin\vitest.CMD run src\streamsrc\playlist-catalog.test.ts src\components\library\online-playlist-section.test.tsx`
+- `node_modules\.bin\biome.CMD check src\streamsrc\playlist-catalog.ts src\streamsrc\playlist-catalog.test.ts src\components\library\online-playlist-section.tsx src\components\library\online-playlist-section.test.tsx src\hooks\use-online-playlist-catalog.ts src\pages\search-page.tsx src\i18n\locales\en\common.json src\i18n\locales\zh\common.json src\i18n\locales\ja\common.json src\i18n\locales\ko\common.json`
+- `node_modules\.bin\tsc.CMD --noEmit --pretty false`
+
+**Phase 2 Implementation Notes:**
+- Added [`use-online-playlist-catalog.ts`](../../../src/hooks/use-online-playlist-catalog.ts), which auto-syncs enabled online sources only when the Library sets wall is active and the source catalog is missing/stale (15 minutes).
+- Added [`online-playlist-section.tsx`](../../../src/components/library/online-playlist-section.tsx), including source chips, platform filter chips, manual refresh, import/open actions, and `VirtualCardGrid` when mounted in the real Library wall scroller.
+- Wired the section into [`search-page.tsx`](../../../src/pages/search-page.tsx) under the `sets` wall, reusing `OnlinePlaylistDetail` and `PlaylistImportDialog`.
 
 ### Phase 3: Settings 歌单列表限高 + filter
 
@@ -490,3 +500,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Initial draft from product request: Library displays persisted synced online playlists with auto/manual refresh; Settings source playlist list becomes bounded and filterable with thin transparent scrollbar. |
 | 2026-07-05 | Codex | Resolved Open Questions per product feedback: online playlists live in sets wall; auto-sync stale window is 15 minutes; logout clears cached catalog; v1 follows existing sets wall view; large catalogs reuse existing gallery/VirtualCardGrid architecture. Added source identity chips and platform filter chips for Bilibili / 网易云 / QQ 音乐. |
 | 2026-07-05 | Codex | Completed Phase 1: metadata-only online playlist catalog types, catalog helper module, TDD coverage for merge/dedupe/stale/filter/error retention, and logout catalog clearing. |
+| 2026-07-05 | Codex | Completed Phase 2: Library sets wall now renders persisted online playlists, source identity/filter chips, 15-minute metadata auto-sync, manual refresh, direct online detail open, import dialog reuse, and VirtualCardGrid-backed large catalog rendering. |

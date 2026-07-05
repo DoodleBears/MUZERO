@@ -5,6 +5,7 @@ import type {
   StreamSourceId,
 } from "@/db/types";
 import type { StreamPlaylist, StreamSourceProvider } from "./provider";
+import { STREAM_SOURCE_IDS } from "./registry";
 
 export const ONLINE_PLAYLIST_CATALOG_STALE_MS = 15 * 60_000;
 
@@ -13,6 +14,13 @@ const SOURCE_ALIASES: Record<StreamSourceId, string[]> = {
   bili: ["bili", "bilibili", "哔哩", "哔哩哔哩", "b站", "b站"],
   youtube: ["youtube", "yt", "油管"],
   qq: ["qq", "qq音乐", "tencent", "腾讯"],
+};
+
+export const STREAM_SOURCE_DISPLAY_NAMES: Record<StreamSourceId, string> = {
+  netease: "网易云",
+  bili: "Bilibili",
+  youtube: "YouTube",
+  qq: "QQ 音乐",
 };
 
 export type OnlinePlaylistCatalog = Partial<Record<StreamSourceId, OnlinePlaylistCatalogSource>>;
@@ -95,6 +103,24 @@ export function isOnlinePlaylistCatalogStale(
 ): boolean {
   if (!source) return true;
   return now - source.syncedAt > staleMs;
+}
+
+export function onlinePlaylistCatalogSourcesToSync(
+  settings: Pick<AppSettings, "onlinePlaylistCatalog" | "streamSources">,
+  now: number,
+  opts: { force?: boolean; staleMs?: number } = {},
+): StreamSourceId[] {
+  return STREAM_SOURCE_IDS.filter((source) => {
+    if (!settings.streamSources?.[source]?.enabled) return false;
+    return (
+      opts.force ||
+      isOnlinePlaylistCatalogStale(
+        settings.onlinePlaylistCatalog?.[source],
+        now,
+        opts.staleMs ?? ONLINE_PLAYLIST_CATALOG_STALE_MS,
+      )
+    );
+  });
 }
 
 export function allOnlinePlaylistCatalogEntries(

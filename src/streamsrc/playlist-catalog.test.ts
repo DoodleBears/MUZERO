@@ -5,6 +5,7 @@ import {
   filterOnlinePlaylists,
   isOnlinePlaylistCatalogStale,
   mergeOnlinePlaylistCatalogSource,
+  onlinePlaylistCatalogSourcesToSync,
   syncOnlinePlaylistCatalogSource,
 } from "./playlist-catalog";
 import type { StreamPlaylist, StreamSourceProvider } from "./provider";
@@ -85,6 +86,26 @@ describe("online playlist catalog", () => {
     expect(isOnlinePlaylistCatalogStale(undefined, 1000)).toBe(true);
     expect(isOnlinePlaylistCatalogStale({ syncedAt: 0 }, 1000, 15 * 60_000)).toBe(false);
     expect(isOnlinePlaylistCatalogStale({ syncedAt: 0 }, 901_000, 15 * 60_000)).toBe(true);
+  });
+
+  it("selects enabled sources whose catalog is missing or stale", () => {
+    const settings = {
+      streamSources: {
+        netease: { enabled: true, cookie: "MUSIC_U=x" },
+        bili: { enabled: true, cookie: "SESSDATA=x" },
+        qq: { enabled: false, cookie: "qqmusic_key=x" },
+      },
+      onlinePlaylistCatalog: {
+        netease: { syncedAt: 0, playlists: [] },
+        bili: { syncedAt: 1000, playlists: [] },
+      },
+    } satisfies Pick<AppSettings, "onlinePlaylistCatalog" | "streamSources">;
+
+    expect(onlinePlaylistCatalogSourcesToSync(settings, 901_000)).toEqual(["netease"]);
+    expect(onlinePlaylistCatalogSourcesToSync(settings, 902_000, { force: true })).toEqual([
+      "netease",
+      "bili",
+    ]);
   });
 
   it("filters by playlist text, source id, and localized source aliases", () => {
