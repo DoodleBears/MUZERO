@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertCircle,
@@ -10,7 +11,7 @@ import {
   Search,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import { isNeteaseDailyPlaylist } from "@/streamsrc/virtual-playlists";
 const ONLINE_ROW_HEIGHT = 60;
 /** Only surface the filter box once the fetched list is long enough to warrant it. */
 const FILTER_MIN_TRACKS = 8;
+const ONLINE_PLAYLIST_TRACKS_QUERY_BASE = "online-playlist-tracks";
 
 /** Reduce a fetched hit to the source-agnostic search row (title / artist / album). */
 function hitToRow(hit: StreamSearchHit): IndexableRow {
@@ -39,6 +41,22 @@ function hitToRow(hit: StreamSearchHit): IndexableRow {
     album: hit.album ? [hit.album] : [],
     tags: [],
   };
+}
+
+function onlinePlaylistTracksQueryKey(
+  playlist: StreamPlaylist,
+  isDaily: boolean,
+  authKey: number,
+  dailyReloadKey: number,
+) {
+  return [
+    ONLINE_PLAYLIST_TRACKS_QUERY_BASE,
+    playlist.source,
+    playlist.id,
+    isDaily ? "daily" : "playlist",
+    authKey,
+    isDaily ? dailyReloadKey : 0,
+  ] as const;
 }
 
 export function OnlinePlaylistDetail({
@@ -52,11 +70,35 @@ export function OnlinePlaylistDetail({
   const settings = useSettings();
   const playOnlinePlaylist = usePlayerStore((s) => s.playOnlinePlaylist);
   const isDaily = isNeteaseDailyPlaylist(playlist);
-  const [hits, setHits] = useState<StreamSearchHit[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const authKey = settings.streamSources?.[playlist.source]?.lastAuthAt ?? 0;
+  const [dailyReloadKey, setDailyReloadKey] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
+  const tracksQuery = useQuery({
+    queryKey: onlinePlaylistTracksQueryKey(playlist, isDaily, authKey, dailyReloadKey),
+    queryFn: async ({ signal }) => {
+      const source = createStreamSource(playlist.source, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (id) => settings.streamSources?.[id]?.cookie,
+      });
+      const next = isDaily
+        ? await source?.getDailyRecommendedTracks?.({
+            signal,
+            afresh: dailyReloadKey > 0,
+          })
+        : await source?.importPlaylist?.(playlist.id, { signal });
+      return next ?? [];
+    },
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    retry: false,
+    staleTime: Infinity,
+  });
+  const hits = tracksQuery.data ?? [];
+  const loading = tracksQuery.isLoading;
+  const error = tracksQuery.isError;
   const totalDurationSec = useMemo(
     () => hits.reduce((sum, hit) => sum + (hit.durationSec ?? 0), 0),
     [hits],
@@ -64,44 +106,13 @@ export function OnlinePlaylistDetail({
 
   useBackGesture(onBack);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError(false);
-      try {
-        const source = createStreamSource(playlist.source, {
-          http: createStreamHttp(),
-          now: () => Date.now(),
-          getCookie: (id) => settings.streamSources?.[id]?.cookie,
-        });
-        const next = isDaily
-          ? await source?.getDailyRecommendedTracks?.({
-              signal: controller.signal,
-              afresh: reloadKey > 0,
-            })
-          : await source?.importPlaylist?.(playlist.id, {
-              signal: controller.signal,
-            });
-        if (!cancelled) setHits(next ?? []);
-      } catch {
-        if (!cancelled && !controller.signal.aborted) {
-          setHits([]);
-          setError(true);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  function refreshTracks() {
+    if (isDaily) {
+      setDailyReloadKey((n) => n + 1);
+      return;
     }
-
-    void load();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [isDaily, playlist.id, playlist.source, reloadKey, settings.streamSources]);
+    void tracksQuery.refetch();
+  }
 
   return (
     <motion.div
@@ -163,10 +174,10 @@ export function OnlinePlaylistDetail({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => setReloadKey((n) => n + 1)}
-            disabled={loading}
+            onClick={refreshTracks}
+            disabled={tracksQuery.isFetching}
           >
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+            <RefreshCw className={cn("size-4", tracksQuery.isFetching && "animate-spin")} />
             {t(isDaily ? "discover.reroll" : "discover.retry")}
           </Button>
         </div>
@@ -183,7 +194,7 @@ export function OnlinePlaylistDetail({
             <div className="flex flex-col items-center gap-3 text-center text-muted-foreground text-sm">
               <AlertCircle className="size-5" />
               <p>{t("streamSources.playlistTracksError")}</p>
-              <Button size="sm" variant="outline" onClick={() => setReloadKey((n) => n + 1)}>
+              <Button size="sm" variant="outline" onClick={refreshTracks}>
                 <RefreshCw className="size-4" />
                 {t("discover.retry")}
               </Button>

@@ -517,6 +517,27 @@ Scrollbar requirement:
 
 ---
 
+## Follow-up: Online Playlist Track Cache
+
+**Date:** 2026-07-05  
+**Status:** Completed
+
+**Problem:** 打开某个在线歌单详情时，网易云等 source 可能一次返回 6000+ 首曲目。当前详情页每次 mount 都直接调用 `importPlaylist(playlist.id)`，导致用户返回/再次打开同一个歌单时重复拉全量曲目，耗时且浪费网络。
+
+**Product Decision:** 在线歌单曲目详情应缓存到请求层。除非用户主动点击详情页刷新/重试/每日推荐换一批，否则重新打开同一个在线歌单不应重新请求完整曲目列表。
+
+**Implementation Notes:**
+- `OnlinePlaylistDetail` 的曲目加载改为 TanStack Query，query key 由 source、playlist id、类型（普通歌单/每日推荐）和 `lastAuthAt` 组成。
+- 普通在线歌单使用 `staleTime: Infinity`、`gcTime: Infinity`，并关闭 mount/window focus/reconnect 自动 refetch。
+- 手动刷新按钮对普通歌单执行 `refetch()`，是唯一会重新拉全量曲目的入口。
+- 每日推荐保留原来的 reroll 语义：初次请求 `afresh: false`，点击换一批后使用新的 query key 并传 `afresh: true`。
+- query key 使用 `lastAuthAt` 区分账号切换，不把 cookie 写进 key 或日志可见结构。
+
+**Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\discover\online-playlist-detail.test.tsx`
+
+---
+
 ## 7. Out of Scope
 
 - Importing every synced playlist automatically as `DjSession`.
@@ -598,3 +619,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Completed source-filter follow-up: sets wall filter now persists and supports all/local/online/specific-platform modes; online playlist cards now match the existing local set gallery grid/list style. |
 | 2026-07-05 | Codex | Adjusted all-source wall ordering so local playlists remain the primary middle section and online playlists render underneath them, with roving keyboard order matching the visible layout. |
 | 2026-07-05 | Codex | Added collapsible sets-wall sections for smart/local/online playlists and prevented local+online grid overlap by avoiding multiple ancestor-scroller virtual grids in the same wall. |
+| 2026-07-05 | Codex | Cached online playlist detail tracks with TanStack Query so reopening a large online playlist does not refetch unless the user explicitly refreshes; daily recommendations keep reroll/afresh behavior. |

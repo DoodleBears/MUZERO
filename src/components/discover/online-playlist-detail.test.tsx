@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -101,9 +102,20 @@ beforeEach(() => {
   ]);
 });
 
+function makeQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+}
+
+function renderWithQuery(ui: ReactNode, client = makeQueryClient()) {
+  return {
+    client,
+    ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>),
+  };
+}
+
 describe("OnlinePlaylistDetail", () => {
   it("loads the fixed daily playlist through the daily recommendations API", async () => {
-    render(
+    renderWithQuery(
       <OnlinePlaylistDetail
         playlist={{
           id: NETEASE_DAILY_PLAYLIST_ID,
@@ -131,7 +143,7 @@ describe("OnlinePlaylistDetail", () => {
   });
 
   it("loads regular online playlists through importPlaylist", async () => {
-    render(
+    renderWithQuery(
       <OnlinePlaylistDetail
         playlist={{ id: "p1", name: "Playlist", source: "netease", trackCount: 1 }}
         onBack={vi.fn()}
@@ -147,9 +159,31 @@ describe("OnlinePlaylistDetail", () => {
     expect(screen.getByText("streamSources.import")).toBeInTheDocument();
   });
 
+  it("keeps regular playlist tracks cached across reopening until manual refresh", async () => {
+    const playlist = { id: "p1", name: "Playlist", source: "netease", trackCount: 1 } as const;
+    const client = makeQueryClient();
+
+    const first = renderWithQuery(
+      <OnlinePlaylistDetail playlist={playlist} onBack={vi.fn()} />,
+      client,
+    );
+
+    expect(await screen.findByText("Playlist Song")).toBeInTheDocument();
+    expect(mocks.provider.importPlaylist).toHaveBeenCalledTimes(1);
+
+    first.unmount();
+    renderWithQuery(<OnlinePlaylistDetail playlist={playlist} onBack={vi.fn()} />, client);
+
+    expect(await screen.findByText("Playlist Song")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.provider.importPlaylist).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText("discover.retry"));
+    await waitFor(() => expect(mocks.provider.importPlaylist).toHaveBeenCalledTimes(2));
+  });
+
   it("plays a clicked row + 'play all' in the online-playlist context", async () => {
     const playlist = { id: "p1", name: "Playlist", source: "netease", trackCount: 1 } as const;
-    render(<OnlinePlaylistDetail playlist={playlist} onBack={vi.fn()} />);
+    renderWithQuery(<OnlinePlaylistDetail playlist={playlist} onBack={vi.fn()} />);
 
     const row = await screen.findByText("Playlist Song");
     fireEvent.click(row);
