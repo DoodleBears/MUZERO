@@ -815,8 +815,14 @@
       "song-search": "点歌 · ライブラリ検索",
       "ai-dj": "AI DJ · 生成",
       "comment": "评论 · コメント",
-      "rating": "评分 · 評価"
+      "rating": "评分 · 評価",
+      "video-request": "视频 · 動画リクエスト"
     },
+    "liveRequestsVideoBadge": "動画",
+    "liveRequestsVideoTitle": "動画リクエスト",
+    "liveRequestsVideoNeedsSource": "動画リクエストには、デスクトップアプリで有効な Bilibili または YouTube ソースが必要です。",
+    "liveRequestsVideoHint": "視聴者は Bilibili / YouTube の動画 ID またはリンクを貼れます。ダウンロードはオンラインソースの既定画質を使い、Downloads に追加されます。",
+    "liveRequestsVideoMaxDuration": "動画の最大時間（分）",
     "liveRequestsRequirePrefix": "コマンド接頭辞を必須にする",
     "liveRequestsRequirePrefixHint": "上記の接頭辞で始まるチャットメッセージのみをリクエストとして扱います。オフ: すべてのメッセージがリクエストになります。",
     "liveRequestsConfidence": "信頼度しきい値",

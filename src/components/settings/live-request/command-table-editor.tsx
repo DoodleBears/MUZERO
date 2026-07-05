@@ -47,9 +47,22 @@ export function CommandTableEditor({
       {commands.map((command) => (
         <div key={command.id} className="grid gap-2 sm:grid-cols-[1fr_10rem] sm:items-start">
           <div className="flex flex-col gap-1">
-            <span className="text-muted-foreground text-xs">
-              {tk(`settings.liveRequestsCommand.${command.id}`, command.id)}
-            </span>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <input
+                  type="checkbox"
+                  checked={command.enabled !== false}
+                  onChange={(event) => patch(command.id, { enabled: event.currentTarget.checked })}
+                  className="size-3.5 accent-[var(--color-primary)]"
+                />
+                {tk(`settings.liveRequestsCommand.${command.id}`, command.id)}
+              </label>
+              {command.mediaKind === "video" && (
+                <span className="rounded-sm border border-primary/30 px-1.5 py-0.5 font-medium text-[10px] text-primary uppercase">
+                  {tk("settings.liveRequestsVideoBadge", "Video")}
+                </span>
+              )}
+            </div>
             <ChipInput
               value={command.prefixes}
               onChange={(prefixes) => patch(command.id, { prefixes })}
@@ -62,7 +75,7 @@ export function CommandTableEditor({
               }
             />
           </div>
-          {command.intent === "request" && (
+          {command.intent === "request" && command.mediaKind !== "video" && (
             <div className="flex flex-col gap-1">
               <span className="text-muted-foreground text-xs">
                 {tk("settings.liveRequestsRoute", "Route")}

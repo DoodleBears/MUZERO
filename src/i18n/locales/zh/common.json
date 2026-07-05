@@ -815,8 +815,14 @@
       "song-search": "点歌 · 库内搜索",
       "ai-dj": "AI DJ · 生成",
       "comment": "评论 · 留言",
-      "rating": "评分 · 打分"
+      "rating": "评分 · 打分",
+      "video-request": "视频 · 视频点播"
     },
+    "liveRequestsVideoBadge": "视频",
+    "liveRequestsVideoTitle": "视频点播",
+    "liveRequestsVideoNeedsSource": "视频点播需要在桌面端启用 Bilibili 或 YouTube 在线源。",
+    "liveRequestsVideoHint": "观众可粘贴 Bilibili 或 YouTube 视频 ID/链接；下载使用「在线源」里的默认视频画质，并落到下载集。",
+    "liveRequestsVideoMaxDuration": "最长视频时长（分钟）",
     "liveRequestsRequirePrefix": "必须带命令前缀",
     "liveRequestsRequirePrefixHint": "只有以上述前缀开头的聊天消息才算点歌；关闭则每条消息都算点歌。",
     "liveRequestsConfidence": "置信阈值",

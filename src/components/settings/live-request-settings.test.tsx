@@ -74,4 +74,21 @@ describe("LiveRequestSettings", () => {
     expect(lastCall.audienceRequestIntake.sources).toHaveLength(2);
     expect(lastCall.audienceRequestIntake.sources[1]).toMatchObject({ status: "testing" });
   });
+
+  it("renders video request controls and saves the duration in seconds", () => {
+    settings = {
+      ...DEFAULT_SETTINGS,
+      streamSources: { bili: { enabled: true } },
+    };
+    render(<LiveRequestSettings />);
+
+    expect(screen.getByText("settings.liveRequestsCommand.video-request")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("settings.liveRequestsVideoMaxDuration"), {
+      target: { value: "12" },
+    });
+
+    const lastCall = saveSettings.mock.calls.at(-1)?.[0];
+    expect(lastCall.audienceRequestIntake.maxVideoRequestDurationSec).toBe(720);
+  });
 });

@@ -20,7 +20,7 @@
 | 1 | 数据模型 + 命令模型：`点视频` intake 命令（`mediaKind:"video"`）+ 时长上限设置 + 库级 by-id 查找（纯函数） | ✅ Completed | [Phase 1](#phase-1数据--命令模型纯函数) |
 | 2 | 请求 fulfillment：id 定向解析 → 本地优先 → 时长闸门 → 预设清晰度下载 → 入队播放（注入式 orchestrator） | ✅ Completed | [Phase 2](#phase-2请求-fulfillment-orchestrator) |
 | 3 | 控制器接线 + 通知 + 播放时序（download-then-enqueue / 队列化，抗 OOM） | ✅ Completed（Electron 手测待跑） | [Phase 3](#phase-3控制器接线--通知--播放时序) |
-| 4 | Settings UI（点视频命令表 + 时长上限 + 清晰度）+ i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4](#phase-4settings-ui--i18n) |
+| 4 | Settings UI（点视频命令表 + 时长上限 + 清晰度）+ i18n（en/zh/ja/ko） | ✅ Completed（Electron 手测待跑） | [Phase 4](#phase-4settings-ui--i18n) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -465,13 +465,16 @@ Automated validation: `pnpm vitest run src/live-requests/live-request-controller
 **Goal:** 让主播能配「点视频」关键词、时长上限、清晰度。
 
 **Tasks:**
-- [ ] `live-request-settings.tsx`：点视频命令行（前缀可编 + 视频徽标 + enable 开关）+ 时长上限输入（分钟）+ 清晰度指向说明。
-- [ ] i18n en→zh/ja/ko 全量（命令名/时长/清晰度说明/4 类拒绝原因/下载中·本地命中通知）。
-- [ ] web/tauri 壳下点视频区块灰显 + 「需在线源（桌面端）」提示。
+- [x] `live-request-settings.tsx`：点视频命令行（前缀可编 + 视频徽标 + enable 开关）+ 时长上限输入（分钟）+ 清晰度指向说明。
+- [x] i18n en→zh/ja/ko 全量（命令名/时长/清晰度说明/4 类拒绝原因/下载中·本地命中通知）。
+- [x] web/tauri 壳下点视频区块灰显 + 「需在线源（桌面端）」提示。
 
 #### Phase 4 Checklist
-- [ ] 四语言文案齐全、无内联硬编码用户可见串。
-- [ ] 端到端手测：配前缀「点MV」→ 发「点MV BV1xx」→ 下载→入库→播放→再点命中本地→点超长被拒，全通。
+- [x] 四语言文案齐全、无内联硬编码用户可见串。验证：`settings.liveRequestsVideo*` 与 `settings.liveRequestsCommand.video-request` 已补齐 en/zh/ja/ko。
+- [x] Settings UI harness：启用在线源后显示 `video-request` 命令，修改「最长视频时长（分钟）」会保存为秒。验证：`pnpm vitest run src/components/settings/live-request-settings.test.tsx` 通过。
+- [ ] 端到端手测：配前缀「点MV」→ 发「点MV BV1xx」→ 下载→入库→播放→再点命中本地→点超长被拒，全通。（需 Electron 壳 + 在线源登录态）
+
+Automated validation: `pnpm vitest run src/components/settings/live-request-settings.test.tsx` 通过；Phase 4 Biome target 与 `pnpm typecheck` 通过。Electron 网络手测需在有在线源登录态的桌面壳内执行：`node scripts/live-request-drive.mjs --video-id <BV-or-YouTube-id> --playback-action play-next`，并在 Settings 中先改前缀/时长上限确认持久化。
 
 ---
 
@@ -540,6 +543,7 @@ Automated validation: `pnpm vitest run src/live-requests/live-request-controller
 | 2026-07-05 | Codex | Phase 1 ✅：TDD 完成 `mediaKind:"video"` 默认命令与 legacy 回填、`maxVideoRequestDurationSec` 默认 480、Dexie v33 `[streamSourceId+streamExternalId]` 复合索引、`normalizeVideoRequestBody` / `resolvePartRef` / `planVideoRequest` 纯规划器、`findLocalDownloadedVideo` 库级 blob-gated 查询。验证：目标 Vitest 90 tests、Biome、TypeScript typecheck 通过 |
 | 2026-07-05 | Codex | Phase 2 ✅：TDD 完成 `executeVideoRequest`/`handleVideoRequest` 注入式 fulfillment、下载集解析复用 `streamDownloadsSetId`、`downloadStreamedHit` 默认清晰度绑定、拒绝/下载失败 never-throw 转状态、`composePartTitle` 分P命名修复。验证：Phase 2 目标 Vitest 49 tests、TypeScript typecheck 通过 |
 | 2026-07-05 | Codex | Phase 3 ✅（自动化）：controller 按 `mediaKind:"video"` 分派到 `handleVideoRequest`；默认下载路径改为 `enqueueDownloadAndWait` 持久队列等待完成后播放；dev control endpoint 与 `scripts/live-request-drive.mjs --video-id` 支持点视频注入；拒绝/下载失败通知接入四语言 key。真实 Electron B站/YouTube 手测仍需在桌面壳执行 |
+| 2026-07-05 | Codex | Phase 4 ✅（自动化）：Settings 命令表显示点视频命令、视频徽标与 enable 开关；视频请求区按 web/在线源状态灰显并提示；最长视频时长以分钟编辑、保存为 `maxVideoRequestDurationSec` 秒；补齐 en/zh/ja/ko Settings 文案。验证：Settings UI Vitest harness、Phase 4 Biome target、TypeScript typecheck 通过；真实 Electron B站/YouTube 手测仍需在线源登录态 |
 
 ---
 

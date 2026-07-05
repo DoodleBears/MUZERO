@@ -46,6 +46,14 @@ export function LiveRequestSettings() {
     intake.transport ?? (isWeb ? "ssn-websocket" : "http-webhook");
   const sources = resolveSources(intake.sources);
   const hasAiDjSource = sources.some((s) => s.routeMode === "ai-dj" || s.routeMode === "hybrid");
+  const hasVideoSource = Boolean(
+    settings.streamSources?.bili?.enabled ||
+      settings.streamSources?.bili?.cookie ||
+      settings.streamSources?.youtube?.enabled ||
+      settings.streamSources?.youtube?.cookie ||
+      settings.streamSources?.youtube?.accessToken,
+  );
+  const videoRequestsDisabled = isWeb || !hasVideoSource;
 
   const [messages, setMessages] = useState<LiveRequestIntakePayload[]>([]);
   const [dialogSourceId, setDialogSourceId] = useState<string | null>(null);
@@ -254,6 +262,46 @@ export function LiveRequestSettings() {
         </div>
 
         <CommandTableEditor commands={resolveCommands(intake)} onChange={onCommandsChange} />
+
+        <div className="rounded-md border border-border p-3">
+          <div className="mb-3 flex flex-col gap-1">
+            <span className="font-medium text-sm">
+              {tk("settings.liveRequestsVideoTitle", "Video requests")}
+            </span>
+            <span className="text-muted-foreground text-xs">
+              {videoRequestsDisabled
+                ? tk(
+                    "settings.liveRequestsVideoNeedsSource",
+                    "Video requests need an enabled Bilibili or YouTube source in the desktop app.",
+                  )
+                : tk(
+                    "settings.liveRequestsVideoHint",
+                    "Viewers can paste a Bilibili or YouTube video id/link. Downloads use Online sources → Default video quality and land in Downloads.",
+                  )}
+            </span>
+          </div>
+          <Field label={tk("settings.liveRequestsVideoMaxDuration", "Max video duration (min)")}>
+            <Input
+              type="number"
+              min={1}
+              disabled={videoRequestsDisabled}
+              value={Math.max(
+                1,
+                Math.round(
+                  (intake.maxVideoRequestDurationSec ??
+                    DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS.maxVideoRequestDurationSec ??
+                    480) / 60,
+                ),
+              )}
+              onChange={(event) =>
+                void update({
+                  maxVideoRequestDurationSec:
+                    Math.max(1, Math.round(Number(event.currentTarget.value) || 1)) * 60,
+                })
+              }
+            />
+          </Field>
+        </div>
 
         <Toggle
           checked={intake.requireCommandPrefix ?? true}

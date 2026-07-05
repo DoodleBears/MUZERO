@@ -833,8 +833,14 @@
       "song-search": "点歌 · library search",
       "ai-dj": "AI DJ · generate",
       "comment": "评论 · comment",
-      "rating": "评分 · rating"
+      "rating": "评分 · rating",
+      "video-request": "视频 · video request"
     },
+    "liveRequestsVideoBadge": "Video",
+    "liveRequestsVideoTitle": "Video requests",
+    "liveRequestsVideoNeedsSource": "Video requests need an enabled Bilibili or YouTube source in the desktop app.",
+    "liveRequestsVideoHint": "Viewers can paste a Bilibili or YouTube video id/link. Downloads use Online sources → Default video quality and land in Downloads.",
+    "liveRequestsVideoMaxDuration": "Max video duration (min)",
     "liveRequestsRequirePrefix": "Require a command prefix",
     "liveRequestsRequirePrefixHint": "Only chat messages that start with a prefix above are treated as song requests. Off: every message is a request.",
     "liveRequestsConfidence": "Confidence threshold",

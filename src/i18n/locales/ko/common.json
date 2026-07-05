@@ -815,8 +815,14 @@
       "song-search": "点歌 · 라이브러리 검색",
       "ai-dj": "AI DJ · 생성",
       "comment": "评论 · 댓글",
-      "rating": "评分 · 평점"
+      "rating": "评分 · 평점",
+      "video-request": "视频 · 동영상 요청"
     },
+    "liveRequestsVideoBadge": "동영상",
+    "liveRequestsVideoTitle": "동영상 요청",
+    "liveRequestsVideoNeedsSource": "동영상 요청을 사용하려면 데스크톱 앱에서 Bilibili 또는 YouTube 소스를 활성화해야 합니다.",
+    "liveRequestsVideoHint": "시청자는 Bilibili 또는 YouTube 동영상 ID/링크를 붙여넣을 수 있습니다. 다운로드는 온라인 소스의 기본 동영상 품질을 사용하며 Downloads에 추가됩니다.",
+    "liveRequestsVideoMaxDuration": "최대 동영상 길이(분)",
     "liveRequestsRequirePrefix": "명령 접두사 필수",
     "liveRequestsRequirePrefixHint": "위 접두사로 시작하는 채팅 메시지만 신청곡으로 처리합니다. 끄면 모든 메시지가 신청곡이 됩니다.",
     "liveRequestsConfidence": "신뢰도 임계값",
