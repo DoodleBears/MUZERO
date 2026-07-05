@@ -6,6 +6,7 @@ afterEach(() => {
     tab: "search",
     settingsItem: "appearance",
     pendingLibraryEntity: null,
+    libraryHomeNonce: 0,
   });
   localStorage.clear();
 });
@@ -62,6 +63,23 @@ describe("nav-store — persisted active tab", () => {
       playlist,
     });
     expect(localStorage.getItem("muzero-nav")).not.toContain("p1");
+  });
+
+  it("re-selecting the active library tab bumps libraryHomeNonce instead of a plain switch", () => {
+    useNavStore.setState({ tab: "search", libraryHomeNonce: 0 });
+    useNavStore.getState().setTab("search");
+    expect(useNavStore.getState().tab).toBe("search");
+    expect(useNavStore.getState().libraryHomeNonce).toBe(1);
+    // A second re-tap keeps bumping so the library page reacts each time.
+    useNavStore.getState().setTab("search");
+    expect(useNavStore.getState().libraryHomeNonce).toBe(2);
+  });
+
+  it("switching to the library tab from elsewhere does not bump libraryHomeNonce", () => {
+    useNavStore.setState({ tab: "settings", libraryHomeNonce: 0 });
+    useNavStore.getState().setTab("search");
+    expect(useNavStore.getState().tab).toBe("search");
+    expect(useNavStore.getState().libraryHomeNonce).toBe(0);
   });
 
   it("openDownloadsTab switches to the library tab and queues the downloads intent", () => {

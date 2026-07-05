@@ -22,15 +22,19 @@ function shortcutKeys(index: number, mac: boolean): string[] {
 }
 
 function HeaderNavTabsTab({
+  active,
   index,
   item,
   label,
   mac,
+  onReselect,
 }: {
+  active: boolean;
   index: number;
   item: NavFabItem;
   label: string;
   mac: boolean;
+  onReselect: () => void;
 }) {
   const iconRef = useRef<AnimatedNavIconHandle>(null);
   const Icon = item.icon;
@@ -50,6 +54,11 @@ function HeaderNavTabsTab({
         render={
           <TabsTab
             className="h-7 bg-accent/30 px-3 text-xs data-[selected]:bg-transparent"
+            // Base UI `Tabs` fires `onValueChange` only on a real change, so
+            // re-clicking the already-active tab is swallowed. Route that click
+            // through `onReselect` so it still reaches `setTab` (which backs the
+            // library tab out of any open detail — the re-tap-to-home behavior).
+            onClick={active ? onReselect : undefined}
             onBlur={stopIconAnimation}
             onFocus={startIconAnimation}
             onMouseEnter={startIconAnimation}
@@ -187,11 +196,13 @@ export function HeaderNavTabs({
 
                       return (
                         <HeaderNavTabsTab
+                          active={item.id === tabValue}
                           index={index}
                           item={item}
                           key={item.id}
                           label={label}
                           mac={mac}
+                          onReselect={() => pick(item.id)}
                         />
                       );
                     })}

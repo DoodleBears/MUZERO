@@ -1232,6 +1232,44 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
     transitionState(update);
   }
 
+  // Re-tapping the already-active library tab (nav-store bumps `libraryHomeNonce`)
+  // backs out of any open detail to the root wall — same effect as pressing Back,
+  // so it animates through `leaveDetail`. Guarded by a ref so it only fires on an
+  // actual bump (not the initial mount) and no-ops when already at the wall.
+  const libraryHomeNonce = useNavStore((s) => s.libraryHomeNonce);
+  const lastLibraryHomeNonce = useRef(libraryHomeNonce);
+  useEffect(() => {
+    if (lastLibraryHomeNonce.current === libraryHomeNonce) return;
+    lastLibraryHomeNonce.current = libraryHomeNonce;
+    if (
+      !selectedSetId &&
+      !selectedSystemPlaylistId &&
+      !selectedOnlinePlaylist &&
+      !selectedArtistKey &&
+      !selectedAlbumKey
+    ) {
+      return;
+    }
+    // Same animated back-out as `leaveDetail`, inlined so the effect depends only
+    // on the nonce + open-detail flags (not the per-render `leaveDetail` closure).
+    transitionState(() => {
+      setSelectedSetAnchorTrackId(undefined);
+      setSelectedSetId(null);
+      setSelectedSystemAnchorTrackId(undefined);
+      setSelectedSystemPlaylistId(null);
+      setSelectedOnlinePlaylist(null);
+      setSelectedArtistKey(null);
+      setSelectedAlbumKey(null);
+    });
+  }, [
+    libraryHomeNonce,
+    selectedSetId,
+    selectedSystemPlaylistId,
+    selectedOnlinePlaylist,
+    selectedArtistKey,
+    selectedAlbumKey,
+  ]);
+
   // Opening a card remembers it so backing out re-focuses it (W/S/↑↓ continue from
   // there) and restores the wall scroll position on the way back.
   const openSet = useCallback(

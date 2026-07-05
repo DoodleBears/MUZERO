@@ -35,6 +35,13 @@ export type LibraryEntityTarget =
 interface NavState {
   tab: Tab;
   setTab: (tab: Tab) => void;
+  /**
+   * Bumped whenever the already-active library (search) tab is re-selected. The
+   * library page watches this to back out of any open detail (set / artist /
+   * album / system / online playlist) to the root wall — re-tapping the tab you're
+   * already on takes you "home". Ephemeral (never persisted).
+   */
+  libraryHomeNonce: number;
   /** Active item in the two-column Settings page (sidebar → detail). */
   settingsItem: string;
   setSettingsItem: (item: string) => void;
@@ -60,7 +67,18 @@ export const useNavStore = create<NavState>()(
   persist(
     (set, get) => ({
       tab: "search",
-      setTab: (tab) => set({ tab: normalizeTab(tab) }),
+      setTab: (tab) => {
+        const next = normalizeTab(tab);
+        // Re-selecting the library tab you're already on returns it to the root
+        // wall instead of a no-op — see `libraryHomeNonce`. (The plain switch
+        // stays faithful; this only backs out of an open detail, not scroll/sort.)
+        if (next === "search" && get().tab === "search") {
+          set((s) => ({ libraryHomeNonce: s.libraryHomeNonce + 1 }));
+          return;
+        }
+        set({ tab: next });
+      },
+      libraryHomeNonce: 0,
       settingsItem: "appearance",
       setSettingsItem: (settingsItem) => set({ settingsItem }),
       pendingLibraryEntity: null,
