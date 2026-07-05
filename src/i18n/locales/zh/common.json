@@ -1409,6 +1409,12 @@
       "local": "本地",
       "online": "在线"
     },
+    "section": {
+      "system": "智能歌单",
+      "local": "本地歌单",
+      "online": "在线歌单"
+    },
+    "playlistCount_other": "{{count}} 个歌单",
     "refreshOnlinePlaylists": "刷新",
     "onlinePlaylistNoMatches": "没有匹配的在线歌单。",
     "cloudSourceUnknown": "云盘来源",

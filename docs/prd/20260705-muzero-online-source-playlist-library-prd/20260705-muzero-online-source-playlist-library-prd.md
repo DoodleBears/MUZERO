@@ -494,6 +494,29 @@ Scrollbar requirement:
 
 ---
 
+## Follow-up: Collapsible Playlist Sections
+
+**Date:** 2026-07-05  
+**Status:** Completed
+
+**Problem:** With both local and online playlists visible, multiple card grids in the same sets wall could visually overlap. The online section was using the ancestor-scroller `VirtualCardGrid` after the local virtualized grid, but that component is tuned for one primary wall grid per scroll container.
+
+**Product Adjustment:** When online playlists are present, the sets wall should read as separate collapsible sections instead of one undifferentiated stack.
+
+**Implementation Notes:**
+- Split the sets wall into collapsible sections for smart/system playlists, local playlists, and online playlists.
+- Persist section collapse state locally with the same UI-preference discipline as view/sort/source filter.
+- Keep the order as smart/system playlists first, local playlists in the middle, and online playlists underneath local content.
+- Disable online `VirtualCardGrid` when local playlists are also visible, preventing multiple ancestor-scroller virtual grids from overlapping. Online-only views can still use the virtual grid.
+- Update roving keyboard navigation to skip cards in collapsed sections.
+
+**Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\library\online-playlist-section.test.tsx src\streamsrc\online-playlist-catalog.e2e.test.tsx src\components\library\system-playlist-cards.test.tsx`
+- `node_modules\.bin\biome.CMD check --write src\pages\search-page.tsx src\components\library\online-playlist-section.tsx src\i18n\locales\en\common.json src\i18n\locales\zh\common.json src\i18n\locales\ja\common.json src\i18n\locales\ko\common.json`
+- `node_modules\.bin\tsc.CMD --noEmit --pretty false`
+
+---
+
 ## 7. Out of Scope
 
 - Importing every synced playlist automatically as `DjSession`.
@@ -574,3 +597,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Fixed NetEase refresh-storm regression: failed catalog refreshes now record `attemptedAt` and are auto-retried only after the stale window, while manual refresh still forces retry. |
 | 2026-07-05 | Codex | Completed source-filter follow-up: sets wall filter now persists and supports all/local/online/specific-platform modes; online playlist cards now match the existing local set gallery grid/list style. |
 | 2026-07-05 | Codex | Adjusted all-source wall ordering so local playlists remain the primary middle section and online playlists render underneath them, with roving keyboard order matching the visible layout. |
+| 2026-07-05 | Codex | Added collapsible sets-wall sections for smart/local/online playlists and prevented local+online grid overlap by avoiding multiple ancestor-scroller virtual grids in the same wall. |

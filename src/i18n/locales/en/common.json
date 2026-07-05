@@ -1430,6 +1430,13 @@
       "local": "Local",
       "online": "Online"
     },
+    "section": {
+      "system": "Smart playlists",
+      "local": "Local playlists",
+      "online": "Online playlists"
+    },
+    "playlistCount_one": "{{count}} playlist",
+    "playlistCount_other": "{{count}} playlists",
     "refreshOnlinePlaylists": "Refresh",
     "onlinePlaylistNoMatches": "No online playlists match your filters.",
     "cloudSourceUnknown": "Cloud source",

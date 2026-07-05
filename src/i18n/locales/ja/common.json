@@ -1409,6 +1409,12 @@
       "local": "ローカル",
       "online": "オンライン"
     },
+    "section": {
+      "system": "スマートプレイリスト",
+      "local": "ローカルプレイリスト",
+      "online": "オンラインプレイリスト"
+    },
+    "playlistCount_other": "{{count}} 件のプレイリスト",
     "refreshOnlinePlaylists": "更新",
     "onlinePlaylistNoMatches": "条件に一致するオンラインプレイリストはありません。",
     "cloudSourceUnknown": "クラウドソース",

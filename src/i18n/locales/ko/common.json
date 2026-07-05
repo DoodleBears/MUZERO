@@ -1408,6 +1408,12 @@
       "local": "로컬",
       "online": "온라인"
     },
+    "section": {
+      "system": "스마트 플레이리스트",
+      "local": "로컬 플레이리스트",
+      "online": "온라인 플레이리스트"
+    },
+    "playlistCount_other": "플레이리스트 {{count}}개",
     "refreshOnlinePlaylists": "새로 고침",
     "onlinePlaylistNoMatches": "필터와 일치하는 온라인 플레이리스트가 없습니다.",
     "cloudSourceUnknown": "클라우드 소스",

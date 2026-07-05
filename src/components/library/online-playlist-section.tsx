@@ -20,6 +20,7 @@ export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
   onRefresh,
   refreshing = false,
   view,
+  showHeader = true,
   scrollElement = null,
   lenisRef,
 }: {
@@ -30,6 +31,7 @@ export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
   onRefresh: () => void;
   refreshing?: boolean;
   view: OnlinePlaylistView;
+  showHeader?: boolean;
   scrollElement?: HTMLElement | null;
   lenisRef?: RefObject<Lenis | null>;
 }) {
@@ -40,18 +42,20 @@ export const OnlinePlaylistSection = memo(function OnlinePlaylistSection({
 
   return (
     <section className="mb-5 px-3" data-testid="online-playlist-section">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-        <div className="min-w-0">
-          <h2 className="font-medium text-sm">{t("gallery.onlinePlaylists")}</h2>
-          <p className="text-muted-foreground text-xs">
-            {t("gallery.onlinePlaylistCount", { count: playlists.length })}
-          </p>
+      {showHeader ? (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
+          <div className="min-w-0">
+            <h2 className="font-medium text-sm">{t("gallery.onlinePlaylists")}</h2>
+            <p className="text-muted-foreground text-xs">
+              {t("gallery.onlinePlaylistCount", { count: playlists.length })}
+            </p>
+          </div>
+          <Button type="button" size="sm" variant="ghost" onClick={onRefresh} disabled={refreshing}>
+            <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
+            {t("gallery.refreshOnlinePlaylists")}
+          </Button>
         </div>
-        <Button type="button" size="sm" variant="ghost" onClick={onRefresh} disabled={refreshing}>
-          <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
-          {t("gallery.refreshOnlinePlaylists")}
-        </Button>
-      </div>
+      ) : null}
 
       {visible.length === 0 ? (
         <p className="rounded-xl px-2 py-6 text-center text-muted-foreground text-sm">

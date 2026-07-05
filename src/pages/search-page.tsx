@@ -2,6 +2,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import type { TFunction } from "i18next";
 import {
   ArrowLeft,
+  ChevronRight,
   Heart,
   ImagePlus,
   LayoutGrid,
@@ -9,11 +10,21 @@ import {
   Loader2,
   Play,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
@@ -219,10 +230,12 @@ const TRACK_SORT_DIR_KEY = "muzero-gallery-track-sort-dir";
 const SET_SORT_KEY = "muzero-gallery-set-sort";
 const SET_SORT_DIR_KEY = "muzero-gallery-set-sort-dir";
 const SET_SOURCE_FILTER_KEY = "muzero-gallery-set-source-filter";
+const SET_SECTION_COLLAPSE_KEY = "muzero-gallery-set-section-collapsed";
 const ENTITY_SORT_KEY = "muzero-gallery-entity-sort";
 const ENTITY_SORT_DIR_KEY = "muzero-gallery-entity-sort-dir";
 type SetSourceFilter = "all" | "local" | "online" | StreamSourceId;
 const STREAM_SOURCE_FILTERS = Object.keys(STREAM_SOURCE_DISPLAY_NAMES) as StreamSourceId[];
+type SetWallSectionId = "system" | "local" | "online";
 
 function savedSortDir(key: string, fallback: SortDir): SortDir {
   if (typeof localStorage === "undefined") return fallback;
@@ -313,6 +326,23 @@ function savedSetSourceFilter(): SetSourceFilter {
     return saved;
   }
   return "all";
+}
+
+function savedSetSectionCollapsed(): Record<SetWallSectionId, boolean> {
+  const fallback = { system: false, local: false, online: false };
+  if (typeof localStorage === "undefined") return fallback;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SET_SECTION_COLLAPSE_KEY) ?? "{}") as Partial<
+      Record<SetWallSectionId, boolean>
+    >;
+    return {
+      system: parsed.system ?? false,
+      local: parsed.local ?? false,
+      online: parsed.online ?? false,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function savedEntitySort(): EntitySort {
@@ -414,6 +444,7 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   const [deletingSet, setDeletingSet] = useState<DjSession | null>(null);
   // Sets-wall origin filter (AI / human / imported). "all" shows everything.
   const [originFilter, setOriginFilter] = useState<SetOrigin | "all">("all");
+  const [collapsedSetSections, setCollapsedSetSections] = useState(savedSetSectionCollapsed);
   const [deletingEntity, setDeletingEntity] = useState<{
     kind: "album" | "artist";
     name: string;
@@ -1074,9 +1105,15 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   const galleryKeys = useMemo<string[]>(() => {
     if (mode === "sets") {
       return [
-        ...(showLocalPlaylists ? systemPlaylistItems.map((item) => item.id) : []),
-        ...shown.map((item) => item.session.id),
-        ...visibleOnlinePlaylists.map((playlist) => `online:${playlist.source}:${playlist.id}`),
+        ...(showLocalPlaylists && !collapsedSetSections.system
+          ? systemPlaylistItems.map((item) => item.id)
+          : []),
+        ...(showLocalPlaylists && !collapsedSetSections.local
+          ? shown.map((item) => item.session.id)
+          : []),
+        ...(showOnlinePlaylists && !collapsedSetSections.online
+          ? visibleOnlinePlaylists.map((playlist) => `online:${playlist.source}:${playlist.id}`)
+          : []),
       ];
     }
     if (mode === "albums") return albumItems.map((item) => item.key);
@@ -1090,6 +1127,8 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
     systemPlaylistItems,
     visibleOnlinePlaylists,
     showLocalPlaylists,
+    showOnlinePlaylists,
+    collapsedSetSections,
   ]);
   const galleryKeysRef = useRef(galleryKeys);
   galleryKeysRef.current = galleryKeys;
@@ -1253,6 +1292,16 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
   function onSetSourceFilterClick(next: SetSourceFilter) {
     setSetSourceFilter(next);
     if (typeof localStorage !== "undefined") localStorage.setItem(SET_SOURCE_FILTER_KEY, next);
+  }
+
+  function toggleSetSection(section: SetWallSectionId) {
+    setCollapsedSetSections((current) => {
+      const next = { ...current, [section]: !current[section] };
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(SET_SECTION_COLLAPSE_KEY, JSON.stringify(next));
+      }
+      return next;
+    });
   }
 
   function onTrackSortClick(next: TrackSort) {
@@ -1955,69 +2004,105 @@ export function SearchPage({ pageActive }: { pageActive?: boolean } = {}) {
               </div>
 
               {showLocalPlaylists ? (
-                <div className="px-3">
-                  <RenderTraceBoundary id="search:sets:system-cards" active={searchTabActive}>
-                    <SystemPlaylistCards
-                      items={systemPlaylistItems}
-                      view={activeWallView}
-                      onOpen={openSystemPlaylist}
-                      onPlay={playSystemSet}
-                    />
-                  </RenderTraceBoundary>
-                </div>
+                <SetWallSection
+                  title={t("gallery.section.system")}
+                  subtitle={t("gallery.playlistCount", { count: systemPlaylistItems.length })}
+                  collapsed={collapsedSetSections.system}
+                  onToggle={() => toggleSetSection("system")}
+                >
+                  <div className="px-3">
+                    <RenderTraceBoundary id="search:sets:system-cards" active={searchTabActive}>
+                      <SystemPlaylistCards
+                        items={systemPlaylistItems}
+                        view={activeWallView}
+                        onOpen={openSystemPlaylist}
+                        onPlay={playSystemSet}
+                      />
+                    </RenderTraceBoundary>
+                  </div>
+                </SetWallSection>
               ) : null}
 
-              {/* Right-click anywhere on the wall (incl. empty space) to start a new set. */}
               {showLocalPlaylists ? (
-                <ContextMenu>
-                  <ContextMenuTrigger className="block min-h-[40vh] px-3">
-                    {shown.length === 0 ? (
-                      visibleOnlinePlaylists.length > 0 ? null : sessions.length === 0 &&
-                        setQuery.trim() === "" ? (
-                        <LibraryImportEmptyState className="mt-6" actions="direct" />
-                      ) : (
-                        <p className="mt-12 text-center text-sm text-muted-foreground">
-                          {t("gallery.empty")}
-                        </p>
-                      )
+                <SetWallSection
+                  title={t("gallery.section.local")}
+                  subtitle={t("gallery.playlistCount", { count: shown.length })}
+                  collapsed={collapsedSetSections.local}
+                  onToggle={() => toggleSetSection("local")}
+                >
+                  {shown.length === 0 ? (
+                    sessions.length === 0 && setQuery.trim() === "" ? (
+                      <LibraryImportEmptyState className="mt-6" actions="direct" />
                     ) : (
-                      <RenderTraceBoundary id="search:sets:grid" active={searchTabActive}>
-                        <VirtualCardGrid
-                          gridRef={galleryRef}
-                          items={shown}
-                          view={activeWallView}
-                          getKey={getSetKey}
-                          className={wallAlphabet ? "pr-6" : undefined}
-                          scrollElement={wallScrollEl}
-                          lenisRef={wallLenisRef}
-                          restoreScrollTop={wallScrollTops.current.sets}
-                          initialFocusKey={returnFocusKeyRef.current}
-                          onInitialFocusHandled={handleSetInitialFocusHandled}
-                          renderCard={renderSetCard}
-                        />
-                      </RenderTraceBoundary>
-                    )}
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    <ContextMenuItem onClick={() => void createNewSet()}>
-                      <Plus /> {t("gallery.newSet")}
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
+                      <p className="mt-12 text-center text-sm text-muted-foreground">
+                        {t("gallery.empty")}
+                      </p>
+                    )
+                  ) : (
+                    <ContextMenu>
+                      <ContextMenuTrigger className="block min-h-[40vh] px-3">
+                        <RenderTraceBoundary id="search:sets:grid" active={searchTabActive}>
+                          <VirtualCardGrid
+                            gridRef={galleryRef}
+                            items={shown}
+                            view={activeWallView}
+                            getKey={getSetKey}
+                            className={wallAlphabet ? "pr-6" : undefined}
+                            scrollElement={wallScrollEl}
+                            lenisRef={wallLenisRef}
+                            restoreScrollTop={wallScrollTops.current.sets}
+                            initialFocusKey={returnFocusKeyRef.current}
+                            onInitialFocusHandled={handleSetInitialFocusHandled}
+                            renderCard={renderSetCard}
+                          />
+                        </RenderTraceBoundary>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onClick={() => void createNewSet()}>
+                          <Plus /> {t("gallery.newSet")}
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  )}
+                </SetWallSection>
               ) : null}
 
               {showOnlinePlaylists ? (
-                <OnlinePlaylistSection
-                  playlists={onlineSourceFilteredPlaylists}
-                  query={setQuery}
-                  onOpen={setSelectedOnlinePlaylist}
-                  onImport={setOnlineImportTarget}
-                  onRefresh={() => void onlineCatalog.refreshAll()}
-                  refreshing={onlineCatalog.syncing}
-                  view={activeWallView}
-                  scrollElement={wallScrollEl}
-                  lenisRef={wallLenisRef}
-                />
+                <SetWallSection
+                  title={t("gallery.section.online")}
+                  subtitle={t("gallery.onlinePlaylistCount", {
+                    count: visibleOnlinePlaylists.length,
+                  })}
+                  collapsed={collapsedSetSections.online}
+                  onToggle={() => toggleSetSection("online")}
+                  action={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void onlineCatalog.refreshAll()}
+                      disabled={onlineCatalog.syncing}
+                    >
+                      <RefreshCw
+                        className={cn("size-4", onlineCatalog.syncing && "animate-spin")}
+                      />
+                      {t("gallery.refreshOnlinePlaylists")}
+                    </Button>
+                  }
+                >
+                  <OnlinePlaylistSection
+                    playlists={onlineSourceFilteredPlaylists}
+                    query={setQuery}
+                    onOpen={setSelectedOnlinePlaylist}
+                    onImport={setOnlineImportTarget}
+                    onRefresh={() => void onlineCatalog.refreshAll()}
+                    refreshing={onlineCatalog.syncing}
+                    view={activeWallView}
+                    showHeader={false}
+                    scrollElement={showLocalPlaylists ? null : wallScrollEl}
+                    lenisRef={showLocalPlaylists ? undefined : wallLenisRef}
+                  />
+                </SetWallSection>
               ) : null}
               {showOnlinePlaylists &&
               !showLocalPlaylists &&
@@ -2870,6 +2955,50 @@ function ViewToggleGroup({
         <LayoutGrid className="size-4" />
       </IconToggle>
     </div>
+  );
+}
+
+function SetWallSection({
+  title,
+  subtitle,
+  action,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mb-5" data-set-wall-section>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-2 px-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronRight
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform",
+              !collapsed && "rotate-90",
+            )}
+          />
+          <span className="min-w-0">
+            <span className="block font-medium text-sm">{title}</span>
+            {subtitle ? (
+              <span className="block truncate text-muted-foreground text-xs">{subtitle}</span>
+            ) : null}
+          </span>
+        </button>
+        {action ? <div className="shrink-0 pr-3">{action}</div> : null}
+      </div>
+      {collapsed ? null : children}
+    </section>
   );
 }
 
