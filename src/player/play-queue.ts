@@ -95,6 +95,22 @@ export function insertRequestAt(
 }
 
 /**
+ * The visible audience-request queue: the contiguous `requested` block immediately
+ * after the current item. For [A, R1, R2, B, C] while A plays, this returns [R1,R2]
+ * and deliberately stops before the host playlist resumes at B.
+ */
+export function requestBlockTrackIds(state: PlayQueueState): string[] {
+  const start = state.currentIndex < 0 ? 0 : state.currentIndex + 1;
+  const ids: string[] = [];
+  for (let i = start; i < state.entries.length; i++) {
+    const entry = state.entries[i];
+    if (!entry?.requested) break;
+    ids.push(entry.trackId);
+  }
+  return ids;
+}
+
+/**
  * Remove an entry by id. Removing the *current* entry leaves the cursor in place
  * (now pointing at what was next); removing any other follows the current track.
  */

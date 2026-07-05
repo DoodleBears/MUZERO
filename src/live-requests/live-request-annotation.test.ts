@@ -93,14 +93,17 @@ describe("applyAnnotationCommand", () => {
     });
   });
 
-  it("anchors to an explicit mm:ss, clamped to the track length", async () => {
+  it("drops an out-of-range explicit timestamp but keeps the comment", async () => {
     const addMemory = vi.fn(memoryStub);
     await applyAnnotationCommand(comment("评论 3:14 这句绝了"), req(), {
       addMemory,
       getCurrentTrackId: () => "trk_1",
       getTrackDurationSec: () => 100,
     });
-    expect(addMemory.mock.calls[0][0].atSec).toBe(100); // 194s clamped to 100s duration
+    expect(addMemory.mock.calls[0][0]).toMatchObject({
+      note: "这句绝了",
+      atSec: undefined,
+    });
   });
 
   it("keeps an in-range explicit timestamp", async () => {

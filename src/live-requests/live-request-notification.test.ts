@@ -10,14 +10,16 @@ vi.mock("@/stores/notification-store", () => ({
   notify: { info: notifyInfo, success: notifySuccess },
 }));
 vi.mock("@/i18n/i18n", () => ({
-  default: { t: (key: string, opts?: { title?: string }) => `${key}:${opts?.title ?? ""}` },
+  default: { t: (key: string, opts?: Record<string, unknown>) => `${key}:${opts?.title ?? ""}` },
 }));
 
 import {
   formatAudienceRequestQueuePreview,
   notifyAiDjRequestReceived,
+  notifyAnnotationAdded,
   notifyAudienceRequestPlayed,
   notifyAudienceRequestQueuePreview,
+  notifyRatingAdded,
 } from "./live-request-notification";
 
 function fakeTrack(over: Partial<Track> = {}): Track {
@@ -104,6 +106,31 @@ describe("notifyAiDjRequestReceived", () => {
     expect(notifySuccess).toHaveBeenCalledWith("liveRequest.aiDjReceived:", {
       detail: "来一首暖场 city pop",
       duration: 8000,
+    });
+  });
+});
+
+describe("annotation toasts", () => {
+  it("fires a rating toast with the updated crowd average", () => {
+    notifySuccess.mockClear();
+
+    notifyRatingAdded(fakeTrack(), 5, { average: 4.5, count: 2 });
+
+    expect(notifySuccess).toHaveBeenCalledWith("liveRequest.ratingAdded:晴天", {
+      detail: "liveRequest.ratingDetail:",
+    });
+  });
+
+  it("fires a comment toast with commenter attribution and note detail", () => {
+    notifySuccess.mockClear();
+
+    notifyAnnotationAdded(fakeTrack(), {
+      author: { displayName: "Alice", kind: "audience", key: "bili:1" },
+      note: "3:14 这句绝了",
+    } as never);
+
+    expect(notifySuccess).toHaveBeenCalledWith("liveRequest.commentAddedBy:晴天", {
+      detail: "3:14 这句绝了",
     });
   });
 });

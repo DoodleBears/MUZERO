@@ -12,6 +12,7 @@ import {
   removeEntriesByTrackIds,
   removeEntry,
   replaceEntries,
+  requestBlockTrackIds,
   unconsumedTrackIds,
 } from "./play-queue";
 
@@ -124,6 +125,37 @@ describe("insertRequestAt (play-next anchored at the store cursor)", () => {
   it("appends when the anchor is idle (-1)", () => {
     const s = insertRequestAt(state(["a", "b"], 1), -1, [e("x")]);
     expect(ids(s)).toEqual(["a", "b", "x"]);
+  });
+});
+
+describe("requestBlockTrackIds", () => {
+  it("returns only the contiguous requested block after the current track", () => {
+    const base = insertRequest(state(["a", "b", "c"], 0), [e("r1")]);
+    const withTwo = insertRequest(base, [e("r2")]);
+
+    expect(ids(withTwo)).toEqual(["a", "r1", "r2", "b", "c"]);
+    expect(requestBlockTrackIds(withTwo)).toEqual(["r1", "r2"]);
+  });
+
+  it("returns remaining requests while a requested track is playing", () => {
+    const base = insertRequest(state(["a", "b"], 0), [e("r1")]);
+    const withTwo = insertRequest(base, [e("r2")]);
+    const playingFirstRequest = { ...withTwo, currentIndex: 1 };
+
+    expect(requestBlockTrackIds(playingFirstRequest)).toEqual(["r2"]);
+  });
+
+  it("stops before normal playlist entries and includes idle requested entries", () => {
+    expect(
+      requestBlockTrackIds({
+        entries: [
+          { ...e("r1"), requested: true },
+          { ...e("b"), requested: false },
+          { ...e("r2"), requested: true },
+        ],
+        currentIndex: -1,
+      }),
+    ).toEqual(["r1"]);
   });
 });
 

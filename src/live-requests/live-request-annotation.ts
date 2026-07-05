@@ -70,7 +70,7 @@ export interface CommentApplyDeps {
     atSec?: number;
   }) => Promise<Memory>;
   getCurrentTrackId: () => string | undefined | Promise<string | undefined>;
-  /** Clamp an explicit `mm:ss` to [0, durationSec]; absent → no upper clamp. */
+  /** Validate an explicit `mm:ss`; if it exceeds durationSec, drop the anchor but keep the note. */
   getTrackDurationSec?: (trackId: string) => number | undefined | Promise<number | undefined>;
   onAnnotated?: (input: { trackId: string; memory: Memory }) => void;
 }
@@ -78,8 +78,9 @@ export interface CommentApplyDeps {
 /**
  * Apply a `评论` command: write a Memory (author = sender) onto the currently-playing
  * track. Default floating (carousel); anchors to `atSec` ONLY when the sender wrote an
- * explicit `mm:ss` (clamped to the track length) — livestream latency makes arrival-time
- * anchoring meaningless (PRD Q10). Ignored when the comment is empty or nothing is playing.
+ * explicit in-range `mm:ss`; an out-of-range timestamp is discarded while the comment
+ * remains floating. Livestream latency makes arrival-time anchoring meaningless (PRD Q10).
+ * Ignored when the comment is empty or nothing is playing.
  */
 export async function applyAnnotationCommand(
   match: IntakeCommandMatch,
@@ -96,7 +97,7 @@ export async function applyAnnotationCommand(
     atSec = Math.max(0, Math.floor(atSec));
     const duration = await deps.getTrackDurationSec?.(trackId);
     if (duration != null && Number.isFinite(duration)) {
-      atSec = Math.min(atSec, Math.floor(duration));
+      atSec = atSec <= Math.floor(duration) ? atSec : undefined;
     }
   }
 

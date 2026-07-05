@@ -558,6 +558,9 @@ export function startPerfControlBridge(): void {
         id: n.id,
         type: n.type,
         message: n.message,
+        detail: n.detail,
+        duration: n.duration,
+        progress: n.progress,
         actions: n.actions?.map((a) => a.label),
       })),
     }),
@@ -654,6 +657,7 @@ export function startPerfControlBridge(): void {
     // so route=search + each playbackAction exercises the live library search + player.
     //   { action: "sample", count? }            → queued tracks {id,title} to query with
     //   { action: "inject", query, routeMode?, playbackAction? } → routes one, returns item
+    //   { action: "payload", body, sourceId? }  → routes a raw intake payload (评论/评分)
     liveRequest: async (payload) => {
       const action = String(payload.action ?? "");
       if (action === "sample") {
@@ -677,6 +681,18 @@ export function startPerfControlBridge(): void {
           playbackAction: payload.playbackAction as never,
         });
         return { item };
+      }
+      if (action === "payload") {
+        const { handleLiveRequestPayload, getLiveRequestItems } = await import(
+          "@/live-requests/live-request-controller"
+        );
+        const body =
+          typeof payload.body === "string" ? payload.body : JSON.stringify(payload.body ?? {});
+        await handleLiveRequestPayload({
+          body,
+          sourceId: typeof payload.sourceId === "string" ? payload.sourceId : undefined,
+        });
+        return { items: getLiveRequestItems().slice(0, 5) };
       }
       if (action === "setApproval") {
         // Safe renderer-side read-modify-write: flip ONLY requireApprovalForPlayNow while

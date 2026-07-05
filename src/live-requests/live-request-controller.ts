@@ -17,6 +17,7 @@ import {
 import { type DesktopLiveRequestIntakeControls, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { log } from "@/lib/logger";
 import { resolveTrackRating } from "@/lib/track-rating";
+import { requestBlockTrackIds } from "@/player/play-queue";
 import {
   type AudienceRequestRuntime,
   type AudienceRequestRuntimeDeps,
@@ -394,11 +395,9 @@ let singleton: LiveRequestController | null = null;
 
 async function notifyRequestQueuePreviewFromDb(): Promise<void> {
   const queue = await getPlayQueue(defaultDb);
-  const upcomingEntries =
-    queue.currentIndex >= 0 ? queue.entries.slice(queue.currentIndex + 1) : queue.entries;
-  const upcomingIds = upcomingEntries.map((entry) => entry.trackId);
-  if (upcomingIds.length === 0) return;
-  const tracks = await getTracksByIds(upcomingIds, defaultDb);
+  const requestIds = requestBlockTrackIds(queue);
+  if (requestIds.length === 0) return;
+  const tracks = await getTracksByIds(requestIds, defaultDb);
   notifyAudienceRequestQueuePreview(tracks);
 }
 
@@ -485,6 +484,14 @@ export function driveLiveRequest(input: {
   playbackAction?: AudienceRequestPlaybackAction;
 }): Promise<AudienceRequestRuntimeItem> {
   return ensureSingleton().drive(input);
+}
+
+/** Dev control-endpoint harness: feed a mapped/intake payload through the real router. */
+export function handleLiveRequestPayload(payload: {
+  sourceId?: string;
+  body: string;
+}): Promise<void> {
+  return ensureSingleton().handlePayload(payload);
 }
 
 /** Dev control-endpoint harness: recent routed requests (newest first). */
