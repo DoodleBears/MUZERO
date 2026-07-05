@@ -51,6 +51,40 @@ const release: ChangelogRelease = {
       },
     },
     {
+      area: "dj",
+      category: "improvement",
+      platform: "all",
+      title: {
+        en: "The DJ replies faster on big libraries — no more full rescan every turn",
+        zh: "大曲库下 DJ 回复更快——不再每回合全库重扫",
+        ja: "大きなライブラリでも DJ の返事が速く——毎ターンの全スキャンを廃止",
+        ko: "큰 라이브러리에서도 DJ 응답이 빨라졌습니다——매 턴 전체 재스캔 제거",
+      },
+      description: {
+        en: "Every chat or voice turn used to rebuild the DJ's genre/tag palette by scanning your whole library. The palette is now cached and kept fresh incrementally: editing a track's tags patches just the changed tags, and adding or removing songs is detected by a cheap in-memory fingerprint — no database reads at all on a warm turn. On a 6,000-track library that means one scan on first use, then effectively instant (~0 ms) for every turn after.",
+        zh: "过去每个聊天 / 语音回合都要全库扫描来重建 DJ 的风格 / tag 面板。现在这份面板会被缓存并增量保鲜：编辑某首歌的 tag 只修补变动的那几个 tag，增删歌曲由一个廉价的内存指纹感知——热回合完全不读数据库。在 6000 首的曲库上，首次使用扫一次，之后每个回合都近乎即时（约 0 毫秒）。",
+        ja: "これまではチャット / 音声のターンごとにライブラリ全体をスキャンして DJ のジャンル / タグパレットを作り直していました。パレットはキャッシュされ、増分で最新に保たれます：トラックのタグ編集は変わったタグだけを修正し、曲の追加・削除は軽量なメモリ内フィンガープリントで検知——ウォームなターンではデータベースを一切読みません。6,000 曲のライブラリでも初回に一度スキャンするだけで、以降のターンはほぼ即時（約 0 ms）です。",
+        ko: "이전에는 채팅 / 음성 턴마다 라이브러리 전체를 스캔해 DJ의 장르 / 태그 팔레트를 다시 만들었습니다. 이제 팔레트는 캐시되고 증분으로 갱신됩니다: 트랙의 태그를 편집하면 바뀐 태그만 수정하고, 곡 추가·삭제는 저렴한 메모리 지문으로 감지합니다——웜 턴에서는 데이터베이스를 전혀 읽지 않습니다. 6,000곡 라이브러리에서도 첫 사용 시 한 번만 스캔하고, 이후 모든 턴은 사실상 즉시(~0 ms)입니다.",
+      },
+    },
+    {
+      area: "player",
+      category: "improvement",
+      platform: "all",
+      title: {
+        en: "Hours-long live sessions stay lean on memory",
+        zh: "连播数小时的直播点歌，内存不再越吃越多",
+        ja: "何時間ものライブ連続再生でもメモリを溜め込まない",
+        ko: "몇 시간짜리 라이브 연속 재생에도 메모리가 계속 늘지 않습니다",
+      },
+      description: {
+        en: "A long live-request stream used to accumulate a little memory with every song — fetched covers, extracted palette colors, and per-request bookkeeping were all kept forever. Those session caches are now bounded (least-recently-used entries make room for new ones), dedupe/cooldown records expire with their decision windows, and skipping songs quickly now cancels the abandoned download instead of letting it finish in the background. Verified with an end-to-end long-run harness against a real 5,700-track library.",
+        zh: "过去直播点歌连播久了，每放一首都会多留一点内存——拉取过的封面、取色出的调色板、每条点歌的登记都被永久留着。现在这些会话缓存全部有界（最久未用的条目让位给新条目），去重 / 冷却记录随判定窗口过期，快速跳歌也会中止被放弃的下载而不是让它在后台跑完。已用端到端长跑 harness 在 5700 首的真实曲库上验证。",
+        ja: "これまで長時間のリクエスト配信では、曲を流すたびにメモリが少しずつ増えていました——取得したカバー、抽出したパレット色、リクエストごとの記録がすべて残り続けていたためです。これらのセッションキャッシュは上限付きになり（最も使われていないものから席を譲る）、重複排除 / クールダウンの記録は判定ウィンドウとともに期限切れになり、素早い曲送りは放棄されたダウンロードを裏で走らせず中断します。5,700 曲の実ライブラリに対する E2E 長時間ハーネスで検証済みです。",
+        ko: "이전에는 긴 신청곡 방송에서 곡을 틀 때마다 메모리가 조금씩 쌓였습니다——가져온 커버, 추출한 팔레트 색, 신청곡별 기록이 모두 영구히 남았기 때문입니다. 이제 이런 세션 캐시는 모두 상한이 있고(가장 오래 안 쓴 항목이 자리를 내줍니다), 중복 제거 / 쿨다운 기록은 판정 윈도와 함께 만료되며, 빠른 곡 넘기기는 버려진 다운로드를 백그라운드에서 끝까지 돌리지 않고 중단합니다. 5,700곡 실제 라이브러리 대상 E2E 장시간 하니스로 검증했습니다.",
+      },
+    },
+    {
       area: "lyrics",
       category: "feature",
       platform: "all",

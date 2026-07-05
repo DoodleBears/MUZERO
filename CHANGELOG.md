@@ -2,6 +2,21 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v2.1.0 — 2026-07-05 · Requests, ratings, and memories over lyrics
+
+The live-request channel now routes by keyword: 点歌 does a quick library search — no more forcing every request through the AI DJ — while AI点歌 goes to the AI DJ, and each command's keyword is yours to set. Viewers can also react to the song that's playing: 评分 5 casts a vote into a crowd rating shown as a persistent 1–5 chip (each person counts once, the host can tap too), and 评论 leaves a signed memory on the track — pinned to a lyric moment when they type a timestamp like 3:14. And while you read the lyrics, this song's memories now carousel across the top, just like immersive mode.
+
+### Highlights
+- **dj** Song requests search first — the AI DJ only when you ask for it — The live-request channel is now a keyword router. `点歌 <name>` does a quick library search (with an online fallback) instead of forcing every request through the heavy AI DJ, and a separate keyword like `AI点歌` sends it to the AI DJ to curate or generate. Each command's trigger keyword is configurable under Settings → Live requests.
+
+### Added
+- **memory** Viewers can rate and comment on the current song — Two new chat commands act on whatever is playing. `评分 5` casts a vote into the song's crowd rating — shown as a persistent 1–5 star chip at the top of Now Playing, where every voter counts once and the host can tap to rate too. `评论 …` leaves a signed memory on the track; comments float in the memory carousel by default, or add a timestamp like `评论 3:14 …` to pin one to that lyric moment. Both keywords are configurable, and ratings stay on your device.
+- **lyrics** Memories carousel over the lyrics — While you're reading the lyrics, this song's memories now surface as a strip across the top — the same gentle carousel as full-immersive mode, with timestamped ones appearing at their moment (tap the time to jump there). Toggle it under Settings → Visualizer ('Show memories over lyrics').
+
+### Changed
+- **dj** The DJ replies faster on big libraries — no more full rescan every turn — Every chat or voice turn used to rebuild the DJ's genre/tag palette by scanning your whole library. The palette is now cached and kept fresh incrementally: editing a track's tags patches just the changed tags, and adding or removing songs is detected by a cheap in-memory fingerprint — no database reads at all on a warm turn. On a 6,000-track library that means one scan on first use, then effectively instant (~0 ms) for every turn after.
+- **player** Hours-long live sessions stay lean on memory — A long live-request stream used to accumulate a little memory with every song — fetched covers, extracted palette colors, and per-request bookkeeping were all kept forever. Those session caches are now bounded (least-recently-used entries make room for new ones), dedupe/cooldown records expire with their decision windows, and skipping songs quickly now cancels the abandoned download instead of letting it finish in the background. Verified with an end-to-end long-run harness against a real 5,700-track library.
+
 ## v2.0.0 — 2026-07-04 · Talk to your DJ
 
 MUZERO 2.0 turns the AI DJ into someone you talk to. Hold a shortcut and just say what you want — 'play something more chill, no vocals' — and the DJ switches songs, searches your library, and curates on the spot, then answers you in the top-left (and reads it aloud if you set up a voice). Imported songs now get genre and style tags filled in automatically, so the DJ — and search — can finally filter your uploads and streaming imports by 'city pop' or 'lo-fi'. Plus the music crossfades on pause and song changes, the DJ curates with real taste and reuses your existing sets instead of making empty ones, and you can filter your sets by AI / made by you / imported.
