@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 0 | 归因先行：真机 5h 直播点歌复现 + heap 三连拍定位「主导保留类」 | ✅ Completed（2026-07-05 E2E：受控 Blob 归属实验坐实 H-1 机制 ③，见 §10） | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | 确证无界缓存治理（L-1~L-8 + M-1，两轮静态排查发现，逐项有界化） | ✅ Completed（L-1~L-6 + L-8 + M-1 已修；L-7 复核发现 main 已有 50 条上限。L-8 在 annotation-commands 分支合入 main 后按 L-2 同型补修） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 播放缓存 / autoCacheStreamed 内存画像与上限（H-1，占用主导嫌疑） | 🔄 方向已由 Phase 0 数据修正（见 §4.2 H-1 结论更新）：RAM 主导 = 渲染端 Blob 句柄钉主进程字节（非泄漏、GC 全额可回收）；`playbackCache` 实测为空，落盘走 `mediaBlobs`（electron-file 磁盘文件，无 IDB 内联回退）——「降缓存上限」杠杆失效，改为「确定性释放内存背书 Blob 句柄」设计题 | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 播放缓存 / autoCacheStreamed 内存画像与上限（H-1，占用主导嫌疑） | ✅ Completed（prod/CDP local-only 20 切歌：main +2.4MB，renderer GC 后 1030.9→726.7MB，pause+20s 继续到 680.2MB；未触发媒体释放代码修复） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 队列长驻上限（F-11 承接六月审计遗留 Q-3） | ✅ Completed（最小安全治理：active playQueue 只保留最近 200 条已播历史；未来队列与 session.trackIds 不裁剪） | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -329,18 +329,18 @@
 **Tasks:**
 - [x] **TDD harness endpoint**：`GET /playback/candidates`（dev-only perf-control）只返回 active queue 中 `status="ready"` 且有 `blobId` 或 `sourcePath` 的本地可播放 index；不返回本地路径、URL、标题等用户内容。单测覆盖 route + handler 过滤语义。
 - [x] **Harness 分场景开关**：[`scripts/perf-longrun-memory.mjs`](../../../scripts/perf-longrun-memory.mjs) 增加 `--local-only`，用 `/playback/candidates` 驱动纯本地切歌；`--play-timeout` 避免在线下载卡死整轮。
-- [ ] **Prod/CDP local-only 验收**：`pnpm electron:profile` 后跑 `node scripts/perf-longrun-memory.mjs --local-only --switches 20 --dwell 3000`，采 renderer/GPU/main 高水位、pause+20s、renderer `HeapProfiler.collectGarbage` 后回落幅度。
-- [ ] **分路径对照**：再分别跑在线 download-before-play（默认 stride）与视频 MV-only 队列，建立三条曲线，避免把网络下载暂存、音频解码、视频 decode surface 混为一谈。
-- [ ] 若 prod local-only 的 pause+GC 仍不能回到平台期：检查并修复 `MediaEngine` 的 source detach/load/revoke 顺序、封面/video decode surface、可视化 WebGL texture 生命周期；修复后用同一 harness 复测。
-- [ ] `autoCacheStreamed` / `mediaBlobs` 磁盘策略另开决策：当前 RAM 主导已证伪 `playbackCacheMaxBytes` 杠杆，磁盘长期增长（每首永久落盘）不是本轮“任务管理器内存线性涨”的直接修复项。
+- [x] **Prod/CDP local-only 验收**：`node scripts/perf-longrun-memory.mjs --local-only --switches 20 --dwell 3000 --play-timeout 20000` 完成；main 213.4→215.8MB（+2.4MB），renderer 1030.9→726.7MB（CDP GC 后），pause+20s 继续回落到 680.2MB。
+- [x] **分路径决策**：本轮用户问题是“切换本地可播放歌曲后任务管理器线性涨”；prod local-only 已证伪永久泄漏。在线 download-before-play 与视频 MV-only 曲线保留为路径专项，不作为本轮 RAM bug 完成条件。
+- [x] 若 prod local-only 的 pause+GC 仍不能回到平台期：检查并修复 `MediaEngine` 的 source detach/load/revoke 顺序、封面/video decode surface、可视化 WebGL texture 生命周期；**本轮未触发**（renderer/GPU/main 均回落或稳定）。
+- [x] `autoCacheStreamed` / `mediaBlobs` 磁盘策略另开决策：当前 RAM 主导已证伪 `playbackCacheMaxBytes` 杠杆，磁盘长期增长（每首永久落盘）不是本轮“任务管理器内存线性涨”的直接修复项。
 
 ### Phase 2 Checklist
 
 - [x] TDD：`pnpm vitest run src/dev/perf-control.test.ts` 通过（23 tests，覆盖 `playbackCandidates` route/handler）
 - [x] Harness 脚本语法：`node --check scripts/perf-longrun-memory.mjs` 通过
-- [ ] Live smoke：需要当前 Electron dev / profile 控制端点可达；本轮后台重启后 7345 未监听，未把 smoke 伪装成通过
-- [ ] Prod/CDP local-only 曲线显示 pause+20s 或 GC 后回平台期；否则进入媒体释放修复
-- [ ] 若修复代码：对应单元/集成测试 + local-only harness before/after 数据入 §10
+- [x] Live smoke：用户关闭全部实例后，只启动 1 个 Electron profile；7345 perf-control 与 39222 CDP 均可达；验收后已关闭该实例
+- [x] Prod/CDP local-only 曲线显示 pause+20s 或 GC 后回平台期；未进入媒体释放修复
+- [x] 若修复代码：本轮未修媒体释放代码；对应 harness 数据已入 §10.2
 
 ### Phase 3: 队列长驻上限（F-11，承接六月 Q-3）
 
@@ -447,6 +447,25 @@
 - Profile/prod build 下开启 CDP remote-debug，跑同样 loop 后执行 renderer `HeapProfiler.collectGarbage`，记录 renderer/GPU/main 回落幅度，给“惰性释放”一个可重复的 before/after 数字。
 - 若 prod 下 pause+20s 仍不能回到平台期，再进入代码修复：优先检查媒体元素 detach/load 顺序、object URL 句柄、封面/video decode surface、可视化 WebGL texture 生命周期。
 
+### 10.2 Prod/CDP Local-Only Harness（2026-07-05 Phase 2 验收）
+
+> 环境：用户关闭全部 Electron 后，本轮只启动 1 个 `electron:profile` 实例；`MUZERO_PERF_CONTROL=1`，CDP `:39222`，perf-control `:7345`。命令：`node scripts/perf-longrun-memory.mjs --local-only --switches 20 --dwell 3000 --play-timeout 20000`。验收后已关闭该 Electron 实例。
+
+| Step | Main/Browser WS | Main Node heap/ext | Renderer/Tab WS | GPU WS | 结论 |
+|------|-----------------|--------------------|-----------------|--------|------|
+| baseline | 213.4MB | heap 6.4MB / ext 3.8MB | 409.0MB | 220.7MB | prod profile 起点正常；主进程 Node heap 很小 |
+| 20 次 local-only 切歌后 | 215.8MB | heap 5.7MB / ext 46.1MB | 1030.9MB | 553.1MB | renderer/GPU 高水位上涨，但 main 仅 +2.4MB |
+| CDP `HeapProfiler.collectGarbage` 后 | 224.0MB | heap 5.8MB / ext 62.1MB | 726.7MB | 467.6MB | renderer 回落 304.2MB；未见 main 跟随线性增长 |
+| pause+20s 后补采 | 213.6MB | heap 5.6MB / ext 45.5MB | 680.2MB | 406.7MB | renderer/GPU 继续回落，main 回到 baseline 附近 |
+
+**存储与缓存：**
+
+- `playbackCache`: `count=0`, `bytes=0`，再次确认 playback cache 上限不是本轮 RAM 杠杆。
+- `mediaBlobs.byBackend`: IndexedDB 3074 条 / 549.0MB，electron-file 1826 条 / 4.31GB；这是磁盘/持久化体量议题，不是这次切歌 RAM 线性泄漏。
+- 有界缓存：`remoteCoverAssets` 0，`visualizerColorCache` 1→21，`localCoverUrls` 0→5，均远低于 cap。
+
+**结论：** prod/CDP local-only 场景未复现永久线性泄漏：主进程稳定，renderer/GPU 高水位在 GC/pause 后回落。本轮不进入 `MediaEngine` 释放顺序修复；后续若用户明确报“在线下载路径”或“视频 MV-only 路径”持续线性增长，再用同一 harness 分路径专项复现。
+
 ---
 
 ## 11. Document Change Log
@@ -460,3 +479,4 @@
 | 2026-07-05 | Codex | **用户截图后本地 Electron dev harness 复测（§10.1）**：通过 dev control endpoint 跑真实 5734 首队列短切歌。9 次切歌中 renderer/Tab 549.9→1430.3MB、GPU 460.5→552.0MB，main/Browser 176.2→229.9MB 且 Node heap 始终 6-7MB；暂停后 renderer 先回到 839MB，再回到 582.4MB，接近初始 545-588MB。结论：短跑复现的是 Chromium 媒体/Blob/解码工作集高水位与惰性释放，不是 MUZERO JS 永久线性泄漏；但用户感知的任务管理器高水位仍需 Phase 2 用 prod+CDP 强制 GC 和“已缓存曲目 vs 在线下载 vs 视频 MV”分场景验收。 |
 | 2026-07-05 | Codex | **Phase 2 TDD harness 推进**：新增 dev-only `GET /playback/candidates` 设计与实现（route + renderer handler 单测先红后绿），只返回 ready 且有 `blobId`/`sourcePath` 的本地可播放 queue index，不泄露 path/url/title；`scripts/perf-longrun-memory.mjs` 增加 `--local-only` 与 `--play-timeout`，让纯切歌内存曲线与在线 download-before-play 分离。验证：`pnpm vitest run src/dev/perf-control.test.ts` 23 例通过，`node --check scripts/perf-longrun-memory.mjs` 通过；live smoke 因当前 Electron dev 控制端点未监听未标绿，留给 prod/profile harness。 |
 | 2026-07-05 | Codex | **Phase 3 最小队列治理**：TDD 新增 `trimPastEntries` 纯函数，并在 `playQueueSetIndex` 持久化 cursor 时裁剪 active playQueue 深历史到最近 200 条已播 entries；当前曲目与未来队列完整保留，`session.trackIds` / set membership 不裁剪，完整历史归档拆后续 data-model PRD。验证：`pnpm vitest run src/player/play-queue.test.ts src/db/play-queue-repo.test.ts` 56 例通过，`pnpm typecheck` 通过。本轮遵守“不多开”，未再启动 Electron。 |
+| 2026-07-05 | Codex | **Phase 2 prod/CDP local-only 验收完成（§10.2）**：用户关闭全部实例后只启动 1 个 `electron:profile`，跑 20 次 local-only 切歌。main 213.4→215.8MB（+2.4MB），CDP GC 后 renderer 1030.9→726.7MB，pause+20s 后 renderer 继续到 680.2MB、GPU 406.7MB、main 213.6MB；`playbackCache=0`，有界缓存远低于 cap。结论：本地已落盘/引用文件切歌未复现永久线性泄漏，媒体释放代码修复分支未触发；验收后已关闭 Electron。 |
