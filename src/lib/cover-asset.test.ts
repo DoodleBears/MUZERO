@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearRemoteCoverAssetCacheForTests,
   getOrFetchRemoteCoverAsset,
+  remoteCoverAssetCacheStats,
   remoteCoverAssetKey,
 } from "@/lib/cover-asset";
 
@@ -62,6 +63,26 @@ describe("remote cover assets", () => {
     const [a, b] = await Promise.all([first, second]);
     expect(a).toBe(b);
     expect(a.mime).toBe("image/png");
+  });
+
+  it("evicts the least-recently-used cover past the cache cap and re-fetches it", async () => {
+    const fetcher = vi.fn(async () =>
+      responseWithBlob(new Blob([new Uint8Array([9])]), "image/jpeg"),
+    );
+    const opts = { fetcher: fetcher as unknown as typeof fetch };
+
+    // Fill one past the 64-entry cap: the first URL becomes the LRU victim.
+    for (let i = 0; i < 65; i += 1) {
+      await getOrFetchRemoteCoverAsset(`https://example.com/cover-${i}.jpg`, opts);
+    }
+    expect(fetcher).toHaveBeenCalledTimes(65);
+    expect(remoteCoverAssetCacheStats().size).toBe(64);
+
+    // cover-0 was evicted → a second lookup re-fetches; cover-64 is still cached.
+    await getOrFetchRemoteCoverAsset("https://example.com/cover-64.jpg", opts);
+    expect(fetcher).toHaveBeenCalledTimes(65);
+    await getOrFetchRemoteCoverAsset("https://example.com/cover-0.jpg", opts);
+    expect(fetcher).toHaveBeenCalledTimes(66);
   });
 
   it("rejects non-image responses", async () => {

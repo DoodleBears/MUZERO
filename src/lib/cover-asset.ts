@@ -1,3 +1,4 @@
+import { createBoundedMap } from "@/lib/bounded-cache";
 import { getAppFetch } from "@/lib/platform";
 
 export interface RemoteCoverAsset {
@@ -10,8 +11,23 @@ export interface RemoteCoverAsset {
 
 type FetchFn = typeof globalThis.fetch;
 
-const remoteCoverAssets = new Map<string, RemoteCoverAsset>();
+// This cache holds real cover Blobs (20–200KB each); a live-request stream pulls
+// one per online song, so an unbounded map pins hundreds of covers over a long
+// session (memory-leak PRD 20260705 L-1). LRU-bound it by count AND bytes —
+// evicted assets are simply re-fetched (force-cache) on the next lookup.
+const REMOTE_COVER_ASSET_MAX_ENTRIES = 64;
+const REMOTE_COVER_ASSET_MAX_BYTES = 24 * 1024 * 1024;
+const remoteCoverAssets = createBoundedMap<string, RemoteCoverAsset>({
+  maxEntries: REMOTE_COVER_ASSET_MAX_ENTRIES,
+  maxBytes: REMOTE_COVER_ASSET_MAX_BYTES,
+  bytesOf: (asset) => asset.bytes,
+});
 const remoteCoverInFlight = new Map<string, Promise<RemoteCoverAsset>>();
+
+/** Dev-only diagnostics (perf-control /memory/diag). */
+export function remoteCoverAssetCacheStats(): { size: number; bytes: number } {
+  return { size: remoteCoverAssets.size, bytes: remoteCoverAssets.bytes };
+}
 
 export function remoteCoverAssetKey(url: string): string {
   return `remote:${url.trim()}`;

@@ -6,6 +6,7 @@ import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { createBoundedMap } from "@/lib/bounded-cache";
 import { getOrFetchRemoteCoverAsset, remoteCoverAssetKey } from "@/lib/cover-asset";
 import {
   coverPaletteFields,
@@ -24,7 +25,16 @@ import {
 } from "@/stores/visualizer-color-store";
 import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
 
-const colorCache = new Map<string, { rgb: Rgb | null; palette: Rgb[] }>();
+// Palettes are tiny, but a 5h live-request stream visits a fresh cover per song —
+// bound the per-cover palette memo so it stops growing (memory-leak PRD 20260705 L-3).
+const colorCache = createBoundedMap<string, { rgb: Rgb | null; palette: Rgb[] }>({
+  maxEntries: 128,
+});
+
+/** Dev-only diagnostics (perf-control /memory/diag). */
+export function visualizerColorCacheStats(): { size: number } {
+  return { size: colorCache.size };
+}
 const paletteExtractionInFlight = new Map<string, Promise<PaletteResolution>>();
 const coverColorLog = createDiagnosticLogger("cover.palette");
 const PALETTE_EXTRACTION_SETTLE_MS = 900;

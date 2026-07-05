@@ -78,7 +78,8 @@ export interface PerfControlCommand {
     | "notifications"
     | "chatTrace"
     | "enrichProbe"
-    | "facetsBench";
+    | "facetsBench"
+    | "memoryDiag";
   actionId?: string;
   /** voiceTranscript: the text to feed into the voice→DJ pipeline (no mic). */
   text?: string;
@@ -383,6 +384,71 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "enrichProbe": {
         if (!deps.enrichProbe) throw new Error("enrichProbe not wired");
         return deps.enrichProbe(command.payload ?? {});
+      }
+      // Memory-leak PRD 20260705 Phase 0/LR-3: report the bounded module caches' sizes
+      // plus the playback-cache / mediaBlobs storage-backend split (H-1 attribution:
+      // is OPFS live, or did media bytes fall back to inline IndexedDB blobs?).
+      // Counts/bytes only — no user content, no URLs (Security §7).
+      case "memoryDiag": {
+        const { db } = await import("@/db/muzero-db");
+        const { remoteCoverAssetCacheStats } = await import("@/lib/cover-asset");
+        const { visualizerColorCacheStats } = await import(
+          "@/components/player/visualizer-dynamic-color"
+        );
+        const { memoryMasonryCacheStats } = await import("@/lib/memory-masonry");
+        const { localCoverUrlCacheStats } = await import("@/hooks/use-local-cover");
+        const { decodedCoverUrlsStats } = await import("@/lib/cover-decode-registry");
+
+        const tally = (
+          buckets: Record<string, { count: number; bytes: number }>,
+          key: string,
+          bytes: number,
+        ) => {
+          const bucket = buckets[key] ?? { count: 0, bytes: 0 };
+          bucket.count += 1;
+          bucket.bytes += bytes;
+          buckets[key] = bucket;
+        };
+
+        const playbackRows = await db.playbackCache.toArray();
+        const playbackByStorage: Record<string, { count: number; bytes: number }> = {};
+        for (const row of playbackRows) {
+          tally(playbackByStorage, row.storage ?? "unknown", row.bytes);
+        }
+
+        // Tally mediaBlobs backends without keeping blob handles around: each()
+        // visits row-by-row; only counters survive the pass.
+        const mediaByBackend: Record<string, { count: number; bytes: number }> = {};
+        const mediaByRole: Record<string, { count: number; bytes: number }> = {};
+        await db.mediaBlobs.each((row) => {
+          const backend = row.storageBackend ?? (row.blob ? "indexeddb-inline" : "unknown");
+          tally(mediaByBackend, backend, row.bytes ?? 0);
+          tally(mediaByRole, row.role, row.bytes ?? 0);
+        });
+
+        const heap = (
+          performance as unknown as {
+            memory?: { usedJSHeapSize: number; totalJSHeapSize: number };
+          }
+        ).memory;
+        const s = usePlayerStore.getState();
+        return {
+          caches: {
+            remoteCoverAssets: remoteCoverAssetCacheStats(),
+            visualizerColorCache: visualizerColorCacheStats(),
+            memoryMasonryPrepared: memoryMasonryCacheStats(),
+            localCoverUrls: localCoverUrlCacheStats(),
+            decodedCoverUrls: decodedCoverUrlsStats(),
+          },
+          playbackCache: {
+            count: playbackRows.length,
+            bytes: playbackRows.reduce((sum, row) => sum + row.bytes, 0),
+            byStorage: playbackByStorage,
+          },
+          mediaBlobs: { byBackend: mediaByBackend, byRole: mediaByRole },
+          queueLength: s.queue.length,
+          jsHeap: heap ? { usedMb: Math.round(heap.usedJSHeapSize / 1e5) / 10 } : null,
+        };
       }
       // Measures the DJ "library palette" build against the REAL library: cold (full scan) vs
       // warm (cache hit) vs post-tag-edit — proving a tag edit reflects incrementally with NO

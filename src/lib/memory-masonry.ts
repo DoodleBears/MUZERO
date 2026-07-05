@@ -1,11 +1,20 @@
 import { layout, type PreparedText, prepare } from "@chenglou/pretext";
+import { createBoundedMap } from "@/lib/bounded-cache";
 
 export const MEMORY_MASONRY_LEADING_ID = "__memory-create";
 
 const DEFAULT_FONT_FAMILY =
   'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
-const preparedCache = new Map<string, PreparedText>();
+// Keyed by (font, text) — live-request comments mint endless distinct texts, so
+// bound the measurement memo (memory-leak PRD 20260705 L-4). Evicted texts are
+// simply re-prepared on the next layout pass.
+const preparedCache = createBoundedMap<string, PreparedText>({ maxEntries: 512 });
+
+/** Dev-only diagnostics (perf-control /memory/diag). */
+export function memoryMasonryCacheStats(): { size: number } {
+  return { size: preparedCache.size };
+}
 let pretextAvailable = true;
 let canUsePretextMeasurementCache: boolean | undefined;
 

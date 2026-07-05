@@ -141,4 +141,20 @@ describe("createAnnotationLimiter", () => {
     expect(limiter.allow("b", opts(11_100))).toBe(true);
     expect(limiter.allow("c", opts(11_200))).toBe(false); // 4th accepted this minute → capped
   });
+
+  it("expires cooled-down raters instead of remembering every rater forever", () => {
+    const limiter = createAnnotationLimiter();
+    const opts = (now: number) => ({ cooldownMs: 10_000, maxPerMinute: 1000, now });
+    // A long stream of distinct raters, each far past the previous one's cooldown:
+    // decisions must stay identical to the unbounded map (all allowed), while the
+    // sweep keeps the map from retaining the whole audience history (PRD L-8).
+    for (let i = 0; i < 500; i += 1) {
+      expect(limiter.allow(`rater-${i}`, opts(i * 61_000))).toBe(true);
+    }
+    // Cooldown semantics survive the sweep: an immediate repeat is still blocked.
+    const at = 500 * 61_000;
+    expect(limiter.allow("again", opts(at))).toBe(true);
+    expect(limiter.allow("again", opts(at + 1_000))).toBe(false);
+    expect(limiter.allow("again", opts(at + 11_000))).toBe(true);
+  });
 });

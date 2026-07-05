@@ -2,6 +2,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { db } from "@/db/muzero-db";
 import type { MediaBlob } from "@/db/types";
+import { createBoundedMap } from "@/lib/bounded-cache";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { canServeLocalCover } from "@/lib/local-cover";
 
@@ -9,8 +10,18 @@ import { canServeLocalCover } from "@/lib/local-cover";
  * storageKey → stable `muzfetch://local-media` URL. Resolved once per key (the
  * token is reused) so the URL is stable and Chromium caches the decoded image by
  * it. A string once resolved; a Promise while the token IPC is in flight.
+ * LRU-bounded so a huge library browsed over hours doesn't accumulate one entry
+ * per cover forever (memory-leak PRD 20260705 L-5) — an evicted key just
+ * re-resolves its token over IPC.
  */
-const localCoverUrlCache = new Map<string, Promise<string> | string>();
+const localCoverUrlCache = createBoundedMap<string, Promise<string> | string>({
+  maxEntries: 1024,
+});
+
+/** Dev-only diagnostics (perf-control /memory/diag). */
+export function localCoverUrlCacheStats(): { size: number } {
+  return { size: localCoverUrlCache.size };
+}
 
 function ensureLocalCoverUrl(storageKey: string, mime: string): Promise<string> | string | null {
   const hit = localCoverUrlCache.get(storageKey);

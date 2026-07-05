@@ -238,6 +238,10 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments.length === 2 && segments[0] === "facets" && segments[1] === "bench") {
     return { kind: "facetsBench", payload: body };
   }
+  // Memory-leak PRD 20260705: bounded-cache sizes + playback-cache/mediaBlobs backend split.
+  if (method === "GET" && segments.length === 2 && segments[0] === "memory" && segments[1] === "diag") {
+    return { kind: "memoryDiag" };
+  }
   return null;
 }
 
@@ -388,6 +392,31 @@ function registerPerfControl({ app, BrowserWindow }) {
   return server;
 }
 
+/**
+ * Main-process memory internals (memory-leak PRD 20260705 Phase 0): a small Node/V8
+ * heap next to a large RSS means the bytes live in Chromium-side allocations (blob
+ * storage / IndexedDB / caches) rather than main-process JS.
+ */
+function snapshotMainProcessMemory() {
+  try {
+    const v8 = require("node:v8");
+    const usage = process.memoryUsage();
+    const heap = v8.getHeapStatistics();
+    const mb = (bytes) => roundMetric(bytes / (1024 * 1024));
+    return {
+      rssMb: mb(usage.rss),
+      heapUsedMb: mb(usage.heapUsed),
+      heapTotalMb: mb(usage.heapTotal),
+      externalMb: mb(usage.external),
+      arrayBuffersMb: mb(usage.arrayBuffers || 0),
+      v8HeapLimitMb: mb(heap.heap_size_limit),
+      mallocedMb: mb(heap.malloced_memory),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function snapshotProcessMetrics(app) {
   const metrics = typeof app?.getAppMetrics === "function" ? app.getAppMetrics() : [];
   const processes = metrics.map((metric) => {
@@ -423,6 +452,7 @@ function snapshotProcessMetrics(app) {
   }
   return {
     capturedAt: Date.now(),
+    mainProcess: snapshotMainProcessMemory(),
     processes,
     totals: {
       byType,

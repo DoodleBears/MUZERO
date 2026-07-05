@@ -1,5 +1,6 @@
 import type { Memory, MemoryAuthorRef } from "@/db/types";
 import type { NormalizedAudienceRequest } from "./audience-request-schema";
+import { pruneExpiredTimestamps } from "./audience-request-security";
 import type { IntakeCommandMatch } from "./intake-command";
 
 /**
@@ -123,6 +124,9 @@ export function createAnnotationLimiter() {
       opts: { cooldownMs: number; maxPerMinute: number; now: number },
     ): boolean {
       recent = recent.filter((at) => opts.now - at < 60_000);
+      // Same sweep as `recent`: expire cooled-down raters so a multi-day live
+      // stream can't grow the map unbounded (memory-leak PRD 20260705 L-8).
+      pruneExpiredTimestamps(lastByRater, opts.now, opts.cooldownMs);
       if (recent.length >= opts.maxPerMinute) return false;
       const last = lastByRater.get(raterKey);
       if (last != null && opts.now - last < opts.cooldownMs) return false;

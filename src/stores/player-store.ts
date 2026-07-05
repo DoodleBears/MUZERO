@@ -951,6 +951,7 @@ async function fetchStreamMediaBytes(
   url: string,
   headers: Record<string, string> | undefined,
   trace?: PlaybackTraceContext,
+  signal?: AbortSignal,
 ): Promise<Blob> {
   const bridge = resolveDesktopBridge();
   const target = url.startsWith("blob:")
@@ -959,8 +960,8 @@ async function fetchStreamMediaBytes(
       ? bridge.mediaProxyUrl(url, headers, streamMediaTrace(track, trace))
       : url;
   const resp = target.startsWith("muzfetch://")
-    ? await fetch(target)
-    : await (await getAppFetch())(target);
+    ? await fetch(target, { signal })
+    : await (await getAppFetch())(target, { signal });
   if (!resp.ok) throw new Error(`download failed (${resp.status})`);
   const blob = await resp.blob();
   if (blob.size === 0) throw new Error("empty media");
@@ -970,17 +971,27 @@ async function fetchStreamMediaBytes(
 /**
  * Download-before-play wrapper: like {@link fetchStreamMediaBytes} but returns null
  * (logged) instead of throwing, so a failed download degrades to plain streaming
- * rather than killing playback.
+ * rather than killing playback. Honors the playback-load abort signal so a rapid
+ * skip cancels the multi-MB body read instead of letting abandoned downloads pile
+ * up in memory (memory-leak PRD 20260705 M-1).
  */
 async function downloadStreamForPlayback(
   track: Track,
   url: string,
   headers: Record<string, string> | undefined,
   trace?: PlaybackTraceContext,
+  signal?: AbortSignal,
 ): Promise<Blob | null> {
   try {
-    return await fetchStreamMediaBytes(track, url, headers, trace);
+    return await fetchStreamMediaBytes(track, url, headers, trace, signal);
   } catch (err) {
+    if (signal?.aborted) {
+      log.debug("player", "download-before-play aborted (track switched)", {
+        trackId: track.id,
+        source: track.streamSourceId,
+      });
+      return null;
+    }
     log.warn("player", "download-before-play failed; streaming instead", {
       trackId: track.id,
       source: track.streamSourceId,
@@ -4910,6 +4921,7 @@ async function ensureLoadedAndPlay(
             resolvedUrl,
             resolved.headers,
             playbackTrace,
+            request.controller.signal,
           );
         } finally {
           setStreamDownloading(track.id, false);

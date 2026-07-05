@@ -48,7 +48,11 @@ import {
   type AudienceRequestSearchResult,
   pickAudienceRequestMatch,
 } from "./audience-request-search";
-import { isDuplicateAudienceRequest, isRequesterCoolingDown } from "./audience-request-security";
+import {
+  isDuplicateAudienceRequest,
+  isRequesterCoolingDown,
+  pruneExpiredTimestamps,
+} from "./audience-request-security";
 
 export type AudienceRequestStatus =
   | "received"
@@ -195,6 +199,12 @@ export function createAudienceRequestRuntime(
       return finish(item, { status: "ignored", confidence: "none", error: "cooldown" });
     }
     recentAcceptedAt = recentAcceptedAt.filter((at) => receivedAt - at < 60_000);
+    // Same sweep spot as the rate window: expire dedupe/cooldown keys past their
+    // decision windows so a multi-day live stream can't grow the maps unbounded
+    // (memory-leak PRD 20260705 L-2). Decisions are unchanged — the checks above
+    // only ever look one window back.
+    pruneExpiredTimestamps(seenExternalIds, receivedAt, intake.dedupeWindowSec * 1000);
+    pruneExpiredTimestamps(lastAcceptedByRequester, receivedAt, intake.requesterCooldownSec * 1000);
     if (recentAcceptedAt.length >= intake.maxRequestsPerMinute) {
       return finish(item, { status: "ignored", confidence: "none", error: "rate-limited" });
     }
