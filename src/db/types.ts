@@ -71,6 +71,9 @@ export interface OnlinePlaylistCatalogEntry {
 
 export interface OnlinePlaylistCatalogSource {
   playlists: OnlinePlaylistCatalogEntry[];
+  /** Last attempted metadata refresh, including failures, for auto-sync throttling. */
+  attemptedAt?: number;
+  /** Last successful metadata refresh. */
   syncedAt: number;
   error?: string;
 }

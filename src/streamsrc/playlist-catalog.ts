@@ -65,6 +65,7 @@ export function mergeOnlinePlaylistCatalogSource(
   return {
     ...(current ?? {}),
     [source]: {
+      attemptedAt: syncedAt,
       syncedAt,
       playlists: deduped,
     },
@@ -75,11 +76,13 @@ export function markOnlinePlaylistCatalogSourceError(
   current: OnlinePlaylistCatalog | undefined,
   source: StreamSourceId,
   message: string,
+  attemptedAt: number,
 ): OnlinePlaylistCatalog {
   const existing = current?.[source];
   return {
     ...(current ?? {}),
     [source]: {
+      attemptedAt,
       syncedAt: existing?.syncedAt ?? 0,
       playlists: existing?.playlists ?? [],
       error: message,
@@ -97,12 +100,12 @@ export function clearOnlinePlaylistCatalogSource(
 }
 
 export function isOnlinePlaylistCatalogStale(
-  source: Pick<OnlinePlaylistCatalogSource, "syncedAt"> | undefined,
+  source: Pick<OnlinePlaylistCatalogSource, "attemptedAt" | "syncedAt"> | undefined,
   now: number,
   staleMs = ONLINE_PLAYLIST_CATALOG_STALE_MS,
 ): boolean {
   if (!source) return true;
-  return now - source.syncedAt > staleMs;
+  return now - (source.attemptedAt ?? source.syncedAt) > staleMs;
 }
 
 export function onlinePlaylistCatalogSourcesToSync(
@@ -175,6 +178,7 @@ export async function syncOnlinePlaylistCatalogSource(
       opts.settings.onlinePlaylistCatalog,
       source,
       message,
+      opts.now?.() ?? Date.now(),
     );
     await opts.save({ onlinePlaylistCatalog });
     return { kind: "error", message };

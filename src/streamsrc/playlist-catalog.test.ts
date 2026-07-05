@@ -47,6 +47,7 @@ describe("online playlist catalog", () => {
     );
 
     expect(next.netease).toEqual({
+      attemptedAt: now,
       syncedAt: now,
       playlists: [playlist("netease", "1", "Daily", 10), playlist("netease", "2", "Night", 12)],
     });
@@ -86,6 +87,9 @@ describe("online playlist catalog", () => {
     expect(isOnlinePlaylistCatalogStale(undefined, 1000)).toBe(true);
     expect(isOnlinePlaylistCatalogStale({ syncedAt: 0 }, 1000, 15 * 60_000)).toBe(false);
     expect(isOnlinePlaylistCatalogStale({ syncedAt: 0 }, 901_000, 15 * 60_000)).toBe(true);
+    expect(
+      isOnlinePlaylistCatalogStale({ syncedAt: 0, attemptedAt: 900_000 }, 901_000, 15 * 60_000),
+    ).toBe(false);
   });
 
   it("selects enabled sources whose catalog is missing or stale", () => {
@@ -147,6 +151,7 @@ describe("online playlist catalog", () => {
       onlinePlaylistCatalog: {
         bili: settings.onlinePlaylistCatalog?.bili,
         netease: {
+          attemptedAt: 123,
           syncedAt: 123,
           playlists: [playlist("netease", "1", "Daily")],
         },
@@ -183,11 +188,63 @@ describe("online playlist catalog", () => {
     expect(save).toHaveBeenCalledWith({
       onlinePlaylistCatalog: {
         netease: {
+          attemptedAt: 200,
           syncedAt: 1,
           playlists: [playlist("netease", "old", "Old")],
           error: "network down",
         },
       },
     });
+    const patch = save.mock.calls[0]?.[0];
+    expect(
+      onlinePlaylistCatalogSourcesToSync(
+        {
+          streamSources: { netease: { enabled: true, cookie: "MUSIC_U=x" } },
+          onlinePlaylistCatalog: patch?.onlinePlaylistCatalog,
+        },
+        201,
+      ),
+    ).toEqual([]);
+  });
+
+  it("throttles repeated auto-sync after a first-time source error", async () => {
+    const settings = {
+      id: "app",
+      streamSources: { netease: { enabled: true, cookie: "MUSIC_U=x" } },
+    } as AppSettings;
+    const save = vi.fn(async (patch: Partial<AppSettings>) => ({ ...settings, ...patch }));
+
+    await syncOnlinePlaylistCatalogSource("netease", {
+      settings,
+      now: () => 300,
+      save,
+      createSource: () =>
+        ({
+          id: "netease",
+          label: "netease",
+          requiresLogin: true,
+          isAuthed: () => true,
+          getUserPlaylists: vi.fn(async () => {
+            throw new Error("temporary netease failure");
+          }),
+        }) as unknown as StreamSourceProvider,
+    });
+
+    const patch = save.mock.calls[0]?.[0];
+    expect(patch?.onlinePlaylistCatalog?.netease).toEqual({
+      attemptedAt: 300,
+      syncedAt: 0,
+      playlists: [],
+      error: "temporary netease failure",
+    });
+    expect(
+      onlinePlaylistCatalogSourcesToSync(
+        {
+          streamSources: settings.streamSources,
+          onlinePlaylistCatalog: patch?.onlinePlaylistCatalog,
+        },
+        301,
+      ),
+    ).toEqual([]);
   });
 });

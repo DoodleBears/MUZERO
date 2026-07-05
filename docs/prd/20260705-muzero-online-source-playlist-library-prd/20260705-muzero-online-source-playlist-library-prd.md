@@ -446,6 +446,28 @@ Scrollbar requirement:
 
 ---
 
+## Regression Follow-up: NetEase Refresh Storm
+
+**Date:** 2026-07-05  
+**Status:** Fixed
+
+**Symptom:** NetEase online playlist catalog sync could appear broken after the Library auto-sync change because a failing metadata refresh was persisted with `syncedAt: 0`. The Library auto-sync stale check then considered the same source immediately stale again, so every settings write from the failure retriggered another refresh attempt.
+
+**Root Cause:** The catalog model only tracked the last successful sync timestamp. Failure retention kept old playlist rows, but first-time failures had no timestamp that could throttle automatic retry. In a live `useSettings()` flow, saving the error caused another render, and the source stayed eligible for immediate auto-sync.
+
+**Fix:**
+- Add `OnlinePlaylistCatalogSource.attemptedAt` for both successful and failed metadata refresh attempts.
+- Make stale checks use `attemptedAt ?? syncedAt`, so failures are retried after the 15-minute stale window instead of immediately.
+- Keep `syncedAt` as the last successful sync time, so Settings does not display a failure as a successful sync.
+- Add a hook-level in-flight ref to prevent duplicate requests for the same source while a refresh is already running.
+
+**Verification:**
+- `node_modules\.bin\vitest.CMD run src\streamsrc\playlist-catalog.test.ts src\streamsrc\netease\netease-source.test.ts src\streamsrc\online-playlist-catalog.e2e.test.tsx src\components\library\online-playlist-section.test.tsx src\components\settings\stream-sources-settings.test.tsx`
+- `node_modules\.bin\biome.CMD check src\db\types.ts src\streamsrc\playlist-catalog.ts src\streamsrc\playlist-catalog.test.ts src\hooks\use-online-playlist-catalog.ts`
+- `node_modules\.bin\tsc.CMD --noEmit --pretty false`
+
+---
+
 ## 7. Out of Scope
 
 - Importing every synced playlist automatically as `DjSession`.
@@ -523,3 +545,4 @@ Scrollbar requirement:
 | 2026-07-05 | Codex | Completed Phase 2: Library sets wall now renders persisted online playlists, source identity/filter chips, 15-minute metadata auto-sync, manual refresh, direct online detail open, import dialog reuse, and VirtualCardGrid-backed large catalog rendering. |
 | 2026-07-05 | Codex | Completed Phase 3: Settings online-source playlists now read the shared catalog, refresh per source, filter by text/source aliases, and render in a bounded thin-transparent-scrollbar container while preserving open/import/sync controls. |
 | 2026-07-05 | Codex | Completed Phase 4 and set PRD status to Completed: added local E2E-style harness and final targeted verification for catalog sync, Library display/filter/open/import, Settings bounded filter list, i18n coverage, Biome, and typecheck. |
+| 2026-07-05 | Codex | Fixed NetEase refresh-storm regression: failed catalog refreshes now record `attemptedAt` and are auto-retried only after the stale window, while manual refresh still forces retry. |
