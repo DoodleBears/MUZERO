@@ -18,7 +18,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 数据模型 + 命令模型：`点视频` intake 命令（`mediaKind:"video"`）+ 时长上限设置 + 库级 by-id 查找（纯函数） | ✅ Completed | [Phase 1](#phase-1数据--命令模型纯函数) |
-| 2 | 请求 fulfillment：id 定向解析 → 本地优先 → 时长闸门 → 预设清晰度下载 → 入队播放（注入式 orchestrator） | 🔲 Pending | [Phase 2](#phase-2请求-fulfillment-orchestrator) |
+| 2 | 请求 fulfillment：id 定向解析 → 本地优先 → 时长闸门 → 预设清晰度下载 → 入队播放（注入式 orchestrator） | ✅ Completed | [Phase 2](#phase-2请求-fulfillment-orchestrator) |
 | 3 | 控制器接线 + 通知 + 播放时序（download-then-enqueue / 队列化，抗 OOM） | 🔲 Pending | [Phase 3](#phase-3控制器接线--通知--播放时序) |
 | 4 | Settings UI（点视频命令表 + 时长上限 + 清晰度）+ i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4](#phase-4settings-ui--i18n) |
 
@@ -427,17 +427,17 @@ components/settings/
 **Goal:** 把 verdict 变成动作——本地播 / 联网下载（预设清晰度）后播 / 拒绝通知；顺带修分P命名，注入式、fake 单测。
 
 **Tasks:**
-- [ ] runtime `handleVideoRequest`/`executeVideoRequest`（注入 `plan`/`downloadHit`/`resolveVideoSetId`/`executePlayback`/`notifyRejected`）。
-- [ ] `downloadHit` 包装：绑定 `downloadStreamedHit(ref, { quality: settings.defaultVideoQuality, sessionId })`；`fetchHitMeta` 绑定 `getTracksByIds`。
-- [ ] `resolveVideoSetId`：复用 `streamDownloadsSetId`（无则 `ensureDownloadsSet()`）（Q2）。
-- [ ] **Q3 命名**：`download-action.ts` `composePartTitle(videoTitle, partTitle, partCount)`（纯，穷举单测）+ 替换 `enqueuePartsForDownload` 的 `title: part.title` → `composePartTitle(...)`。**对所有分P下载路径统一生效**（⌘F/收藏夹/点视频）。
-- [ ] fake-deps 单测：play-local / download-online→play / rejected(每种) / 下载失败 verdict 转通知，never throws。
+- [x] runtime `handleVideoRequest`/`executeVideoRequest`（注入 `plan`/`downloadHit`/`resolveVideoSetId`/`executePlayback`/`notifyRejected`）。
+- [x] `downloadHit` 包装：绑定 `downloadStreamedHit(ref, { quality: settings.defaultVideoQuality, sessionId })`；`fetchHitMeta` 绑定 `getTracksByIds`。
+- [x] `resolveVideoSetId`：复用 `streamDownloadsSetId`（无则 `ensureDownloadsSet()`）（Q2）。
+- [x] **Q3 命名**：`download-action.ts` `composePartTitle(videoTitle, partTitle, partCount)`（纯，穷举单测）+ 替换 `enqueuePartsForDownload` 的 `title: part.title` → `composePartTitle(...)`。**对所有分P下载路径统一生效**（⌘F/收藏夹/点视频）。
+- [x] fake-deps 单测：play-local / download-online→play / rejected(每种) / 下载失败 verdict 转通知，never throws。
 
 #### Phase 2 Checklist
-- [ ] 注入 canned deps：本地有 blob 命中直接播、不调 downloadHit；仅引用无 blob → 调 downloadHit。
-- [ ] online 路径：调 downloadHit(预设清晰度) → 建 track（标题=视频标题+分P名）→ executePlayback(action)。
-- [ ] 超长/不支持源/无法解析 → 各自 notifyRejected，无下载、无抛错。
-- [ ] `composePartTitle`：多P→`标题 - P名`、单P→纯标题、`part===标题`→不冗余。
+- [x] 注入 canned deps：本地有 blob 命中直接播、不调 downloadHit；仅引用无 blob → 调 downloadHit。
+- [x] online 路径：调 downloadHit(预设清晰度) → 建 track（标题=视频标题+分P名）→ executePlayback(action)。
+- [x] 超长/不支持源/无法解析 → 各自 notifyRejected，无下载、无抛错。
+- [x] `composePartTitle`：多P→`标题 - P名`、单P→纯标题、`part===标题`→不冗余。验证：`pnpm vitest run src/streamsrc/download-action.test.ts src/live-requests/audience-request-runtime.test.ts src/live-requests/live-request-controller.test.ts` 与 `pnpm typecheck` 通过。
 
 ### Phase 3: 控制器接线 + 通知 + 播放时序
 
@@ -536,6 +536,7 @@ components/settings/
 | 2026-07-05 | DoodleBear | Initial draft：点视频（弹幕视频请求）——`IntakeCommand.mediaKind:"video"` 新命令（可配前缀）+ id 定向解析（`parseBareStreamId`）+ 库级 by-id 本地优先（`findLocalDownloadedVideo`）+ 时长上限（默认 480s）+ 预设清晰度下载（复用 `downloadStreamedHit`/`defaultVideoQuality` prefer-match-else-degrade）。定位为 20260620（视频下载）× 20260625（弹幕点歌路由）的接线层，几乎零新栈 |
 | 2026-07-05 | DoodleBear | Open Questions 全 7 项拍板并回写正文：**Q1** 只认 id/链接（不搜歌名）；**Q2** 复用 `streamDownloadsSetId`（不新增 set）；**Q3** 支持分P（`bvid#cid` / `bvid 空格 cid`，未给→默认 P1；本地精确 cid 匹配；**下载命名改为「视频标题 - 分P名」**，修 `enqueuePartsForDownload` 的 `title:part.title` bug，对所有分P下载路径统一生效）；**Q4** 按长期性能 Best Practice 加复合索引 `[streamSourceId+streamExternalId]`（Dexie v32→v33，纯 additive 无 upgrade）；**Q5** 先下载再播放（含 play-now，不做 stream-first）；**Q6** 本地命中须有 `blobId`（仅在线引用无 blob→仍下载持久化）；**Q7** 未知时长放行。新增 §4.1a（分P解析）/§4.3a（分P命名修复），Phase 1/2 任务与 checklist 相应扩充 |
 | 2026-07-05 | Codex | Phase 1 ✅：TDD 完成 `mediaKind:"video"` 默认命令与 legacy 回填、`maxVideoRequestDurationSec` 默认 480、Dexie v33 `[streamSourceId+streamExternalId]` 复合索引、`normalizeVideoRequestBody` / `resolvePartRef` / `planVideoRequest` 纯规划器、`findLocalDownloadedVideo` 库级 blob-gated 查询。验证：目标 Vitest 90 tests、Biome、TypeScript typecheck 通过 |
+| 2026-07-05 | Codex | Phase 2 ✅：TDD 完成 `executeVideoRequest`/`handleVideoRequest` 注入式 fulfillment、下载集解析复用 `streamDownloadsSetId`、`downloadStreamedHit` 默认清晰度绑定、拒绝/下载失败 never-throw 转状态、`composePartTitle` 分P命名修复。验证：Phase 2 目标 Vitest 49 tests、TypeScript typecheck 通过 |
 
 ---
 

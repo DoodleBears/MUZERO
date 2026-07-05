@@ -390,6 +390,15 @@ export async function clearAllDownloads(): Promise<number> {
   return clearAllDownloadJobs();
 }
 
+export function composePartTitle(videoTitle: string, partTitle: string, partCount: number): string {
+  const cleanVideoTitle = videoTitle.trim();
+  const cleanPartTitle = partTitle.trim();
+  if (partCount <= 1 || !cleanPartTitle || cleanPartTitle === cleanVideoTitle) {
+    return cleanVideoTitle;
+  }
+  return `${cleanVideoTitle} - ${cleanPartTitle}`;
+}
+
 /**
  * Enqueue every 分P part for video download (default quality) through the persistent
  * queue. Returns the count queued. Going through the queue (not a direct fetch loop) is
@@ -406,7 +415,7 @@ export async function enqueuePartsForDownload(
     await enqueue({
       source: hit.source,
       externalId: part.externalId,
-      title: part.title,
+      title: composePartTitle(hit.title, part.title, parts.length),
       coverUrl: hit.coverUrl,
     });
   }

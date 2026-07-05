@@ -6,6 +6,7 @@ import {
   getPlayQueue,
   getSession,
   getSettings,
+  getTrack,
   listAllTracks,
   playQueueSet,
   prependTrackIds,
@@ -16,9 +17,11 @@ import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, type Track } from "@/db/types
 import type { AudienceRequestAiDjQueue } from "./audience-request-ai-dj";
 import {
   createAudienceRequestRuntime,
+  executeVideoRequest,
   resolveLiveRequestOnlineSetId,
 } from "./audience-request-runtime";
 import type { NormalizedAudienceRequest } from "./audience-request-schema";
+import type { VideoRequestPlan } from "./video-request";
 
 let db: MuzeroDB;
 let dbName: string;
@@ -436,6 +439,107 @@ describe("resolveLiveRequestOnlineSetId (Q3 — online matches always land in th
   });
 });
 
+describe("executeVideoRequest", () => {
+  it("plays a local downloaded video without calling the downloader", async () => {
+    const local = await track(
+      (await createSession({ seedPrompt: "", config: { autoExtend: false } }, db)).id,
+      "Local MV",
+      "video",
+    );
+    const executePlayback = vi.fn(async () => undefined);
+    const downloadHit = vi.fn();
+
+    const result = await executeVideoRequest(
+      { kind: "play-local", track: local },
+      {
+        action: "play-next",
+        downloadHit,
+        executePlayback,
+        getTrack: (id) => getTrack(id, db),
+        notifyRejected: vi.fn(),
+        resolveVideoSetId: async () => "ses_downloads",
+        quality: "1080",
+      },
+    );
+
+    expect(result).toEqual({ status: "completed", matchedTrackId: local.id });
+    expect(executePlayback).toHaveBeenCalledWith("play-next", local);
+    expect(downloadHit).not.toHaveBeenCalled();
+  });
+
+  it("downloads an online video to the downloads set, then plays the resulting track", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const downloaded = await track(session.id, "Downloaded MV", "video");
+    const executePlayback = vi.fn(async () => undefined);
+    const hit = { source: "bili" as const, externalId: "BV1#1", title: "MV" };
+    const downloadHit = vi.fn(async () => ({
+      bytes: 100,
+      container: "mp4" as const,
+      height: 720,
+      kind: "downloaded" as const,
+      trackId: downloaded.id,
+    }));
+
+    const result = await executeVideoRequest(
+      {
+        kind: "download-online",
+        ref: { source: "bili", kind: "song", id: "BV1#1" },
+        hit,
+      },
+      {
+        action: "append-queue",
+        downloadHit,
+        executePlayback,
+        getTrack: (id) => getTrack(id, db),
+        notifyRejected: vi.fn(),
+        resolveVideoSetId: async () => "ses_downloads",
+        quality: "720",
+      },
+    );
+
+    expect(downloadHit).toHaveBeenCalledWith(hit, { quality: "720", sessionId: "ses_downloads" });
+    expect(executePlayback).toHaveBeenCalledWith("append-queue", downloaded);
+    expect(result).toEqual({ status: "completed", matchedTrackId: downloaded.id });
+  });
+
+  it("notifies rejections and download failures without throwing", async () => {
+    const notifyRejected = vi.fn();
+    const base = {
+      action: "play-next" as const,
+      executePlayback: vi.fn(),
+      getTrack: (id: string) => getTrack(id, db),
+      notifyRejected,
+      resolveVideoSetId: async () => "ses_downloads",
+      quality: "1080",
+    };
+
+    await expect(
+      executeVideoRequest(
+        { kind: "rejected", reason: "too-long", durationSec: 481, maxSec: 480 },
+        {
+          ...base,
+          downloadHit: vi.fn(),
+        },
+      ),
+    ).resolves.toEqual({ status: "ignored", error: "too-long" });
+    expect(notifyRejected).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "too-long", durationSec: 481, maxSec: 480 }),
+    );
+
+    const failedPlan: VideoRequestPlan = {
+      kind: "download-online",
+      ref: { source: "bili", kind: "song", id: "BV1#1" },
+      hit: { source: "bili", externalId: "BV1#1", title: "MV" },
+    };
+    await expect(
+      executeVideoRequest(failedPlan, {
+        ...base,
+        downloadHit: vi.fn(async () => ({ kind: "error" as const, message: "network" })),
+      }),
+    ).resolves.toEqual({ status: "failed", error: "network" });
+  });
+});
+
 async function seedQueue() {
   const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
   const current = await track(session.id, "Current Song");
@@ -446,12 +550,16 @@ async function seedQueue() {
   return { current, target, tail, sessionId: session.id };
 }
 
-async function track(sessionId: string, title: string): Promise<Track> {
+async function track(
+  sessionId: string,
+  title: string,
+  kind: "audio" | "video" = "audio",
+): Promise<Track> {
   return createUploadedTrack(
     {
       sessionId,
       title,
-      kind: "audio",
+      kind,
       blob: new Blob(["audio"], { type: "audio/mpeg" }),
       mime: "audio/mpeg",
       durationSec: 180,

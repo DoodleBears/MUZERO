@@ -38,6 +38,7 @@ function fakeRuntime() {
   );
   const runtime: AudienceRequestRuntime = {
     handle,
+    handleVideoRequest: vi.fn(),
     approve: vi.fn(),
     reject: vi.fn(() => undefined),
     getItems: () => [],

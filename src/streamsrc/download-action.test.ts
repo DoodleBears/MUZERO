@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { enqueueHitsForDownload, enqueuePartsForDownload } from "./download-action";
+import {
+  composePartTitle,
+  enqueueHitsForDownload,
+  enqueuePartsForDownload,
+} from "./download-action";
 import type { EnqueueInput } from "./download-queue";
 import type { StreamPart, StreamSearchHit } from "./provider";
 
@@ -26,6 +30,12 @@ function part(index: number): StreamPart {
 }
 
 describe("enqueuePartsForDownload", () => {
+  it("composes stable part titles without losing the video title", () => {
+    expect(composePartTitle("Whole video", "P1", 3)).toBe("Whole video - P1");
+    expect(composePartTitle("Whole video", "Whole video", 3)).toBe("Whole video");
+    expect(composePartTitle("Whole video", "P1", 1)).toBe("Whole video");
+  });
+
   it("enqueues every part through the persistent queue and returns the count", async () => {
     const enqueue = vi.fn(async (_input: EnqueueInput) => undefined);
 
@@ -36,13 +46,13 @@ describe("enqueuePartsForDownload", () => {
     expect(enqueue).toHaveBeenNthCalledWith(1, {
       source: "bili",
       externalId: "BV1#cid1",
-      title: "P1",
+      title: "Whole video - P1",
       coverUrl: "https://cdn/cover.jpg",
     });
     expect(enqueue).toHaveBeenNthCalledWith(3, {
       source: "bili",
       externalId: "BV1#cid3",
-      title: "P3",
+      title: "Whole video - P3",
       coverUrl: "https://cdn/cover.jpg",
     });
   });

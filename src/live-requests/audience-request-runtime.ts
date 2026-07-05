@@ -24,10 +24,17 @@ import {
 } from "@/db/types";
 import i18n from "@/i18n/i18n";
 import { newId } from "@/lib/id";
+import { DEFAULT_VIDEO_QUALITY, downloadStreamedHit } from "@/streamsrc/download-action";
+import type { DownloadStreamedVideoResult } from "@/streamsrc/download-to-library";
 import { cacheStreamTrackCover } from "@/streamsrc/playlist-cover-cache";
+import type { StreamSearchHit } from "@/streamsrc/provider";
 import { resolveEnabledStreamSources } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
-import { createStreamedTrack, hitToStreamedInput } from "@/streamsrc/streamed-track-repo";
+import {
+  createStreamedTrack,
+  findLocalDownloadedVideo,
+  hitToStreamedInput,
+} from "@/streamsrc/streamed-track-repo";
 import {
   type AudienceRequestAiDjProgress,
   type AudienceRequestAiDjQueue,
@@ -53,6 +60,11 @@ import {
   isRequesterCoolingDown,
   pruneExpiredTimestamps,
 } from "./audience-request-security";
+import {
+  planVideoRequest as planVideoRequestCore,
+  type VideoRequestPlan,
+  type VideoRequestRejectReason,
+} from "./video-request";
 
 export type AudienceRequestStatus =
   | "received"
@@ -127,6 +139,22 @@ export interface AudienceRequestRuntimeDeps {
    * tests so the search/route engine carries no UI dependency.
    */
   onRequestPlayed?: (input: { track: Track; action: AudienceRequestPlaybackAction }) => void;
+  planVideoRequest?: (input: {
+    body: string;
+    settings: AppSettings;
+    intake: AudienceRequestIntakeSettings;
+  }) => Promise<VideoRequestPlan>;
+  downloadVideoHit?: (
+    hit: StreamSearchHit,
+    opts: { quality?: string; sessionId: string },
+  ) => Promise<DownloadStreamedVideoResult>;
+  resolveVideoSetId?: (settings: AppSettings) => Promise<string>;
+  onVideoRequestRejected?: (input: {
+    reason: VideoRequestRejectReason | "download-failed";
+    durationSec?: number;
+    maxSec?: number;
+    message?: string;
+  }) => void;
 }
 
 /** Per-call routing overrides — a multi-source intake sets these from the source config. */
@@ -140,9 +168,74 @@ export interface AudienceRequestRuntime {
     request: NormalizedAudienceRequest,
     override?: AudienceRequestHandleOverride,
   ): Promise<AudienceRequestRuntimeItem>;
+  handleVideoRequest(
+    request: NormalizedAudienceRequest,
+    body: string,
+    override?: Pick<AudienceRequestHandleOverride, "playbackAction">,
+  ): Promise<AudienceRequestRuntimeItem>;
   approve(id: string, action?: AudienceRequestPlaybackAction): Promise<AudienceRequestRuntimeItem>;
   reject(id: string): AudienceRequestRuntimeItem | undefined;
   getItems(): AudienceRequestRuntimeItem[];
+}
+
+export interface ExecuteVideoRequestResult {
+  status: Extract<AudienceRequestStatus, "completed" | "failed" | "ignored">;
+  matchedTrackId?: string;
+  error?: string;
+}
+
+export interface ExecuteVideoRequestDeps {
+  action: AudienceRequestPlaybackAction;
+  quality?: string;
+  resolveVideoSetId: () => Promise<string>;
+  downloadHit: (
+    hit: StreamSearchHit,
+    opts: { quality?: string; sessionId: string },
+  ) => Promise<DownloadStreamedVideoResult>;
+  getTrack: (trackId: string) => Promise<Track | undefined>;
+  executePlayback: (action: AudienceRequestPlaybackAction, track: Track) => Promise<void>;
+  notifyRejected: (input: {
+    reason: VideoRequestRejectReason | "download-failed";
+    durationSec?: number;
+    maxSec?: number;
+    message?: string;
+  }) => void;
+}
+
+export async function executeVideoRequest(
+  plan: VideoRequestPlan,
+  deps: ExecuteVideoRequestDeps,
+): Promise<ExecuteVideoRequestResult> {
+  if (plan.kind === "rejected") {
+    deps.notifyRejected({
+      reason: plan.reason,
+      durationSec: plan.durationSec,
+      maxSec: plan.maxSec,
+    });
+    return { status: "ignored", error: plan.reason };
+  }
+  if (plan.kind === "play-local") {
+    await deps.executePlayback(deps.action, plan.track);
+    return { status: "completed", matchedTrackId: plan.track.id };
+  }
+
+  const sessionId = await deps.resolveVideoSetId();
+  const downloaded = await deps.downloadHit(plan.hit, { quality: deps.quality, sessionId });
+  if (downloaded.kind === "downloaded") {
+    const track = await deps.getTrack(downloaded.trackId);
+    if (!track) return { status: "failed", error: "track-not-found" };
+    await deps.executePlayback(deps.action, track);
+    return { status: "completed", matchedTrackId: track.id };
+  }
+
+  const message =
+    downloaded.kind === "requires-login"
+      ? "requires-login"
+      : downloaded.kind === "no-permission"
+        ? downloaded.reason
+        : downloaded.message;
+  deps.notifyRejected({ reason: "download-failed", message });
+  return { status: "failed", error: message };
 }
 
 export function createAudienceRequestRuntime(
@@ -230,6 +323,82 @@ export function createAudienceRequestRuntime(
       return finish(item, {
         status: "failed",
         confidence: item.confidence,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async function handleVideoRequest(
+    request: NormalizedAudienceRequest,
+    body: string,
+    override: Pick<AudienceRequestHandleOverride, "playbackAction"> = {},
+  ): Promise<AudienceRequestRuntimeItem> {
+    const settings = await getSettings(db);
+    const baseIntake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
+    const intake: AudienceRequestIntakeSettings = {
+      ...baseIntake,
+      playbackAction: override.playbackAction ?? baseIntake.playbackAction,
+    };
+    const receivedAt = now();
+    const item = createItem({ ...request, normalizedQuery: body }, intake, receivedAt);
+    remember(item);
+
+    if (!body.trim()) {
+      return finish(item, { status: "ignored", confidence: "none", error: "not-a-video-ref" });
+    }
+    if (
+      isDuplicateAudienceRequest({
+        externalId: request.externalId,
+        now: receivedAt,
+        seenExternalIds,
+        dedupeWindowMs: intake.dedupeWindowSec * 1000,
+      })
+    ) {
+      return finish(item, { status: "ignored", confidence: "none", error: "duplicate" });
+    }
+    if (
+      isRequesterCoolingDown({
+        requesterKey: request.requesterKey,
+        now: receivedAt,
+        lastAcceptedByRequester,
+        cooldownMs: intake.requesterCooldownSec * 1000,
+      })
+    ) {
+      return finish(item, { status: "ignored", confidence: "none", error: "cooldown" });
+    }
+    recentAcceptedAt = recentAcceptedAt.filter((at) => receivedAt - at < 60_000);
+    pruneExpiredTimestamps(seenExternalIds, receivedAt, intake.dedupeWindowSec * 1000);
+    pruneExpiredTimestamps(lastAcceptedByRequester, receivedAt, intake.requesterCooldownSec * 1000);
+    if (recentAcceptedAt.length >= intake.maxRequestsPerMinute) {
+      return finish(item, { status: "ignored", confidence: "none", error: "rate-limited" });
+    }
+
+    if (request.externalId) seenExternalIds.set(request.externalId, receivedAt);
+    if (request.requesterKey) lastAcceptedByRequester.set(request.requesterKey, receivedAt);
+    recentAcceptedAt.push(receivedAt);
+
+    try {
+      const plan =
+        (await deps.planVideoRequest?.({ body, settings, intake })) ??
+        (await defaultPlanVideoRequest(body, settings, intake));
+      const result = await executeVideoRequest(plan, {
+        action: intake.playbackAction,
+        downloadHit: deps.downloadVideoHit ?? ((hit, opts) => downloadStreamedHit(hit, opts)),
+        executePlayback,
+        getTrack: (trackId) => getTrack(trackId, db),
+        notifyRejected: (input) => deps.onVideoRequestRejected?.(input),
+        quality: settings.defaultVideoQuality ?? DEFAULT_VIDEO_QUALITY,
+        resolveVideoSetId: () =>
+          deps.resolveVideoSetId?.(settings) ?? resolveLiveRequestVideoSetId(db, settings),
+      });
+      return finish(item, {
+        status: result.status,
+        matchedTrackId: result.matchedTrackId,
+        error: result.error,
+      });
+    } catch (error) {
+      return finish(item, {
+        status: "failed",
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -480,8 +649,38 @@ export function createAudienceRequestRuntime(
     return { trackId: track.id };
   }
 
+  async function defaultPlanVideoRequest(
+    body: string,
+    settings: AppSettings,
+    intake: AudienceRequestIntakeSettings,
+  ): Promise<VideoRequestPlan> {
+    const streamDeps = {
+      http: createStreamHttp(),
+      now,
+      getCookie: (id: keyof NonNullable<AppSettings["streamSources"]>) =>
+        settings.streamSources?.[id]?.cookie,
+    };
+    const sources = resolveEnabledStreamSources(settings, streamDeps);
+    const byId = new Map(sources.map((source) => [source.id, source]));
+    return planVideoRequestCore(body, {
+      maxDurationSec:
+        intake.maxVideoRequestDurationSec ??
+        DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS.maxVideoRequestDurationSec,
+      fetchFirstPartExternalId: async (externalId) => {
+        const parts = await byId.get("bili")?.listParts?.(externalId);
+        return parts?.[0]?.externalId;
+      },
+      fetchHit: async (ref) => {
+        const hits = await byId.get(ref.source)?.getTracksByIds?.([ref.id]);
+        return hits?.[0];
+      },
+      findLocal: (source, externalId) => findLocalDownloadedVideo(source, externalId, db),
+    });
+  }
+
   return {
     handle,
+    handleVideoRequest,
     approve,
     reject,
     getItems: () => [...items],
@@ -522,6 +721,31 @@ export async function resolveLiveRequestOnlineSetId(
     db,
   );
   await saveSettings({ streamOnlineSetId: session.id }, db);
+  return session.id;
+}
+
+/**
+ * The stable home set for videos downloaded by live requests. Reuses the existing
+ * Downloads set contract so 点视频, manual video downloads, and playlist video imports
+ * share one local bucket.
+ */
+export async function resolveLiveRequestVideoSetId(
+  db: MuzeroDB,
+  settings: AppSettings,
+): Promise<string> {
+  if (settings.streamDownloadsSetId && (await getSession(settings.streamDownloadsSetId, db))) {
+    return settings.streamDownloadsSetId;
+  }
+  const session = await createSession(
+    {
+      name: i18n.t("download.setName"),
+      seedPrompt: "",
+      config: { autoExtend: false },
+      displayMode: "video",
+    },
+    db,
+  );
+  await saveSettings({ streamDownloadsSetId: session.id }, db);
   return session.id;
 }
 
