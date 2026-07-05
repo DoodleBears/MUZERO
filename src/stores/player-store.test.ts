@@ -2037,7 +2037,7 @@ describe("player-store context-aware play (playTrackInContext)", () => {
     timeout: 30000,
   }, async () => {
     const rt = await loadRuntime();
-    const { db, repos, usePlayerStore } = rt;
+    const { db, usePlayerStore } = rt;
     const { set, tracks } = await setupShuffleSet(rt, ["a", "b", "c"]);
     // A standalone track that gets 点歌'd in after the current one.
     const requested = readyTrack("trk_req", set.id, "Requested", "blb_req");
@@ -2060,10 +2060,9 @@ describe("player-store context-aware play (playTrackInContext)", () => {
     );
 
     const cur = usePlayerStore.getState().currentIndex;
-    await repos.playQueueInsertAt(cur + 1, [requested.id]);
-    // The liveQuery reflect of the DB insert into the store queue can lag many seconds under
-    // full-suite parallel load (forks pool + IndexedDB starvation); give it generous slack
-    // (bounded, so a genuine hang still fails) within the 30s per-test timeout above.
+    await usePlayerStore.getState().playNextTrack(requested);
+    // The store action publishes the queue snapshot immediately after persisting the
+    // play-next entry, so this assertion no longer depends on Dexie liveQuery timing.
     await waitFor(() => expect(usePlayerStore.getState().queue[cur + 1]?.id).toBe("trk_req"), {
       timeout: 20000,
     });

@@ -1550,7 +1550,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // anchored to the store cursor (what's actually playing) so it lands right after
     // the current track even while the persisted cursor lags — same as a live request.
     // The queue panel surfaces this block as "Next in queue" (Q10 / Spotify parity).
-    await playQueueRequestNextAt(get().currentIndex, [track.id]);
+    const pq = await playQueueRequestNextAt(get().currentIndex, [track.id]);
+    await publishPlayQueueSnapshot(set, get, pq);
   },
 
   async playRequestNow(track) {
@@ -1627,7 +1628,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // cursor), NOT the persisted DB cursor — which can lag by one in the post-switch
     // debounce window and drop the request behind the playing track. We don't switch the
     // cursor: the request plays when the current track (and any earlier requests) finish.
-    await playQueueRequestNextAt(get().currentIndex, [track.id]);
+    const pq = await playQueueRequestNextAt(get().currentIndex, [track.id]);
+    await publishPlayQueueSnapshot(set, get, pq);
   },
 
   async playStreamedHit(hit) {
@@ -4522,6 +4524,25 @@ async function ensureTrackInCurrentPlayQueue(
     set({ queue });
   }
   return idx;
+}
+
+async function publishPlayQueueSnapshot(
+  set: (p: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  pq: Awaited<ReturnType<typeof getPlayQueue>>,
+): Promise<void> {
+  const trackIds = pq.entries.map((entry) => entry.trackId);
+  const queue = await getTracksByIds(trackIds);
+  const state = get();
+  const currentTrackId = currentTrack(state)?.id ?? loadedTrackId;
+  const currentIndex = reconcileCurrentIndex(
+    queue.map((track) => track.id),
+    currentTrackId,
+    clampIndex(queue.length, pq.currentIndex),
+  );
+  lastQueueSig = queueSig(queue);
+  set({ queue, currentIndex });
+  void afterQueueUpdate(set, get);
 }
 
 /** Get (or lazily create + remember) the set that collects online-source songs. */
