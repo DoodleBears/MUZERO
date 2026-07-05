@@ -13,7 +13,7 @@
 // blob-storage bytes = lazy-GC theory confirmed).
 //
 // Usage: node scripts/perf-longrun-memory.mjs [--switches 14] [--dwell 9000]
-//        [--port 39222] [--step 137] [--no-gc]
+//        [--port 39222] [--step 137] [--local-only] [--play-timeout 45000] [--no-gc]
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { connectCdp, pickPageTarget } from "./lib/cdp-client.mjs";
@@ -33,18 +33,31 @@ const debugPort = Number(arg("--port", process.env.MUZERO_REMOTE_DEBUG_PORT ?? 3
 // A prime-ish stride spreads picks across a large queue → mostly uncached tracks.
 const step = Number(arg("--step", 137));
 const doGc = !process.argv.includes("--no-gc");
+const localOnly = process.argv.includes("--local-only");
+const playTimeoutMs = Number(arg("--play-timeout", 45_000));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function call(method, p, body) {
-  const res = await fetch(`${conn.url}${p}`, {
-    method,
-    headers: HEADERS,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const json = await res.json();
-  if (!json.ok) throw new Error(`${p} -> ${res.status} ${json.error}`);
-  return json.data;
+async function call(method, p, body, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 0;
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(`${conn.url}${p}`, {
+      method,
+      headers: HEADERS,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller?.signal,
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(`${p} -> ${res.status} ${json.error}`);
+    return json.data;
+  } catch (error) {
+    if (controller?.signal.aborted) throw new Error(`${p} timed out after ${timeoutMs}ms`);
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function mainRow(processes) {
@@ -101,8 +114,15 @@ async function main() {
 
   const state = await call("GET", "/state");
   if (state.queueLength < 2) throw new Error(`queue too short (${state.queueLength})`);
+  const localCandidates = localOnly
+    ? (await call("GET", "/playback/candidates")).candidates ?? []
+    : [];
+  if (localOnly && localCandidates.length < 2) {
+    throw new Error(`not enough local playback candidates (${localCandidates.length})`);
+  }
   console.log(
-    `queue=${state.queueLength} currentIndex=${state.currentIndex} switches=${switches} dwell=${dwellMs}ms\n`,
+    `queue=${state.queueLength} currentIndex=${state.currentIndex} switches=${switches} dwell=${dwellMs}ms ` +
+      `mode=${localOnly ? `local-only candidates=${localCandidates.length}` : `stride=${step}`}\n`,
   );
 
   const cdp = await connectHeap();
@@ -114,9 +134,11 @@ async function main() {
 
   const base = Math.max(0, state.currentIndex);
   for (let i = 1; i <= switches; i += 1) {
-    const index = (base + i * step) % state.queueLength;
+    const index = localOnly
+      ? localCandidates[(i - 1) % localCandidates.length].index
+      : (base + i * step) % state.queueLength;
     try {
-      await call("POST", "/player/playIndex", { index });
+      await call("POST", "/player/playIndex", { index }, { timeoutMs: playTimeoutMs });
     } catch (error) {
       console.log(`  playIndex ${index} failed: ${error.message}`);
     }

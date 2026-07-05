@@ -73,6 +73,7 @@ export interface PerfControlCommand {
     | "syncPlaylists"
     | "downloadQueue"
     | "playbackContext"
+    | "playbackCandidates"
     | "voiceTranscript"
     | "ttsPreview"
     | "notifications"
@@ -212,6 +213,30 @@ function snapshot(deps: PerfCommandHandlerDeps) {
     // The next few upcoming ids — play-next appends to a FIFO request block after the
     // current track, so a routed match may land a slot or two past nextTrackId.
     upcomingTrackIds: s.queue.slice(s.currentIndex + 1, s.currentIndex + 9).map((t) => t.id),
+  };
+}
+
+function playbackCandidates(deps: PerfCommandHandlerDeps) {
+  const queue = deps.getPlayerState().queue;
+  const candidates = queue.flatMap((track, index) => {
+    const hasBlob = Boolean(track.blobId);
+    const hasSourcePath = Boolean(track.sourcePath);
+    if (track.status !== "ready" || (!hasBlob && !hasSourcePath)) return [];
+    return [
+      {
+        index,
+        trackId: track.id,
+        kind: track.kind,
+        origin: track.origin,
+        hasBlob,
+        hasSourcePath,
+      },
+    ];
+  });
+  return {
+    candidates,
+    count: candidates.length,
+    queueLength: queue.length,
   };
 }
 
@@ -381,6 +406,8 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         if (!deps.playbackContext) throw new Error("playbackContext not wired");
         return deps.playbackContext(command.payload ?? {});
       }
+      case "playbackCandidates":
+        return playbackCandidates(deps);
       case "enrichProbe": {
         if (!deps.enrichProbe) throw new Error("enrichProbe not wired");
         return deps.enrichProbe(command.payload ?? {});

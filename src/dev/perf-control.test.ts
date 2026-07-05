@@ -65,6 +65,9 @@ describe("routeToCommand", () => {
       method: "playIndex",
       payload: { index: 5 },
     });
+    expect(routeToCommand("GET", ["playback", "candidates"], {})).toEqual({
+      kind: "playbackCandidates",
+    });
     expect(routeToCommand("POST", ["settings"], { theme: "light" })).toEqual({
       kind: "settings",
       patch: { theme: "light" },
@@ -181,6 +184,71 @@ describe("createPerfCommandHandler", () => {
     const handle = createPerfCommandHandler(deps);
     await handle({ kind: "player", method: "playIndex", payload: { index: "+1" } });
     expect(playerState.playIndex).toHaveBeenCalledWith(2);
+  });
+
+  it("playbackCandidates returns only ready local queue entries without paths or urls", async () => {
+    const deps = makeDeps();
+    (
+      deps as unknown as {
+        _playerState: {
+          queue: Array<Record<string, unknown>>;
+        };
+      }
+    )._playerState.queue = [
+      {
+        id: "remote",
+        status: "ready",
+        kind: "audio",
+        origin: "streamed",
+        remoteMediaUrl: "https://example.test/song.mp3",
+      },
+      {
+        id: "blobbed",
+        status: "ready",
+        kind: "audio",
+        origin: "streamed",
+        blobId: "blb_1",
+      },
+      {
+        id: "referenced",
+        status: "ready",
+        kind: "video",
+        origin: "uploaded",
+        sourcePath: "D:/secret/MV.mp4",
+      },
+      {
+        id: "pending",
+        status: "pending",
+        kind: "audio",
+        origin: "generated",
+        blobId: "blb_pending",
+      },
+    ];
+
+    const handle = createPerfCommandHandler(deps);
+
+    await expect(handle({ kind: "playbackCandidates" } as PerfControlCommand)).resolves.toEqual({
+      candidates: [
+        {
+          hasBlob: true,
+          hasSourcePath: false,
+          index: 1,
+          kind: "audio",
+          origin: "streamed",
+          trackId: "blobbed",
+        },
+        {
+          hasBlob: false,
+          hasSourcePath: true,
+          index: 2,
+          kind: "video",
+          origin: "uploaded",
+          trackId: "referenced",
+        },
+      ],
+      count: 2,
+      queueLength: 4,
+    });
   });
 
   it("normalizes the user-facing sets tab alias for navTab", async () => {

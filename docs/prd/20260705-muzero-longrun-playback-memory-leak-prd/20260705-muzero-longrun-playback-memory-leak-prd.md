@@ -322,20 +322,25 @@
 - [x] typecheck（tsc 0 错）+ biome（触达文件 0 错；仓库残留错误在干净 main 同样存在，非本次引入）+ 全量 vitest 3693 通过
 - [x] E2E 回归：直播点歌注入 3/3 completed（含重复 query 命中同曲）；切歌/封面/取色在长跑场景无异常
 
-### Phase 2: 播放缓存 / autoCacheStreamed 内存画像与上限（H-1，依赖 Phase 0 结论）
+### Phase 2: 切歌内存高水位归因与确定性释放（H-1，依赖 Phase 0/§10.1 结论）
 
-**Goal:** 若 Phase 0 证实 H-1 主导——缓存内存占用受控、可配、平台期不逼近 OOM。
+**Goal:** 把“每切一首歌任务管理器看起来线性涨”的用户感知拆成可重复 harness 场景，区分本地已落盘播放、在线 download-before-play、视频 MV 解码三条路径；若 prod+CDP 证明 pause/GC 后仍不回平台期，再修媒体元素 / Blob URL / decode surface 生命周期。
 
 **Tasks:**
-- [ ] 据 Phase 0 结论定 `playbackCacheMaxBytes` 默认值（评估 2GiB→512MiB–1GiB），Settings 滑块文案同步（i18n 四语）
-- [ ] 确保 OPFS 路径生效、避免 IndexedDB 内联 blob 长期驻留（Phase 0 若发现走了 IDB 回退，查因）
-- [ ] 评估直播点歌形态下 `autoCacheStreamed` 默认策略（默认关 / 仅音频 / 仅最近 N 首）——可见 Settings 控件，不藏 flag
-- [ ] LR-4 验证 before/after RSS 平台期下降
+- [x] **TDD harness endpoint**：`GET /playback/candidates`（dev-only perf-control）只返回 active queue 中 `status="ready"` 且有 `blobId` 或 `sourcePath` 的本地可播放 index；不返回本地路径、URL、标题等用户内容。单测覆盖 route + handler 过滤语义。
+- [x] **Harness 分场景开关**：[`scripts/perf-longrun-memory.mjs`](../../../scripts/perf-longrun-memory.mjs) 增加 `--local-only`，用 `/playback/candidates` 驱动纯本地切歌；`--play-timeout` 避免在线下载卡死整轮。
+- [ ] **Prod/CDP local-only 验收**：`pnpm electron:profile` 后跑 `node scripts/perf-longrun-memory.mjs --local-only --switches 20 --dwell 3000`，采 renderer/GPU/main 高水位、pause+20s、renderer `HeapProfiler.collectGarbage` 后回落幅度。
+- [ ] **分路径对照**：再分别跑在线 download-before-play（默认 stride）与视频 MV-only 队列，建立三条曲线，避免把网络下载暂存、音频解码、视频 decode surface 混为一谈。
+- [ ] 若 prod local-only 的 pause+GC 仍不能回到平台期：检查并修复 `MediaEngine` 的 source detach/load/revoke 顺序、封面/video decode surface、可视化 WebGL texture 生命周期；修复后用同一 harness 复测。
+- [ ] `autoCacheStreamed` / `mediaBlobs` 磁盘策略另开决策：当前 RAM 主导已证伪 `playbackCacheMaxBytes` 杠杆，磁盘长期增长（每首永久落盘）不是本轮“任务管理器内存线性涨”的直接修复项。
 
 ### Phase 2 Checklist
 
-- [ ] LR-1 5h（或 1h 外推）渲染进程 RSS 平台期较 before 明显下降
-- [ ] 缓存上限变更不破坏离线播放 / 已缓存命中（sync/musicgen/preload 测试全绿）
+- [x] TDD：`pnpm vitest run src/dev/perf-control.test.ts` 通过（23 tests，覆盖 `playbackCandidates` route/handler）
+- [x] Harness 脚本语法：`node --check scripts/perf-longrun-memory.mjs` 通过
+- [ ] Live smoke：需要当前 Electron dev / profile 控制端点可达；本轮后台重启后 7345 未监听，未把 smoke 伪装成通过
+- [ ] Prod/CDP local-only 曲线显示 pause+20s 或 GC 后回平台期；否则进入媒体释放修复
+- [ ] 若修复代码：对应单元/集成测试 + local-only harness before/after 数据入 §10
 
 ### Phase 3: 队列长驻上限（F-11，承接六月 Q-3）
 
@@ -449,3 +454,4 @@
 | 2026-07-05 | Claude Code | **第四轮：E2E 实测归因 + Phase 1 落地**。① Phase 0 完成：受控 Blob 归属实验（`perf-blob-pinning-probe.mjs`，100×8MB）坐实机制 ③——主进程精确 +801MB、渲染端 GC 后**全额回落** ⇒ 2.8GB = 惰性 GC 钉字节，**非泄漏**（Q-1/Q-7 答）；`playbackCache` 实测为空、流媒体落盘走 `mediaBlobs` electron-file（Q-2 证伪 IDB 内联回退、Q-4 moot——**Phase 2 原「降缓存上限」方案作废**，改「确定性释放内存背书 Blob 句柄」+「mediaBlobs/autoCacheStreamed 磁盘策略」）。② Phase 1 完成：L-1~L-6 有界化（新 `src/lib/bounded-cache.ts` LRU/BoundedSet + 各站点接入 + 穷举单测）、L-2 `pruneExpiredTimestamps` 窗口清扫、M-1 abort signal 接线；**L-7 复核 main 已有 50 条上限（初稿误读）、L-8 所指文件不在 main（N/A）**。③ 观测设施：`GET /memory/diag`、`/processes.mainProcess`、`scripts/perf-longrun-memory.mjs`。④ 验证：全量 vitest 3693 通过；直播点歌注入回归 3/3 completed；14 切歌主进程 +17.6MB 收敛、有界缓存全部 ≤ cap（§10 回填）。 |
 | 2026-07-05 | Claude Code | **第三轮：用户任务管理器截图坐实 Q-6——2,859.9MB 是主进程，渲染进程仅 62.4MB**。①§1.1 事实 1 修正（初稿「占用在渲染进程」判断被推翻）；② H-1 机制精确化：渲染端 Blob 句柄惰性 GC + 字节钉在主进程 blob storage（BlobMemoryController 内存层 ~2GB 上限与 2.86GB 画像吻合），渲染端 L-2~L-8/F-11 确认非主导；③ 主进程（electron/）全量静态复核：fetch-proxy 流式无缓冲、diagnostics 环 100、intake 有界、ipc 均健康——主进程 JS 侧无 GB 级候选，指向 Chromium 存储层；新登记 M-2（pendingMediaStorageWrites fd 边缘泄漏，Low）；④ Phase 0 重定向：主进程 `process.memoryUsage()`/`v8.getHeapStatistics()` + **渲染端手动 GC → 看主进程 RSS 回落**的廉价定性实验（新 Q-7）；渲染端 heap 三连拍降级为辅助。 |
 | 2026-07-05 | Codex | **用户截图后本地 Electron dev harness 复测（§10.1）**：通过 dev control endpoint 跑真实 5734 首队列短切歌。9 次切歌中 renderer/Tab 549.9→1430.3MB、GPU 460.5→552.0MB，main/Browser 176.2→229.9MB 且 Node heap 始终 6-7MB；暂停后 renderer 先回到 839MB，再回到 582.4MB，接近初始 545-588MB。结论：短跑复现的是 Chromium 媒体/Blob/解码工作集高水位与惰性释放，不是 MUZERO JS 永久线性泄漏；但用户感知的任务管理器高水位仍需 Phase 2 用 prod+CDP 强制 GC 和“已缓存曲目 vs 在线下载 vs 视频 MV”分场景验收。 |
+| 2026-07-05 | Codex | **Phase 2 TDD harness 推进**：新增 dev-only `GET /playback/candidates` 设计与实现（route + renderer handler 单测先红后绿），只返回 ready 且有 `blobId`/`sourcePath` 的本地可播放 queue index，不泄露 path/url/title；`scripts/perf-longrun-memory.mjs` 增加 `--local-only` 与 `--play-timeout`，让纯切歌内存曲线与在线 download-before-play 分离。验证：`pnpm vitest run src/dev/perf-control.test.ts` 23 例通过，`node --check scripts/perf-longrun-memory.mjs` 通过；live smoke 因当前 Electron dev 控制端点未监听未标绿，留给 prod/profile harness。 |

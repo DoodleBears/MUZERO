@@ -230,6 +230,11 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments.length === 2 && segments[0] === "playback") {
     return { kind: "playbackContext", payload: { action: segments[1], ...body } };
   }
+  // Playback memory harness: list queue indices that are ready and local-only
+  // (blobId or referenced sourcePath), so the run can avoid online download noise.
+  if (method === "GET" && segments.length === 2 && segments[0] === "playback" && segments[1] === "candidates") {
+    return { kind: "playbackCandidates" };
+  }
   // Enrichment feasibility probe: POST /enrich/probe { sourceId, search|externalId }
   if (method === "POST" && segments.length === 2 && segments[0] === "enrich" && segments[1] === "probe") {
     return { kind: "enrichProbe", payload: body };
