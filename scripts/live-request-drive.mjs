@@ -14,7 +14,9 @@
 // itself (no phantom queue entries left behind). play-now needs the "立即播放" config
 // (requireApprovalForPlayNow=false); we flip it for the probe and restore the user's value.
 //
-// Usage: node scripts/live-request-drive.mjs [--samples N] [--timeout MS]
+// Usage:
+//   node scripts/live-request-drive.mjs [--samples N] [--timeout MS]
+//   node scripts/live-request-drive.mjs --video-id BV... [--playback-action play-next]
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -29,6 +31,8 @@ function arg(name, fallback) {
 }
 const sampleCount = Number(arg("--samples", 12));
 const timeoutMs = Number(arg("--timeout", 5000));
+const videoId = arg("--video-id", "");
+const videoPlaybackAction = arg("--playback-action", "play-next");
 const ROUTE = "library-search";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -47,6 +51,8 @@ async function call(method, p, body) {
 const state = () => call("GET", "/state");
 const inject = (query, playbackAction) =>
   call("POST", "/live-request", { action: "inject", query, routeMode: ROUTE, playbackAction });
+const injectVideo = (query, playbackAction) =>
+  call("POST", "/live-request", { action: "inject", query, mediaKind: "video", playbackAction });
 
 /** Seat the cursor at a fresh, distant index and PAUSE so the position is stable while we
  *  route a request (no auto-advance drift, no heavy set-reseed race). */
@@ -106,6 +112,17 @@ async function main() {
   console.log(`baseline: ${JSON.stringify(slim(before))}`);
   const sessionId = before.activeSessionId;
   if (!sessionId) throw new Error("no active session to test against");
+
+  if (videoId) {
+    const { item } = await injectVideo(videoId, videoPlaybackAction);
+    const ok = item.status === "completed";
+    record(
+      "video-request",
+      ok,
+      `status=${item.status} match=${item.matchedTrackId ?? "-"} error=${item.error ?? "-"}`,
+    );
+    return finish(sessionId);
+  }
 
   const { samples } = await call("POST", "/live-request", { action: "sample", count: sampleCount });
   if (!samples?.length) throw new Error("no sampleable tracks in the live queue");

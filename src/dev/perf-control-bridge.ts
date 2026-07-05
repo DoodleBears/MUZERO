@@ -671,6 +671,7 @@ export function startPerfControlBridge(): void {
       if (action === "inject") {
         const { driveLiveRequest } = await import("@/live-requests/live-request-controller");
         const item = await driveLiveRequest({
+          mediaKind: payload.mediaKind as never,
           query: String(payload.query ?? ""),
           routeMode: payload.routeMode as never,
           playbackAction: payload.playbackAction as never,

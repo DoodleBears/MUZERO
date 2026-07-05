@@ -36,14 +36,21 @@ function fakeRuntime() {
     async (_request: NormalizedAudienceRequest, _override?: AudienceRequestHandleOverride) =>
       ({ id: "arq_x" }) as AudienceRequestRuntimeItem,
   );
+  const handleVideoRequest = vi.fn(
+    async (
+      _request: NormalizedAudienceRequest,
+      _body: string,
+      _override?: Pick<AudienceRequestHandleOverride, "playbackAction">,
+    ) => ({ id: "arq_v" }) as AudienceRequestRuntimeItem,
+  );
   const runtime: AudienceRequestRuntime = {
     handle,
-    handleVideoRequest: vi.fn(),
+    handleVideoRequest,
     approve: vi.fn(),
     reject: vi.fn(() => undefined),
     getItems: () => [],
   };
-  return { runtime, handle };
+  return { runtime, handle, handleVideoRequest };
 }
 
 function fakeControls() {
@@ -229,6 +236,19 @@ describe("live-request-controller intent router", () => {
     expect(handle.mock.calls[0][1]).toMatchObject({ routeMode: "ai-dj" });
   });
 
+  it("routes 点视频 to runtime.handleVideoRequest with the stripped id body", async () => {
+    await enableIntake();
+    const { runtime, handle, handleVideoRequest } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload(payload(JSON.stringify({ message: "点视频 BV1HLz9BJEgi" })));
+
+    expect(handle).not.toHaveBeenCalled();
+    expect(handleVideoRequest).toHaveBeenCalledTimes(1);
+    expect(handleVideoRequest.mock.calls[0][1]).toBe("BV1HLz9BJEgi");
+    expect(handleVideoRequest.mock.calls[0][2]).toMatchObject({ playbackAction: "play-next" });
+  });
+
   it("does not route comment / rating commands through the runtime (annotation intents)", async () => {
     await enableIntake();
     const { runtime, handle } = fakeRuntime();
@@ -308,6 +328,24 @@ describe("live-request-controller intent router", () => {
 
     expect(handle).toHaveBeenCalledTimes(1);
     expect(handle.mock.calls[0][1]).toMatchObject({ routeMode: "ai-dj" });
+  });
+
+  it("dev drive can inject the video request path", async () => {
+    const { runtime, handle, handleVideoRequest } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.drive({
+      mediaKind: "video",
+      playbackAction: "append-queue",
+      query: "BV1HLz9BJEgi",
+    });
+
+    expect(handle).not.toHaveBeenCalled();
+    expect(handleVideoRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ normalizedQuery: "BV1HLz9BJEgi" }),
+      "BV1HLz9BJEgi",
+      { playbackAction: "append-queue" },
+    );
   });
 });
 

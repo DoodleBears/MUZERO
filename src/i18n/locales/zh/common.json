@@ -1574,7 +1574,12 @@
     "ratingAdded": "给《{{title}}》打了 {{score}}★",
     "ratingDetail": "均分 {{average}} · {{count}} 票",
     "commentAdded": "《{{title}}》多了一条记忆",
-    "commentAddedBy": "{{name}} 评论了《{{title}}》"
+    "commentAddedBy": "{{name}} 评论了《{{title}}》",
+    "videoNotARef": "点视频请粘贴 B站或 YouTube 的视频 id/链接",
+    "videoUnsupportedSource": "点视频目前支持 B站和 YouTube 链接",
+    "videoUnresolved": "没能解析这个视频",
+    "videoTooLong": "视频超过 {{minutes}} 分钟",
+    "videoDownloadFailed": "点视频下载失败"
   },
   "rating": {
     "aria": "给这首歌打分",

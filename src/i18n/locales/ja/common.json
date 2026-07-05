@@ -1574,7 +1574,12 @@
     "ratingAdded": "{{title}} を {{score}}★ で評価",
     "ratingDetail": "平均 {{average}} · {{count}} 票",
     "commentAdded": "{{title}} に新しいメモリー",
-    "commentAddedBy": "{{name}} が {{title}} にコメント"
+    "commentAddedBy": "{{name}} が {{title}} にコメント",
+    "videoNotARef": "動画リクエストには Bilibili または YouTube の動画 ID/リンクを貼ってください",
+    "videoUnsupportedSource": "動画リクエストは現在 Bilibili と YouTube リンクに対応しています",
+    "videoUnresolved": "この動画を解決できませんでした",
+    "videoTooLong": "動画が {{minutes}} 分を超えています",
+    "videoDownloadFailed": "動画リクエストのダウンロードに失敗しました"
   },
   "rating": {
     "aria": "この曲を評価",

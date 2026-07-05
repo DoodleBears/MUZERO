@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import type { DownloadJob } from "@/db/types";
 import {
   composePartTitle,
+  enqueueDownloadAndWait,
   enqueueHitsForDownload,
   enqueuePartsForDownload,
 } from "./download-action";
@@ -101,3 +103,57 @@ describe("enqueueHitsForDownload (favlist re-sync → video queue)", () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 });
+
+describe("enqueueDownloadAndWait", () => {
+  it("waits for the persistent queued job to finish and returns the track id", async () => {
+    const job = jobRow({ status: "pending" });
+    const states: DownloadJob[] = [
+      job,
+      { ...job, status: "active" },
+      { ...job, status: "done", trackId: "trk_done" },
+    ];
+
+    const result = await enqueueDownloadAndWait(
+      { source: "bili", externalId: "BV1#1", title: "MV", quality: "1080" },
+      {
+        enqueue: async () => job,
+        listJobs: async () => [states.shift() ?? states[states.length - 1] ?? job],
+        sleep: async () => undefined,
+        timeoutMs: 1000,
+      },
+    );
+
+    expect(result).toMatchObject({ kind: "downloaded", trackId: "trk_done" });
+  });
+
+  it("turns a failed queued job into a download error", async () => {
+    const job = jobRow({ status: "failed", lastError: "login" });
+
+    await expect(
+      enqueueDownloadAndWait(
+        { source: "bili", externalId: "BV1#1", title: "MV" },
+        {
+          enqueue: async () => job,
+          listJobs: async () => [job],
+          sleep: async () => undefined,
+          timeoutMs: 1000,
+        },
+      ),
+    ).resolves.toEqual({ kind: "error", message: "login" });
+  });
+});
+
+function jobRow(patch: Partial<DownloadJob>): DownloadJob {
+  return {
+    attempts: 0,
+    bytesDone: 0,
+    createdAt: 1,
+    externalId: "BV1#1",
+    id: "dlj_1",
+    source: "bili",
+    status: "pending",
+    title: "MV",
+    updatedAt: 1,
+    ...patch,
+  };
+}

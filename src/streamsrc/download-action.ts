@@ -362,6 +362,42 @@ export function enqueueDownload(input: EnqueueInput): Promise<DownloadJob> {
   return getQueueRunner().enqueue(input);
 }
 
+export async function enqueueDownloadAndWait(
+  input: EnqueueInput,
+  opts: {
+    enqueue?: (input: EnqueueInput) => Promise<DownloadJob>;
+    listJobs?: () => Promise<DownloadJob[]>;
+    sleep?: (ms: number) => Promise<void>;
+    pollMs?: number;
+    timeoutMs?: number;
+  } = {},
+): Promise<DownloadStreamedVideoResult> {
+  const enqueue = opts.enqueue ?? enqueueDownload;
+  const listJobs = opts.listJobs ?? listDownloadJobs;
+  const sleep = opts.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const pollMs = opts.pollMs ?? 500;
+  const timeoutMs = opts.timeoutMs ?? 30 * 60_000;
+  const job = await enqueue(input);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const current = (await listJobs()).find((candidate) => candidate.id === job.id) ?? job;
+    if (current.status === "done" && current.trackId) {
+      return {
+        bytes: current.totalBytes ?? current.bytesDone ?? 0,
+        container: "mp4",
+        height: 0,
+        kind: "downloaded",
+        trackId: current.trackId,
+      };
+    }
+    if (current.status === "failed") {
+      return { kind: "error", message: current.lastError ?? "download-failed" };
+    }
+    await sleep(pollMs);
+  }
+  return { kind: "error", message: "download-timeout" };
+}
+
 /** On app start: refresh concurrency from settings + resume jobs left mid-flight (rule: persist + recover). */
 export async function recoverDownloadQueue(): Promise<void> {
   const settings = await getSettings();

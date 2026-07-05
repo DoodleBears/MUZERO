@@ -24,7 +24,7 @@ import {
 } from "@/db/types";
 import i18n from "@/i18n/i18n";
 import { newId } from "@/lib/id";
-import { DEFAULT_VIDEO_QUALITY, downloadStreamedHit } from "@/streamsrc/download-action";
+import { DEFAULT_VIDEO_QUALITY, enqueueDownloadAndWait } from "@/streamsrc/download-action";
 import type { DownloadStreamedVideoResult } from "@/streamsrc/download-to-library";
 import { cacheStreamTrackCover } from "@/streamsrc/playlist-cover-cache";
 import type { StreamSearchHit } from "@/streamsrc/provider";
@@ -383,7 +383,17 @@ export function createAudienceRequestRuntime(
         (await defaultPlanVideoRequest(body, settings, intake));
       const result = await executeVideoRequest(plan, {
         action: intake.playbackAction,
-        downloadHit: deps.downloadVideoHit ?? ((hit, opts) => downloadStreamedHit(hit, opts)),
+        downloadHit:
+          deps.downloadVideoHit ??
+          ((hit, opts) =>
+            enqueueDownloadAndWait({
+              coverUrl: hit.coverUrl,
+              externalId: hit.externalId,
+              quality: opts.quality,
+              sessionId: opts.sessionId,
+              source: hit.source,
+              title: hit.title,
+            })),
         executePlayback,
         getTrack: (trackId) => getTrack(trackId, db),
         notifyRejected: (input) => deps.onVideoRequestRejected?.(input),

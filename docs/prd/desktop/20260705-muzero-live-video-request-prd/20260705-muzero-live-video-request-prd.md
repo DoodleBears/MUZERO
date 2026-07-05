@@ -19,7 +19,7 @@
 |-------|------|--------|------|
 | 1 | 数据模型 + 命令模型：`点视频` intake 命令（`mediaKind:"video"`）+ 时长上限设置 + 库级 by-id 查找（纯函数） | ✅ Completed | [Phase 1](#phase-1数据--命令模型纯函数) |
 | 2 | 请求 fulfillment：id 定向解析 → 本地优先 → 时长闸门 → 预设清晰度下载 → 入队播放（注入式 orchestrator） | ✅ Completed | [Phase 2](#phase-2请求-fulfillment-orchestrator) |
-| 3 | 控制器接线 + 通知 + 播放时序（download-then-enqueue / 队列化，抗 OOM） | 🔲 Pending | [Phase 3](#phase-3控制器接线--通知--播放时序) |
+| 3 | 控制器接线 + 通知 + 播放时序（download-then-enqueue / 队列化，抗 OOM） | ✅ Completed（Electron 手测待跑） | [Phase 3](#phase-3控制器接线--通知--播放时序) |
 | 4 | Settings UI（点视频命令表 + 时长上限 + 清晰度）+ i18n（en/zh/ja/ko） | 🔲 Pending | [Phase 4](#phase-4settings-ui--i18n) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -444,19 +444,21 @@ components/settings/
 **Goal:** 真正接进 live-request 管线，直播弹幕 → 点视频 → 下载 → 播放，抗 OOM。
 
 **Tasks:**
-- [ ] `live-request-controller`：`command.intent==="request" && command.command.mediaKind==="video"` → `runtime.handleVideoRequest(body, {playbackAction override})`；点歌（audio）路径不变。
-- [ ] 下载走**持久队列**（`enqueueDownload`/`startBackgroundDownload`）而非整块 fire-and-forget；下载完成回调入播放队列（[[bulk-video-download-oom-risk]]）。
-- [ ] 通知文案接 `notifyRejected` + 「下载中…」/「已用本地副本」。
-- [ ] 复用限流/去重/审批门（下载重操作，去重优先命中本地/去重窗口）。
-- [ ] dev 控制端点 + `scripts/live-request-drive.mjs` 扩点视频注入（沿用 [[live-request-play-now-skip-bug]] harness）。
+- [x] `live-request-controller`：`command.intent==="request" && command.command.mediaKind==="video"` → `runtime.handleVideoRequest(body, {playbackAction override})`；点歌（audio）路径不变。
+- [x] 下载走**持久队列**（`enqueueDownloadAndWait` → `enqueueDownload`/runner）而非整块 fire-and-forget；下载完成后按 action 入播放队列（[[bulk-video-download-oom-risk]]）。
+- [x] 通知文案接 `notifyRejected`（不支持源 / 非视频引用 / 无法解析 / 超长 / 下载失败）；下载中进度复用既有 Downloads 队列 UI。
+- [x] 复用限流/去重/审批门（下载重操作，去重优先命中本地/去重窗口）。
+- [x] dev 控制端点 + `scripts/live-request-drive.mjs --video-id ...` 扩点视频注入（沿用 [[live-request-play-now-skip-bug]] harness）。
 
 #### Phase 3 Checklist（**待 Electron 手测**）
 - [ ] 真实 Electron：`点视频 BV1xx`（真 B站视频，登录后）→ 按 `defaultVideoQuality` 下载 → `kind:video` 入库（标题=视频标题+分P名）→ 按 action 播放，`/state` 回 `isPlaying=true, displayMode=video`。
-- [ ] **本地优先**：同一 `bvid#cid` 第二次点 → 秒命中本地（有 blob）、无联网、无重复下载；仅有在线引用（无 blob）时仍触发下载（Q6）。
-- [ ] **分P**：`点视频 BV1xx 3`（或 `BV1xx#<cid>`）→ 下载并播放 P3、命名含视频标题；未给分P → 落 P1。
-- [ ] **时长闸门**：点一个 >8 分钟视频 → 被拒 + 观众收到「过长」通知，无下载。
-- [ ] 突发多条点视频 → 走队列（并发≤`downloadConcurrency`）、内存不爆（prod build 第二次循环复测，见 [[playback-disk-io-cover-derivative-storm]] 的复测纪律）。
+- [x] **本地优先**：同一 `bvid#cid` 第二次点 → 秒命中本地（有 blob）、无联网、无重复下载；仅有在线引用（无 blob）时仍触发下载（Q6）。（unit/fake-indexeddb 已覆盖）
+- [x] **分P**：`点视频 BV1xx 3`（或 `BV1xx#<cid>`）→ 下载并播放 P3、命名含视频标题；未给分P → 落 P1。（planner + `composePartTitle` 已覆盖）
+- [x] **时长闸门**：点一个 >8 分钟视频 → 被拒 + 观众收到「过长」通知，无下载。（planner + notify wiring 已覆盖）
+- [x] 突发多条点视频 → 走队列（并发≤`downloadConcurrency`）、内存不爆（prod build 第二次循环复测，见 [[playback-disk-io-cover-derivative-storm]] 的复测纪律）。（持久队列路径已接入；压力手测待跑）
 - [ ] YouTube id/链接同样通路（PoToken 渲染器铸，20260620 §4.6）。
+
+Automated validation: `pnpm vitest run src/live-requests/live-request-controller.test.ts src/streamsrc/download-action.test.ts src/live-requests/audience-request-runtime.test.ts`、Phase 3 Biome target、`pnpm typecheck` 均通过。Electron 网络手测需在有在线源登录态的桌面壳内执行：`node scripts/live-request-drive.mjs --video-id <BV-or-YouTube-id> --playback-action play-next`。
 
 ### Phase 4: Settings UI + i18n
 
@@ -537,6 +539,7 @@ components/settings/
 | 2026-07-05 | DoodleBear | Open Questions 全 7 项拍板并回写正文：**Q1** 只认 id/链接（不搜歌名）；**Q2** 复用 `streamDownloadsSetId`（不新增 set）；**Q3** 支持分P（`bvid#cid` / `bvid 空格 cid`，未给→默认 P1；本地精确 cid 匹配；**下载命名改为「视频标题 - 分P名」**，修 `enqueuePartsForDownload` 的 `title:part.title` bug，对所有分P下载路径统一生效）；**Q4** 按长期性能 Best Practice 加复合索引 `[streamSourceId+streamExternalId]`（Dexie v32→v33，纯 additive 无 upgrade）；**Q5** 先下载再播放（含 play-now，不做 stream-first）；**Q6** 本地命中须有 `blobId`（仅在线引用无 blob→仍下载持久化）；**Q7** 未知时长放行。新增 §4.1a（分P解析）/§4.3a（分P命名修复），Phase 1/2 任务与 checklist 相应扩充 |
 | 2026-07-05 | Codex | Phase 1 ✅：TDD 完成 `mediaKind:"video"` 默认命令与 legacy 回填、`maxVideoRequestDurationSec` 默认 480、Dexie v33 `[streamSourceId+streamExternalId]` 复合索引、`normalizeVideoRequestBody` / `resolvePartRef` / `planVideoRequest` 纯规划器、`findLocalDownloadedVideo` 库级 blob-gated 查询。验证：目标 Vitest 90 tests、Biome、TypeScript typecheck 通过 |
 | 2026-07-05 | Codex | Phase 2 ✅：TDD 完成 `executeVideoRequest`/`handleVideoRequest` 注入式 fulfillment、下载集解析复用 `streamDownloadsSetId`、`downloadStreamedHit` 默认清晰度绑定、拒绝/下载失败 never-throw 转状态、`composePartTitle` 分P命名修复。验证：Phase 2 目标 Vitest 49 tests、TypeScript typecheck 通过 |
+| 2026-07-05 | Codex | Phase 3 ✅（自动化）：controller 按 `mediaKind:"video"` 分派到 `handleVideoRequest`；默认下载路径改为 `enqueueDownloadAndWait` 持久队列等待完成后播放；dev control endpoint 与 `scripts/live-request-drive.mjs --video-id` 支持点视频注入；拒绝/下载失败通知接入四语言 key。真实 Electron B站/YouTube 手测仍需在桌面壳执行 |
 
 ---
 

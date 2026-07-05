@@ -3,6 +3,7 @@ import i18n from "@/i18n/i18n";
 import { trackAlbum, trackArtists } from "@/lib/track-display";
 import { notify } from "@/stores/notification-store";
 import type { AudienceRequestPlaybackAction } from "./audience-request-schema";
+import type { VideoRequestRejectReason } from "./video-request";
 
 /** Which message key confirms the request, given how the track was routed.
  *  `as const` keeps the values as literal i18n keys (not widened to `string`)
@@ -63,4 +64,30 @@ export function notifyAnnotationAdded(track: Track, memory: Memory): void {
     ? i18n.t("liveRequest.commentAddedBy", { name: who, title: track.title })
     : i18n.t("liveRequest.commentAdded", { title: track.title });
   notify.success(message, { detail: memory.note });
+}
+
+export function notifyVideoRequestRejected(input: {
+  reason: VideoRequestRejectReason | "download-failed";
+  durationSec?: number;
+  maxSec?: number;
+  message?: string;
+}): void {
+  if (input.reason === "too-long") {
+    notify.error(
+      i18n.t("liveRequest.videoTooLong", {
+        minutes: Math.ceil((input.maxSec ?? 0) / 60),
+      }),
+    );
+    return;
+  }
+  if (input.reason === "download-failed") {
+    notify.error(i18n.t("liveRequest.videoDownloadFailed"), { detail: input.message });
+    return;
+  }
+  const key = {
+    "not-a-video-ref": "liveRequest.videoNotARef",
+    "unsupported-source": "liveRequest.videoUnsupportedSource",
+    unresolved: "liveRequest.videoUnresolved",
+  } as const satisfies Record<Exclude<VideoRequestRejectReason, "too-long">, string>;
+  notify.error(i18n.t(key[input.reason]));
 }

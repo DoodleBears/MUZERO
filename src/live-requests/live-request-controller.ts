@@ -12,6 +12,7 @@ import { log } from "@/lib/logger";
 import { resolveTrackRating } from "@/lib/track-rating";
 import {
   type AudienceRequestRuntime,
+  type AudienceRequestRuntimeDeps,
   type AudienceRequestRuntimeItem,
   createAudienceRequestRuntime,
 } from "./audience-request-runtime";
@@ -35,6 +36,7 @@ import {
   notifyAnnotationAdded,
   notifyAudienceRequestPlayed,
   notifyRatingAdded,
+  notifyVideoRequestRejected,
 } from "./live-request-notification";
 import { applyMapping } from "./request-mapping-presets";
 import { DEFAULT_SSN_RELAY_URL } from "./social-stream-relay";
@@ -94,6 +96,8 @@ export interface LiveRequestControllerDeps {
   getTrackDurationSec?: (trackId: string) => number | undefined | Promise<number | undefined>;
   /** Notified after a 评论 memory lands (production: a toast). */
   onAnnotated?: (input: { trackId: string; memory: Memory }) => void;
+  /** Notified when a 点视频 request is rejected or its download fails. */
+  onVideoRequestRejected?: AudienceRequestRuntimeDeps["onVideoRequestRejected"];
   now?: () => number;
   /** Inject the intake controls (tests); otherwise resolved from the desktop bridge. */
   controls?: DesktopLiveRequestIntakeControls;
@@ -117,6 +121,7 @@ export interface LiveRequestController {
    */
   drive(input: {
     query: string;
+    mediaKind?: "audio" | "video";
     routeMode?: AudienceRequestRouteMode;
     playbackAction?: AudienceRequestPlaybackAction;
   }): Promise<AudienceRequestRuntimeItem>;
@@ -168,6 +173,7 @@ export function createLiveRequestController(
       playNow: deps.playNow,
       playNext: deps.playNext,
       onRequestPlayed: deps.onRequestPlayed,
+      onVideoRequestRejected: deps.onVideoRequestRejected,
       getActiveQueueTrackIds: deps.getActiveQueueTrackIds,
       getCurrentTrackId: deps.getCurrentTrackId,
     });
@@ -259,6 +265,21 @@ export function createLiveRequestController(
         return;
       }
       try {
+        if (command.command.mediaKind === "video") {
+          await runtime.handleVideoRequest(
+            {
+              ...request,
+              normalizedQuery: command.body,
+              matchedCommandPrefix: command.matchedPrefix,
+            },
+            command.body,
+            {
+              playbackAction:
+                command.command.playbackAction ?? source.playbackAction ?? intake.playbackAction,
+            },
+          );
+          return;
+        }
         await runtime.handle(
           {
             ...request,
@@ -342,11 +363,18 @@ export function createLiveRequestController(
     handlePayload,
     getCaptured: (sourceId) => captures.get(sourceId) ?? [],
     getItems: () => runtime.getItems(),
-    drive: (input) =>
-      runtime.handle(normalizeAudienceRequest({ message: input.query }, { commandPrefixes: [] }), {
+    drive: (input) => {
+      const request = normalizeAudienceRequest({ message: input.query }, { commandPrefixes: [] });
+      if (input.mediaKind === "video") {
+        return runtime.handleVideoRequest(request, input.query, {
+          playbackAction: input.playbackAction,
+        });
+      }
+      return runtime.handle(request, {
         routeMode: input.routeMode,
         playbackAction: input.playbackAction,
-      }),
+      });
+    },
   };
 }
 
@@ -389,6 +417,7 @@ function ensureSingleton(): LiveRequestController {
       const track = await getTrack(trackId, defaultDb);
       if (track) notifyAnnotationAdded(track, memory);
     },
+    onVideoRequestRejected: notifyVideoRequestRejected,
   });
   return singleton;
 }
@@ -423,6 +452,7 @@ export function getCapturedLiveRequests(sourceId: string): CapturedPayload[] {
 /** Dev control-endpoint harness: drive a synthetic request through the live singleton. */
 export function driveLiveRequest(input: {
   query: string;
+  mediaKind?: "audio" | "video";
   routeMode?: AudienceRequestRouteMode;
   playbackAction?: AudienceRequestPlaybackAction;
 }): Promise<AudienceRequestRuntimeItem> {
