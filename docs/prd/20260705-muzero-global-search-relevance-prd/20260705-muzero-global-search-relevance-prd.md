@@ -389,6 +389,7 @@ Tie breakers:
 
 - [x] Querying an exact artist name surfaces that artist in the first 5 rows.
 - [x] Querying an exact artist name ranks the artist entity ahead of songs whose artist field has the same exact score.
+- [x] Querying an artist-name prefix ranks the artist entity ahead of songs whose artist field has the same prefix score.
 - [x] Querying an exact song title surfaces the song before weaker artist/album matches.
 - [x] Querying an exact album name surfaces the album near top without hiding song results.
 - [x] Down-arrow navigation follows visual order, including Best Matches.
@@ -452,3 +453,4 @@ Tie breakers:
 | 2026-07-05 | Codex | Completed Phase 2: local track/artist/album results now carry relevance scores |
 | 2026-07-05 | Codex | Completed Phase 3: Best Matches section ranks scored local results and exposes dev snapshot count |
 | 2026-07-05 | Codex | Tightened Phase 3: exact entity labels outrank same-score track metadata matches |
+| 2026-07-05 | Codex | Tightened Phase 3: artist/album/set label prefixes outrank same-score track metadata prefixes |

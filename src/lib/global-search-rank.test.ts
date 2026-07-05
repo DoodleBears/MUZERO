@@ -20,6 +20,15 @@ describe("rankGlobalSearchBestMatches", () => {
     expect(ranked.map((item) => item.key)).toEqual(["artist:supercell", "track:song-by-supercell"]);
   });
 
+  it("puts an artist prefix entity before tracks whose artist field has the same prefix score", () => {
+    const ranked = rankGlobalSearchBestMatches([
+      { exactness: 1, key: "track:sing", kind: "track", order: 0, score: 1 },
+      { exactness: 3, key: "artist:ed-sheeran", kind: "artist", order: 1, score: 1 },
+    ]);
+
+    expect(ranked.map((item) => item.key)).toEqual(["artist:ed-sheeran", "track:sing"]);
+  });
+
   it("keeps an exact track-title match ahead of an exact artist entity", () => {
     const ranked = rankGlobalSearchBestMatches([
       { exactness: 3, key: "track:title-supercell", kind: "track", order: 0, score: 0 },

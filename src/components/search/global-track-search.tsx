@@ -180,6 +180,7 @@ type ScoredSetResult = {
 };
 
 type BestMatchCandidate = {
+  /** Higher means the candidate's primary label more directly matches the query. */
   exactness?: number;
   item: NavItem;
   key: string;
@@ -192,16 +193,25 @@ type BestMatchCandidate = {
 function exactLabelRank(
   query: string,
   labels: readonly (string | undefined)[],
-  rank: number,
+  exactRank: number,
+  prefixRank = 0,
 ): number {
   if (!query) return 0;
-  return labels.some((label) => label && normalizeSearchText(label) === query) ? rank : 0;
+  let best = 0;
+  for (const label of labels) {
+    if (!label) continue;
+    const normalized = normalizeSearchText(label);
+    if (normalized === query) best = Math.max(best, exactRank);
+    else if (prefixRank > 0 && normalized.startsWith(query)) best = Math.max(best, prefixRank);
+  }
+  return best;
 }
 
 function trackExactLabelRank(query: string, track: Track): number {
   if (!query) return 0;
-  if (exactLabelRank(query, [track.title, track.mediaMetadata?.title], 3) > 0) return 3;
-  return exactLabelRank(query, [...trackArtists(track), trackAlbum(track)], 1);
+  const titleRank = exactLabelRank(query, [track.title, track.mediaMetadata?.title], 6, 4);
+  if (titleRank > 0) return titleRank;
+  return exactLabelRank(query, [...trackArtists(track), trackAlbum(track)], 2, 1);
 }
 
 export function GlobalTrackSearch({
@@ -533,7 +543,7 @@ export function GlobalTrackSearch({
     let order = 0;
     for (const hit of setResultHits) {
       candidates.push({
-        exactness: exactLabelRank(queryLabel, [hit.session.name], 2),
+        exactness: exactLabelRank(queryLabel, [hit.session.name], 5, 3),
         item: { type: "set", session: hit.session },
         key: `set:${hit.session.id}`,
         kind: "set",
@@ -566,7 +576,7 @@ export function GlobalTrackSearch({
     }
     for (const entry of albumResults) {
       candidates.push({
-        exactness: exactLabelRank(queryLabel, [entry.name], 2),
+        exactness: exactLabelRank(queryLabel, [entry.name], 5, 3),
         item: { type: "album", entry },
         key: `album:${entry.key}`,
         kind: "album",
@@ -576,7 +586,7 @@ export function GlobalTrackSearch({
     }
     for (const entry of artistResults) {
       candidates.push({
-        exactness: exactLabelRank(queryLabel, [entry.name], 2),
+        exactness: exactLabelRank(queryLabel, [entry.name], 5, 3),
         item: { type: "artist", entry },
         key: `artist:${entry.key}`,
         kind: "artist",
